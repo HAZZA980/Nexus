@@ -1,0 +1,79 @@
+[
+  {
+    "id": "book_one_author",
+    "label": "Book with one author",
+    "heading": "Example: book with one author",
+    "body": "In-text citations\n\nThe overview by McCormick (2023) confirms Hill’s experience (2023, pp. 46–52).\n\nNB: No page number citation for McCormick because the reference is to the whole book.\n\nSpecific pages are being cited in Hill’s book.\n\nReference list\n\nHill, F. (2023) There’s nothing for you here: finding opportunity in the twenty-first century. Mariner Books.\n\nMcCormick, J.M. (2023) American foreign policy and process. 7th edn. Cambridge University Press.",
+    "youTry": "Surname, Initial. (Year of publication) Title. Edition. Publisher."
+  },
+  {
+    "id": "book_two_authors",
+    "label": "Book with two authors",
+    "heading": "Example: book with two authors",
+    "body": "In-text citations\n\nThompson and Reed (2022) argue that clear frameworks improve adoption.\n\nReference list\n\nThompson, A. and Reed, J. (2022) Designing research methods. 2nd edn. Sage.",
+    "youTry": "Surname, Initial. and Surname, Initial. (Year) Title. Edition. Publisher."
+  },
+  {
+    "id": "book_three_plus",
+    "label": "Book with three or more authors",
+    "heading": "Example: book with three or more authors",
+    "body": "In-text citations\n\nGarcia et al. (2021) illustrate the impact of collaboration on outcomes.\n\nReference list\n\nGarcia, L., Patel, S., O’Neill, T. and Chen, M. (2021) Collaborative leadership in practice. Routledge.",
+    "youTry": "Surname, Initial., Surname, Initial., Surname, Initial. and Surname, Initial. (Year) Title. Publisher."
+  },
+  {
+    "id": "edited_book",
+    "label": "Edited book",
+    "heading": "Example: edited book",
+    "body": "In-text citations\n\nTaylor (2019) discusses interdisciplinary approaches.\n\nReference list\n\nTaylor, H. (ed.) (2019) Interdisciplinary frontiers. Cambridge University Press.",
+    "youTry": "Surname, Initial. (ed.) (Year) Title. Publisher."
+  },
+  {
+    "id": "chapter_in_edited",
+    "label": "Chapter in an edited book",
+    "heading": "Example: chapter in an edited book",
+    "body": "In-text citations\n\nAhmed (2020) highlights local context in policy design.\n\nReference list\n\nAhmed, R. (2020) ‘Local context in policy design’, in Gray, P. and Smith, L. (eds.) Policy in practice. Oxford University Press, pp. 45–62.",
+    "youTry": "Chapter author Surname, Initial. (Year) ‘Title of chapter’, in Editor Surname, Initial. (ed.) Title of book. Publisher, page numbers."
+  },
+  {
+    "id": "translated_book",
+    "label": "Translated book",
+    "heading": "Example: translated book",
+    "body": "In-text citations\n\nBenjamin (2018) explores translation theory.\n\nReference list\n\nBenjamin, C. (2018) The craft of translation. Translated by P. Long. Penguin.",
+    "youTry": "Author Surname, Initial. (Year) Title. Translated by Initial. Surname. Publisher."
+  },
+  {
+    "id": "corporate_author",
+    "label": "Corporate author book",
+    "heading": "Example: corporate (organisation-authored) book",
+    "body": "In-text citations\n\nWorld Health Organization (2021) provides updated guidance.\n\nReference list\n\nWorld Health Organization (2021) Global health strategies. WHO Press.",
+    "youTry": "Organisation Name (Year) Title. Publisher."
+  },
+  {
+    "id": "no_author",
+    "label": "Book with no identified author",
+    "heading": "Example: book with no identified author",
+    "body": "In-text citations\n\n(The concise atlas, 2020) is frequently consulted.\n\nReference list\n\nThe concise atlas (2020) London: Atlas Press.",
+    "youTry": "Title (Year) Publisher."
+  },
+  {
+    "id": "editor_as_author",
+    "label": "Book with an editor instead of an author",
+    "heading": "Example: book with editor instead of author",
+    "body": "In-text citations\n\nLane (2017) compiles key essays on ethics.\n\nReference list\n\nLane, D. (ed.) (2017) Ethics and society. Blackwell.",
+    "youTry": "Editor Surname, Initial. (ed.) (Year) Title. Publisher."
+  },
+  {
+    "id": "reprinted_book",
+    "label": "Reprinted book",
+    "heading": "Example: reprinted book",
+    "body": "In-text citations\n\nDurkheim (2010) remains influential.\n\nReference list\n\nDurkheim, E. (2010) The rules of sociological method. Reprint of 1895 edn. Free Press.",
+    "youTry": "Author Surname, Initial. (Year) Title. Reprint of original year edn. Publisher."
+  },
+  {
+    "id": "multi_volume",
+    "label": "Multi-volume book",
+    "heading": "Example: multi-volume book",
+    "body": "In-text citations\n\nHarris (2019, vol. 2) analyses regional trends.\n\nReference list\n\nHarris, K. (2019) Economic landscapes. 3 vols. Vol. 2. Sage.",
+    "youTry": "Author Surname, Initial. (Year) Title. Number of vols. Vol. number. Publisher."
+  }
+]
