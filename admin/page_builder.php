@@ -131,6 +131,18 @@ $base = base_path();
         </span>
         <span class="nx-item-label">Image</span>
       </div>
+      <div class="nx-item" draggable="true" data-type="panel" tabindex="0" title="Panel">
+        <span class="nx-item-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M12 6v12"/></svg>
+        </span>
+        <span class="nx-item-label">Panel</span>
+      </div>
+      <div class="nx-item" draggable="true" data-type="testimonial" tabindex="0" title="Testimonial">
+        <span class="nx-item-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 6h7l-2 5h3l-4 7H5l2-7H5zM16 6h4l-2 5h3l-4 7h-5l2-7h-3z"/></svg>
+        </span>
+        <span class="nx-item-label">Testimonial</span>
+      </div>
       <div class="nx-item" draggable="true" data-type="video" tabindex="0" title="Video">
         <span class="nx-item-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="13" height="14" rx="2"/><path d="M17 9l3-2v10l-3-2"/></svg>
@@ -172,6 +184,12 @@ $base = base_path();
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8h12M6 12h12M6 16h12"/><path d="M9 10l-2-2 2-2M15 14l2 2-2 2"/></svg>
         </span>
         <span class="nx-item-label">Accordion/Tabs</span>
+      </div>
+      <div class="nx-item" draggable="true" data-type="download" tabindex="0" title="Download">
+        <span class="nx-item-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"/><path d="M7 12l5 5 5-5"/><rect x="4" y="19" width="16" height="2" rx="1"/></svg>
+        </span>
+        <span class="nx-item-label">Download</span>
       </div>
     </div>
   </div>

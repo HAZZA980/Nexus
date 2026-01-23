@@ -149,6 +149,100 @@
 .nexus-page .nx-try-status{font-weight:700;}
 .nexus-page .nx-try-status.ok{color:#166534;}
 .nexus-page .nx-try-status.no{color:#b91c1c;}
+.nexus-page .nx-panel{
+  display:grid;
+  gap:14px;
+  border:1px solid var(--nexus-border, rgba(17,24,39,.18));
+  border-radius:14px;
+  background:#f4f4f6;
+  padding:0;
+  grid-template-columns:1fr 1fr;
+  align-items:stretch;
+}
+.nexus-page .nx-panel--img-right{
+  grid-template-columns:1fr 1fr;
+}
+.nexus-page .nx-panel--img-top,
+.nexus-page .nx-panel--text-top{
+  grid-template-columns:1fr;
+}
+.nexus-page .nx-panel--stacked{
+  grid-template-columns:1fr;
+}
+.nexus-page .nx-panel-body{
+  line-height:1.55;
+  color:#1f2937;
+  padding:14px;
+  text-align:center;
+}
+.nexus-page .nx-panel-media{
+  border-radius:12px;
+  overflow:hidden;
+  min-height:180px;
+  background:rgba(17,24,39,.06);
+  border:1px solid rgba(17,24,39,.08);
+}
+.nexus-page .nx-panel-media img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+.nexus-page .nx-panel-media--placeholder{
+  background:repeating-linear-gradient(135deg, rgba(17,24,39,.08), rgba(17,24,39,.08) 10px, rgba(17,24,39,.14) 10px, rgba(17,24,39,.14) 20px);
+}
+.nexus-page .nx-panel--img-right .nx-panel-media{order:2;}
+.nexus-page .nx-panel--img-right .nx-panel-body{order:1;}
+.nexus-page .nx-panel--img-top .nx-panel-media{order:0;}
+.nexus-page .nx-panel--img-top .nx-panel-body{order:1;}
+.nexus-page .nx-panel--text-top .nx-panel-media{order:2;}
+.nexus-page .nx-panel--text-top .nx-panel-body{order:1;}
+@media (max-width: 768px){
+  .nexus-page .nx-panel{
+    grid-template-columns:1fr !important;
+  }
+  .nexus-page .nx-panel .nx-panel-media,
+  .nexus-page .nx-panel .nx-panel-body{
+    order:0;
+  }
+}
+.nexus-page .nx-testimonial{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  color:#0f172a;
+  font-size:17px;
+  line-height:1.4;
+  padding:12px;
+}
+.nexus-page .nx-testimonial-qt{
+  font-size:28px;
+  color:#0b4f58;
+  font-weight:800;
+}
+.nexus-page .nx-testimonial-copy{
+  text-align:center;
+}
+.nexus-page .nx-download{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 14px;
+  border:1px solid #0f4c55;
+  border-radius:10px;
+  color:#0f4c55;
+  text-decoration:none;
+  font-weight:700;
+  background:linear-gradient(180deg,#f9fbfc 0%,#f3f7f8 100%);
+}
+.nexus-page .nx-download:hover{
+  filter:brightness(1.03);
+}
+.nexus-page .nx-download[aria-disabled="true"]{
+  opacity:0.6;
+  pointer-events:none;
+}
 
 .nexus-page .nx-hero{
   position:relative;

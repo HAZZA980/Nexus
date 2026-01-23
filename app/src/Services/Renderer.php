@@ -309,6 +309,39 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         return self::wrapWithStyles($html, $blk, true);
       }
 
+      case 'panel': {
+        $layout = (string)($p['layout'] ?? 'img-left');
+        if (!in_array($layout, ['img-left','img-right','img-top','text-top'], true)) {
+          $layout = 'img-top';
+        }
+        $stacked = ($layout === 'img-top' || $layout === 'text-top');
+
+        $bodyRaw = (string)($p['bodyHtml'] ?? ($p['html'] ?? ''));
+        if ($bodyRaw !== '') {
+          $body = self::hasHtml($bodyRaw) ? self::safeInlineHtml($bodyRaw) : self::formatMarkedText($bodyRaw);
+        } else {
+          $body = self::formatMarkedText((string)($p['body'] ?? ''));
+        }
+
+        $imgSrc = trim((string)($p['image'] ?? ''));
+        $imgAlt = Security::e((string)($p['alt'] ?? ''));
+        $media = $imgSrc !== ''
+          ? "<div class=\"nx-panel-media\"><img src=\"" . Security::e($imgSrc) . "\" alt=\"{$imgAlt}\" loading=\"lazy\"></div>"
+          : "<div class=\"nx-panel-media nx-panel-media--placeholder\"></div>";
+        $text = "<div class=\"nx-panel-body\">{$body}</div>";
+
+        $first = $media;
+        $second = $text;
+        if ($layout === 'img-right') { $first = $text; $second = $media; }
+        if ($layout === 'text-top')  { $first = $text; $second = $media; }
+        if ($layout === 'img-top')   { $first = $media; $second = $text; }
+
+        $extra = $stacked ? ' nx-panel--stacked' : '';
+        $html = "<div class=\"nx-panel nx-panel--{$layout}{$extra}\">{$first}{$second}</div>";
+
+        return self::wrapWithStyles($html, $blk, true);
+      }
+
       case 'youTry': {
         $title = Security::e((string)($p['title'] ?? 'You try'));
 
@@ -482,6 +515,38 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
         $img = "<img class=\"nx-img\" src=\"{$srcEsc}\" alt=\"{$alt}\">";
         return self::wrapWithStyles($img, $blk, false);
+      }
+
+      case 'download': {
+        $labelRaw = (string)($p['label'] ?? 'Download');
+        $label = Security::e($labelRaw === '' ? 'Download' : $labelRaw);
+        $urlRaw = trim((string)($p['url'] ?? ''));
+        $url = $urlRaw !== '' ? Security::e($urlRaw) : '#';
+        $disabled = $urlRaw === '';
+        $attrs = $disabled ? 'aria-disabled="true"' : 'target="_blank" rel="noopener"';
+
+        $html = "<a class=\"nx-download\" href=\"{$url}\" {$attrs}>"
+          . "<span class=\"nx-download-ic\">⬇</span>"
+          . "<span class=\"nx-download-text\">{$label}</span>"
+          . "</a>";
+
+        return self::wrapWithStyles($html, $blk, true);
+      }
+
+      case 'testimonial': {
+        $bodyRaw = (string)($p['bodyHtml'] ?? ($p['html'] ?? ''));
+        if ($bodyRaw !== '') {
+          $body = self::hasHtml($bodyRaw) ? self::safeInlineHtml($bodyRaw) : self::formatMarkedText($bodyRaw);
+        } else {
+          $body = self::formatMarkedText((string)($p['body'] ?? ''));
+        }
+        $html = "<div class=\"nx-testimonial\">"
+          . "<span class=\"nx-testimonial-qt\">&ldquo;</span>"
+          . "<div class=\"nx-testimonial-copy\">{$body}</div>"
+          . "<span class=\"nx-testimonial-qt\">&rdquo;</span>"
+          . "</div>";
+
+        return self::wrapWithStyles($html, $blk, true);
       }
 
       case 'video': {

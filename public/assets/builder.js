@@ -329,6 +329,9 @@
       case 'textbox': return { id: uuid(), type: 'textbox', props: { label: 'Textbox', placeholder: 'Type here…', lines: 3 } };
       case 'citationOrder': return { id: uuid(), type: 'citationOrder', props: { title: 'Citation order', body: '• Author/editor\n• Year of publication (in round brackets)\n• Title (in italics)\n• Edition (edition number if not the first edn and/or rev. edn)\n• Publisher\n• Series and volume number (where relevant)' }, styleText:{} };
       case 'exampleCard': return { id: uuid(), type: 'exampleCard', props: { exampleId: 'book_one_author', heading: 'Example: book with one author', body: 'In-text citations\n\nThe overview by McCormick (2023) confirms Hill’s experience (2023, pp. 46–52).\n\nNB: No page number citation for McCormick because the reference is to the whole book.\n\nSpecific pages are being cited in Hill’s book.\n\nReference list\n\nHill, F. (2023) There’s nothing for you here: finding opportunity in the twenty-first century. Mariner Books.\n\nMcCormick, J.M. (2023) American foreign policy and process. 7th edn. Cambridge University Press.', youTry: 'Surname, Initial. (Year of publication) Title. Edition. Publisher.', showYouTry: true }, styleText:{} };
+      case 'panel': return { id: uuid(), type: 'panel', props: { image: '', alt: '', body: 'Panel text…', layout: 'img-top' }, styleText:{} };
+      case 'testimonial': return { id: uuid(), type: 'testimonial', props: { body: 'I am meeting my deadlines consistently!' }, styleText:{} };
+      case 'download': return { id: uuid(), type: 'download', props: { label: 'Download', url: '' }, styleText:{} };
       case 'heroCard': return { id: uuid(), type: 'heroCard', props: { title: 'Hero Title', body: 'Hero text', bgImage: '', bgColor: '#111827', overlayOpacity: 0.35 }, styleText:{} };
       case 'dragWords': return { id: uuid(), type: 'dragWords', props: {
         instruction: 'Drag or click the correct words into the blanks',
@@ -728,6 +731,9 @@
       blk.type === 'youTry' ||
       blk.type === 'citationOrder' ||
       blk.type === 'exampleCard' ||
+      blk.type === 'panel' ||
+      blk.type === 'testimonial' ||
+      blk.type === 'download' ||
       blk.type === 'heroCard' ||
       blk.type === 'heroPage' // legacy docs
       || blk.type === 'carousel'
@@ -880,6 +886,49 @@
       ? p.html
       : formatMarked((p.body || '').slice(0, 180));
     return wrap(`<div><b>${title}</b><div style="margin-top:6px">${body}</div></div>`);
+  }
+
+  if (blk.type === 'panel') {
+    const body = hasHtml(p.bodyHtml)
+      ? p.bodyHtml
+      : formatMarked((p.body || '').slice(0, 260));
+    const img = p.image ? `<div class="panel-img" style="background:url('${esc(p.image)}') center/cover no-repeat;"></div>` : `<div class="panel-img panel-img--placeholder">Add image</div>`;
+    const layout = p.layout || 'img-top';
+    const horizontal = layout === 'img-left' || layout === 'img-right';
+    const order = (wantFirst) => {
+      if (horizontal) return wantFirst ? (layout === 'img-left' ? img : body) : (layout === 'img-left' ? body : img);
+      return wantFirst ? img : body; // stacked
+    };
+    return `
+      <div class="nx-panel-preview ${horizontal ? 'panel-horizontal' : 'panel-stacked'}" data-layout="${layout}">
+        ${order(true)}
+        ${horizontal ? order(false) : `<div class="panel-body" style="text-align:center">${body}</div>`}
+      </div>
+    `;
+  }
+
+  if (blk.type === 'testimonial') {
+    const body = hasHtml(p.bodyHtml)
+      ? p.bodyHtml
+      : formatMarked((p.body || 'I am meeting my deadlines consistently!').slice(0, 200));
+    return `
+      <div class="nx-testimonial-preview">
+        <span class="qt">“</span>
+        <span class="copy">${body}</span>
+        <span class="qt">”</span>
+      </div>
+    `;
+  }
+
+  if (blk.type === 'download') {
+    const label = esc(p.label || 'Download');
+    const url = esc(p.url || '#');
+    return `
+      <a class="nx-download-preview" href="${url}" target="_blank" rel="noopener">
+        <span class="icon">⬇</span>
+        <span>${label}</span>
+      </a>
+    `;
   }
 
   if (blk.type === 'textbox') {
@@ -2181,6 +2230,44 @@
         <label class="nx-muted">Alt text</label><br>
         <input id="p_alt" value="${esc(p.alt || '')}" style="${inputStyle}">
       `;
+    } else if (blk.type === 'panel') {
+      html += `
+        <label class="nx-muted">Image URL</label><br>
+        <input id="p_image" value="${esc(p.image || '')}" style="${inputStyle}">
+        <br><br>
+        <label class="nx-muted">Upload image</label><br>
+        <input id="p_image_file" type="file" accept="image/*" style="color:#e6eaf2">
+        <br><br>
+        <label class="nx-muted">Alt text</label><br>
+        <input id="p_alt" value="${esc(p.alt || '')}" style="${inputStyle}">
+        <br><br>
+        <label class="nx-muted">Text</label><br>
+        <div id="p_html" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:140px;white-space:pre-wrap"></div>
+        <br><br>
+        <label class="nx-muted">Layout</label><br>
+        <select id="p_layout" style="${inputStyle}">
+          <option value="img-left" ${p.layout === 'img-left' ? 'selected' : ''}>Image left / Text right</option>
+          <option value="img-right" ${p.layout === 'img-right' ? 'selected' : ''}>Image right / Text left</option>
+          <option value="img-top" ${p.layout === 'img-top' ? 'selected' : ''}>Image top / Text bottom</option>
+          <option value="text-top" ${p.layout === 'text-top' ? 'selected' : ''}>Text top / Image bottom</option>
+        </select>
+      `;
+    } else if (blk.type === 'testimonial') {
+      html += `
+        <label class="nx-muted">Quote text</label><br>
+        <div id="p_html" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:80px;white-space:pre-wrap"></div>
+      `;
+    } else if (blk.type === 'download') {
+      html += `
+        <label class="nx-muted">Button text</label><br>
+        <input id="p_dl_label" value="${esc(p.label || 'Download')}" style="${inputStyle}">
+        <br><br>
+        <label class="nx-muted">Link URL</label><br>
+        <input id="p_dl_url" value="${esc(p.url || '')}" style="${inputStyle}">
+        <br><br>
+        <label class="nx-muted">Upload file</label><br>
+        <input id="p_dl_file" type="file" style="color:#e6eaf2">
+      `;
     } else if (blk.type === 'video') {
       html += `
         <label class="nx-muted">Embed URL (iframe src)</label><br>
@@ -2871,6 +2958,9 @@
       if (blk.type === 'youTry') return (p.html ?? '') || (p.body ?? '');
       if (blk.type === 'citationOrder') return (p.html ?? '') || (p.body ?? '');
       if (blk.type === 'exampleCard') return (p.bodyHtml ?? '') || (p.body ?? '');
+      if (blk.type === 'panel') return (p.bodyHtml ?? '') || (p.body ?? '');
+      if (blk.type === 'testimonial') return (p.bodyHtml ?? '') || (p.body ?? '');
+      if (blk.type === 'download') return (p.bodyHtml ?? '') || (p.body ?? '');
       if (blk.type === 'heroCard' || blk.type === 'heroPage') return (p.bodyHtml ?? '') || (p.body ?? '');
       return baseRichInitial;
     })(), (htmlVal, textVal) => {
@@ -2881,6 +2971,9 @@
       if (blk.type === 'youTry') blk.props.body = textVal;
       if (blk.type === 'citationOrder') blk.props.body = textVal;
       if (blk.type === 'exampleCard') { blk.props.body = textVal; blk.props.bodyHtml = htmlVal; }
+      if (blk.type === 'panel') { blk.props.body = textVal; blk.props.bodyHtml = htmlVal; }
+      if (blk.type === 'testimonial') { blk.props.body = textVal; blk.props.bodyHtml = htmlVal; }
+      if (blk.type === 'download') { blk.props.body = textVal; blk.props.bodyHtml = htmlVal; }
       if (blk.type === 'heroCard' || blk.type === 'heroPage') { blk.props.body = textVal; blk.props.bodyHtml = htmlVal; }
     });
 
@@ -2902,6 +2995,8 @@
 
     if (blk.type === 'heading') bind('p_level', 'level', (v) => parseInt(v || '2', 10));
     if (blk.type === 'image')  { bind('p_src', 'src'); bind('p_alt', 'alt'); }
+    if (blk.type === 'panel')  { bind('p_image', 'image'); bind('p_alt', 'alt'); bind('p_layout', 'layout'); }
+    if (blk.type === 'download')  { bind('p_dl_label', 'label'); bind('p_dl_url', 'url'); }
     if (blk.type === 'video')  bind('p_url', 'url');
     const imgFile = document.getElementById('p_src_file');
     if (imgFile) {
@@ -2910,6 +3005,24 @@
         if (!file || !file.type.startsWith('image/')) return;
         const url = URL.createObjectURL(file);
         setProp('src', url);
+      });
+    }
+    const panelImgFile = document.getElementById('p_image_file');
+    if (panelImgFile) {
+      panelImgFile.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file || !file.type.startsWith('image/')) return;
+        const url = URL.createObjectURL(file);
+        setProp('image', url);
+      });
+    }
+    const dlFile = document.getElementById('p_dl_file');
+    if (dlFile) {
+      dlFile.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        setProp('url', url);
       });
     }
     const vidFile = document.getElementById('p_url_file');
