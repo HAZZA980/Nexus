@@ -12,8 +12,8 @@ if ($exists > 0) {
 
 $hash = password_hash('Admin123!', PASSWORD_DEFAULT);
 $pdo->prepare(
-  "INSERT INTO users (email,password_hash,display_name,role)
-   VALUES ('admin@nexuscms.local',?,?, 'super_admin')"
+  "INSERT INTO users (email,password_hash,display_name,role,access)
+   VALUES ('admin@nexuscms.local',?,?, 'super_admin', NULL)"
 )->execute([$hash, 'Admin']);
 
 echo "Installed. <a href='/NexusCMS/admin/login.php'>Go to Admin</a>";

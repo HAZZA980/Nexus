@@ -8,6 +8,7 @@ use NexusCMS\Models\Site;
 use NexusCMS\Models\Page;
 
 $base = base_path();
+$activeNav = 'sites';
 $sites = Site::all();
 // attach published count
 foreach ($sites as &$s) {
@@ -134,7 +135,9 @@ if ($currentUser && isset($currentUser['role'])) {
     (function() {
       try {
         const stored = localStorage.getItem('nexusTheme');
-        if (stored === 'light') document.documentElement.classList.add('theme-light');
+        const theme = stored === 'light' ? 'light' : 'dark';
+        localStorage.setItem('nexusTheme', theme);
+        document.documentElement.classList.toggle('theme-light', theme === 'light');
       } catch(e) {}
     })();
   </script>
@@ -189,7 +192,6 @@ if ($currentUser && isset($currentUser['role'])) {
     .top-bar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: 16px;
       padding: 14px 18px;
       background: linear-gradient(90deg, rgba(91,33,182,0.12), rgba(91,33,182,0));
@@ -216,6 +218,34 @@ if ($currentUser && isset($currentUser['role'])) {
     }
     .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
     .brand-text small { color: var(--muted); font-weight: 500; }
+
+    .top-nav{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-left:auto;
+      flex-wrap:wrap;
+    }
+    .top-nav .nav-link{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,0.05);
+      color:var(--text);
+      font-weight:700;
+      text-decoration:none;
+      min-height:40px;
+    }
+    .top-nav .nav-link:hover{background:rgba(255,255,255,0.1);}
+    .top-nav .nav-link.active{
+      background:linear-gradient(135deg, var(--primary), var(--primary-strong));
+      color:#fff;
+      border-color:transparent;
+      box-shadow:var(--shadow);
+    }
 
     .top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .btn {
@@ -429,6 +459,11 @@ if ($currentUser && isset($currentUser['role'])) {
         <small>Admin</small>
       </div>
     </div>
+    <nav class="top-nav" aria-label="Admin navigation">
+      <a class="nav-link <?= $activeNav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
+      <a class="nav-link <?= $activeNav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
+      <a class="nav-link <?= $activeNav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Images</a>
+    </nav>
     <div class="top-actions">
       <a class="btn primary" href="<?= $base ?>/admin/site_new.php">+ Create new website</a>
       <div class="user-menu">

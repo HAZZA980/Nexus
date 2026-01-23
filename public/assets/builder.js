@@ -321,17 +321,38 @@
   const defBlock = (type) => {
     switch (type) {
       case 'heading': return { id: uuid(), type: 'heading', props: { level: 2, text: 'Heading' }, styleText:{} };
-      case 'text':    return { id: uuid(), type: 'text', props: { text: 'Text…' }, styleText:{} };
+      case 'text':    return { id: uuid(), type: 'text', props: { text: 'Text…', bgColor: '' }, styleText:{} };
       case 'image':   return { id: uuid(), type: 'image', props: { src: '', alt: '' } };
       case 'video':   return { id: uuid(), type: 'video', props: { url: '' } };
       case 'card':    return { id: uuid(), type: 'card', props: { title: 'Card title', body: 'Card body…' }, styleText:{} };
       case 'youTry':  return { id: uuid(), type: 'youTry', props: { title: 'You try', body: 'Try it yourself…' }, styleText:{} };
-      case 'textbox': return { id: uuid(), type: 'textbox', props: { label: 'Textbox', placeholder: 'Type here…', lines: 3 } };
+      case 'textbox': return { id: uuid(), type: 'textbox', props: { label: 'Textbox', placeholder: 'Type here…', lines: 3, bgColor: '' } };
       case 'citationOrder': return { id: uuid(), type: 'citationOrder', props: { title: 'Citation order', body: '• Author/editor\n• Year of publication (in round brackets)\n• Title (in italics)\n• Edition (edition number if not the first edn and/or rev. edn)\n• Publisher\n• Series and volume number (where relevant)' }, styleText:{} };
       case 'exampleCard': return { id: uuid(), type: 'exampleCard', props: { exampleId: 'book_one_author', heading: 'Example: book with one author', body: 'In-text citations\n\nThe overview by McCormick (2023) confirms Hill’s experience (2023, pp. 46–52).\n\nNB: No page number citation for McCormick because the reference is to the whole book.\n\nSpecific pages are being cited in Hill’s book.\n\nReference list\n\nHill, F. (2023) There’s nothing for you here: finding opportunity in the twenty-first century. Mariner Books.\n\nMcCormick, J.M. (2023) American foreign policy and process. 7th edn. Cambridge University Press.', youTry: 'Surname, Initial. (Year of publication) Title. Edition. Publisher.', showYouTry: true }, styleText:{} };
-      case 'panel': return { id: uuid(), type: 'panel', props: { image: '', alt: '', body: 'Panel text…', layout: 'img-top' }, styleText:{} };
+      case 'panel': return { id: uuid(), type: 'panel', props: { image: '', alt: '', body: 'Panel text…', layout: 'img-top', splitRatio: '50-50' }, styleText:{} };
       case 'testimonial': return { id: uuid(), type: 'testimonial', props: { body: 'I am meeting my deadlines consistently!' }, styleText:{} };
       case 'download': return { id: uuid(), type: 'download', props: { label: 'Download', url: '' }, styleText:{} };
+      case 'heroBanner': return { id: uuid(), type: 'heroBanner', props: { heading: 'Welcome to Cite Them Right', cta: 'Choose your referencing style', ctaHtml: '', bgImage: '', overlayOpacity: 0.6 }, styleText:{} };
+      case 'table': {
+        return {
+          id: uuid(),
+          type: 'table',
+          props: {
+            data: [
+              ['Header 1','Header 2','Header 3'],
+              ['Row 1 col 1','Row 1 col 2','Row 1 col 3']
+            ],
+            headerRow: true,
+            headerCol: false,
+            density: 'default',
+            rowStyle: 'none',
+            gridLines: 'subtle',
+            textAlign: 'left',
+            vAlign: 'middle',
+            colResize: true
+          }
+        };
+      }
       case 'heroCard': return { id: uuid(), type: 'heroCard', props: { title: 'Hero Title', body: 'Hero text', bgImage: '', bgColor: '#111827', overlayOpacity: 0.35 }, styleText:{} };
       case 'dragWords': return { id: uuid(), type: 'dragWords', props: {
         instruction: 'Drag or click the correct words into the blanks',
@@ -450,12 +471,14 @@
     blk.props = blk.props || {};
     const p = blk.props;
     p.mode = p.mode === 'tabs' ? 'tabs' : 'accordion';
+    p.accStyle = ['standard','grouped'].includes(p.accStyle) ? p.accStyle : 'standard';
     const normalizeItem = (it, i) => {
       const item = it && typeof it === 'object' ? it : {};
       if (!item.id) item.id = uuid();
       if (!item.title) item.title = `Item ${i + 1}`;
       item.body = item.body || '';
       item.bodyHtml = item.bodyHtml || '';
+      item.subItems = Array.isArray(item.subItems) ? item.subItems : [];
       item.openDefault = !!item.openDefault;
       item.headerImg = item.headerImg || '';
       item.headerAlt = item.headerAlt || '';
@@ -869,7 +892,8 @@
     const inner = hasHtml(p.html)
       ? p.html
       : formatMarked((p.text || '').slice(0, 220));
-    return wrap(inner);
+    const bg = p.bgColor ? `background:${esc(p.bgColor)};` : '';
+    return wrap(`<div style="padding:10px;border:1px dashed rgba(17,24,39,.18);border-radius:10px;${bg}">${inner}</div>`);
   }
 
   if (blk.type === 'card') {
@@ -895,12 +919,21 @@
     const img = p.image ? `<div class="panel-img" style="background:url('${esc(p.image)}') center/cover no-repeat;"></div>` : `<div class="panel-img panel-img--placeholder">Add image</div>`;
     const layout = p.layout || 'img-top';
     const horizontal = layout === 'img-left' || layout === 'img-right';
+    const split = p.splitRatio || '50-50';
+    const colsMap = {
+      '50-50': '1fr 1fr',
+      '60-40': '3fr 2fr',
+      '40-60': '2fr 3fr',
+      '70-30': '7fr 3fr',
+      '30-70': '3fr 7fr'
+    };
+    const cols = colsMap[split] || '1fr 1fr';
     const order = (wantFirst) => {
       if (horizontal) return wantFirst ? (layout === 'img-left' ? img : body) : (layout === 'img-left' ? body : img);
       return wantFirst ? img : body; // stacked
     };
     return `
-      <div class="nx-panel-preview ${horizontal ? 'panel-horizontal' : 'panel-stacked'}" data-layout="${layout}">
+      <div class="nx-panel-preview ${horizontal ? 'panel-horizontal' : 'panel-stacked'}" data-layout="${layout}" style="${horizontal ? `grid-template-columns:${cols}` : ''}">
         ${order(true)}
         ${horizontal ? order(false) : `<div class="panel-body" style="text-align:center">${body}</div>`}
       </div>
@@ -935,7 +968,8 @@
     const label = esc(p.label || 'Textbox');
     const placeholder = esc(p.placeholder || 'Type here…');
     const lines = Math.max(1, Math.min(12, parseInt(p.lines ?? 3, 10) || 3));
-    return `<div><div style="font-weight:700;margin-bottom:6px">${label}</div><div style="padding:10px;border:1px dashed rgba(17,24,39,.25);border-radius:10px;min-height:${lines*16 + 20}px;color:rgba(17,24,39,.55)">${placeholder}</div></div>`;
+    const bg = p.bgColor ? `background:${esc(p.bgColor)};` : 'background:rgba(255,255,255,.85);';
+    return `<div><div style="font-weight:700;margin-bottom:6px">${label}</div><div style="padding:10px;border:1px dashed rgba(17,24,39,.25);border-radius:10px;min-height:${lines*16 + 20}px;color:rgba(17,24,39,.8);${bg}">${placeholder}</div></div>`;
   }
 
   if (blk.type === 'citationOrder') {
@@ -991,6 +1025,87 @@
             <div style="font-weight:900;font-size:18px;margin-bottom:8px;color:#111827">${title}</div>
             <div style="color:#111827">${body}</div>
           </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (blk.type === 'heroBanner') {
+    const heading = esc(p.heading || 'Welcome');
+    const ctaContent = p.ctaHtml
+      ? (hasHtml(p.ctaHtml) ? p.ctaHtml : formatMarked(p.ctaHtml))
+      : esc(p.cta || 'Learn more');
+    const bg = p.bgImage ? `url(${esc(p.bgImage)})` : 'linear-gradient(135deg,#1f2937,#111827)';
+    const overlay = Math.min(Math.max(parseFloat(p.overlayOpacity ?? 0.6), 0), 1);
+    return `
+      <div class="nx-hero-banner-preview" style="background:${bg};background-size:cover;background-position:center;position:relative;overflow:hidden;border-radius:10px;min-height:240px;border:1px solid rgba(0,0,0,.15);display:grid;place-items:center;padding:24px;">
+        <div style="max-width:780px;width:100%;text-align:center;color:#fff;display:grid;gap:18px;padding:24px;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.22);background:rgba(0,0,0,${overlay});">
+          <div style="font-size:32px;font-weight:800;line-height:1.2;">${heading}</div>
+          <div style="display:inline-flex;justify-content:center;">
+            <span style="display:inline-flex;align-items:center;gap:8px;padding:12px 18px;background:#1f3b87;border-radius:12px;color:#fff;font-weight:800;">${ctaContent}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (blk.type === 'table') {
+    const data = Array.isArray(p.data) && p.data.length ? p.data : [['', '', ''], ['', '', '']];
+    const rows = data.length;
+    const cols = Math.max(...data.map(r => r.length), 1);
+    const density = p.density || 'default';
+    const rowStyle = p.rowStyle || 'none';
+    const gridLines = p.gridLines || 'subtle';
+    const textAlign = p.textAlign || 'left';
+    const vAlign = p.vAlign || 'middle';
+    const headerRow = !!p.headerRow;
+    const headerCol = !!p.headerCol;
+    const allowResize = p.colResize !== false;
+    const colWidths = Array.isArray(p.colWidths) ? p.colWidths : [];
+
+    const densityPad = density === 'compact' ? '6px 8px' : density === 'spacious' ? '12px 14px' : '9px 12px';
+    const border =
+      gridLines === 'full' ? '1px solid rgba(17,24,39,.18)'
+      : gridLines === 'subtle' ? '1px solid rgba(17,24,39,.12)'
+      : '1px solid transparent';
+
+    const colgroup = Array.from({ length: cols }).map((_, cIdx) => {
+      const width = colWidths[cIdx] || 'auto';
+      return `<col style="width:${esc(width)}">`;
+    }).join('');
+
+    const rowsHtml = data.map((row, rIdx) => {
+      const isHeadRow = headerRow && rIdx === 0;
+      const stripedBg = rowStyle === 'striped' && rIdx % 2 === 1 ? 'background:rgba(17,24,39,.04);' : '';
+      const cells = Array.from({ length: cols }).map((_, cIdx) => {
+        const cell = row[cIdx] ?? '';
+        const isHeadCol = headerCol && cIdx === 0;
+        const tag = (isHeadRow || isHeadCol) ? 'th' : 'td';
+        return `<${tag}
+          class="nx-table-cell"
+          data-row="${rIdx}"
+          data-col="${cIdx}"
+          contenteditable="true"
+          style="padding:${densityPad};border:${border};text-align:${textAlign};vertical-align:${vAlign};${stripedBg}"
+        >${formatMarked(cell || '')}</${tag}>`;
+      }).join('');
+      return `<tr data-row="${rIdx}">${cells}</tr>`;
+    }).join('');
+
+    return `
+      <div class="nx-table-block" data-bid="${blk.id}" data-density="${density}" data-grid="${gridLines}">
+        <div class="nx-table-toolbar">
+          <div class="nx-table-hint">${allowResize ? 'Resize cols enabled' : 'Fixed cols'} • Enter → new row • Tab ↔</div>
+          <div class="nx-table-actions">
+            <button type="button" class="btn small nx-table-add-row" data-pos="below">+ Row</button>
+            <button type="button" class="btn small nx-table-add-col" data-pos="right">+ Column</button>
+          </div>
+        </div>
+        <div class="nx-table-scroller">
+          <table class="nx-table-preview" data-density="${density}" data-grid="${gridLines}">
+            <colgroup>${colgroup}</colgroup>
+            ${rowsHtml}
+          </table>
         </div>
       </div>
     `;
@@ -1135,6 +1250,8 @@
     const imgPos = acc.headerImgPos || 'left';
     const imgSize = acc.headerImgSize || 'medium';
     const focusIdx = getAccordionFocus(blk.id, renderItems.length);
+    const accStyle = acc.accStyle || 'standard';
+    const isGrouped = accStyle === 'grouped';
 
     const renderHeaderImg = (it) => {
       if (!it.showHeaderImg || !it.headerImg) return '';
@@ -1182,7 +1299,75 @@
       const first = [...openSet][0];
       openSet.clear(); openSet.add(first);
     }
-    const indPos = acc.showIndicator ? acc.indicatorPosition : 'none';
+    const indPos = acc.showIndicator && !isGrouped ? acc.indicatorPosition : (isGrouped ? 'right' : 'none');
+    const indIcon = (isOpen) => isOpen ? '−' : '+';
+
+    if (isGrouped) {
+      const parent = items[0] || { title: 'Group', subItems: [] };
+      const children = items.slice(1);
+      const isOpen = openSet.has(0);
+      const headId = `acc-head-${blk.id}-0`;
+      const panelId = `acc-panel-${blk.id}-0`;
+      const parentSubs = Array.isArray(parent.subItems) ? parent.subItems : [];
+      const parentList = parentSubs.length
+        ? `<ul class="nx-accordion-sublist">${parentSubs.map((s) => {
+            const label = esc(s.label || '');
+            const href = esc(s.url || '');
+            if (!label) return '';
+            return href ? `<li><a href="${href}">${label}</a></li>` : `<li>${label}</li>`;
+          }).join('')}</ul>`
+        : '';
+      const childAccordions = children.map((it, idx) => {
+        const childSubs = Array.isArray(it.subItems) ? it.subItems : [];
+        const list = childSubs.length
+          ? `<ul class="nx-accordion-sublist">${childSubs.map((s) => {
+              const label = esc(s.label || '');
+              const href = esc(s.url || '');
+              if (!label) return '';
+              return href ? `<li><a href="${href}">${label}</a></li>` : `<li>${label}</li>`;
+            }).join('')}</ul>`
+          : '<div class="nx-muted" style="padding:6px 0;">Add sub-items…</div>';
+        return `
+          <div class="nx-accordion-childrow">
+            <button type="button" class="nx-accordion-childhead" data-idx="${idx}">
+              <span class="nx-accordion-title">${esc(it.title || `Item ${idx + 2}`)}</span>
+              <span class="nx-accordion-plus" aria-hidden="true">+</span>
+            </button>
+            <div class="nx-accordion-childpanel" hidden>
+              <div class="nx-accordion-body">${list}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      return `
+        <div class="nx-accordion nx-accordion--grouped"
+          data-grouped="1"
+          data-allow="multiple"
+          data-collapse="${acc.allowCollapseAll !== false ? 'allow' : 'force'}"
+          data-indicator="right"
+          data-spacing="compact"
+          data-style="minimal"
+          data-dividers="on"
+          data-border="${acc.showBorder ? 'on' : 'off'}"
+          data-bid="${blk.id}"
+          style="${vars.join(';')}">
+          <div class="nx-accordion-item nx-accordion-parent ${isOpen ? 'is-open' : ''}" data-idx="0">
+            <button type="button" class="nx-accordion-head" id="${headId}" aria-expanded="${isOpen ? 'true' : 'false'}" aria-controls="${panelId}">
+              <span class="nx-accordion-title">${esc(parent.title || 'Group')}</span>
+              <span class="nx-accordion-plus" aria-hidden="true">${indIcon(isOpen)}</span>
+            </button>
+            <div class="nx-accordion-panel" id="${panelId}" role="region" aria-labelledby="${headId}" ${isOpen ? '' : 'hidden'}>
+              <div class="nx-accordion-body">
+                ${parentList}
+                <div class="nx-accordion-childlist">
+                  ${childAccordions}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
 
     return `
       <div class="nx-accordion"
@@ -1253,6 +1438,7 @@
     const btn = item.querySelector('.nx-accordion-head');
     const panel = item.querySelector('.nx-accordion-panel');
     const chevron = btn?.querySelector('.nx-accordion-chevron');
+    const plus = item.querySelector('.nx-accordion-plus');
     if (!btn || !panel) return;
     const applyHeight = () => {
       panel.style.maxHeight = open ? `${panel.scrollHeight}px` : '0px';
@@ -1260,6 +1446,7 @@
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
     panel.setAttribute('aria-hidden', open ? 'false' : 'true');
     if (chevron) chevron.classList.toggle('open', open);
+    if (plus) plus.textContent = open ? '−' : '+';
     if (open) {
       item.classList.add('is-open');
       panel.hidden = false;
@@ -1290,11 +1477,49 @@
     }
   };
 
-    items.forEach((item) => {
-      const btn = item.querySelector('.nx-accordion-head');
-      if (!btn) return;
-      const idx = parseInt(item.dataset.idx || '-1', 10);
-      const toggle = () => {
+  // child rows for grouped variant
+  const childRows = el.dataset.grouped === '1'
+    ? Array.from(el.querySelectorAll('.nx-accordion-childrow'))
+    : [];
+  const closeAllChildren = () => {
+    childRows.forEach((row) => {
+      const p = row.querySelector('.nx-accordion-childpanel');
+      const pl = row.querySelector('.nx-accordion-plus');
+      if (!p) return;
+      p.hidden = true;
+      p.style.maxHeight = '0px';
+      if (pl) pl.textContent = '+';
+    });
+  };
+  const toggleChild = (row) => {
+    const panel = row.querySelector('.nx-accordion-childpanel');
+    const plus = row.querySelector('.nx-accordion-plus');
+    if (!panel) return;
+    const open = panel.hidden !== false;
+    panel.hidden = !open;
+    if (open) {
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      setTimeout(() => { panel.style.maxHeight = 'none'; }, 180);
+      row.classList.add('is-open');
+    } else {
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      requestAnimationFrame(() => { panel.style.maxHeight = '0px'; });
+      const onEnd = () => {
+        panel.hidden = true;
+        panel.removeEventListener('transitionend', onEnd);
+      };
+      panel.addEventListener('transitionend', onEnd);
+      setTimeout(onEnd, 240);
+      row.classList.remove('is-open');
+    }
+    if (plus) plus.textContent = open ? '−' : '+';
+  };
+
+  items.forEach((item) => {
+    const btn = item.querySelector('.nx-accordion-head');
+    if (!btn) return;
+    const idx = parseInt(item.dataset.idx || '-1', 10);
+    const toggle = () => {
         const isOpen = item.classList.contains('is-open');
         if (Number.isInteger(idx)) {
           setAccordionFocus(el.dataset.bid, idx);
@@ -1305,12 +1530,15 @@
         if (isOpen && !allowCollapse && !allowMultiple) {
           return;
         }
-        if (!isOpen && !allowMultiple) {
-          items.forEach(it => { if (it !== item) setOpen(it, false); });
-        }
-        setOpen(item, !isOpen);
-        savePreviewState();
-      };
+      if (!isOpen && !allowMultiple) {
+        items.forEach(it => { if (it !== item) setOpen(it, false); });
+      }
+      if (el.dataset.grouped === '1' && idx === 0 && isOpen === true) {
+        closeAllChildren();
+      }
+      setOpen(item, !isOpen);
+      savePreviewState();
+    };
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         toggle();
@@ -1325,6 +1553,18 @@
 
   // Initialize heights
   items.forEach(item => setOpen(item, item.classList.contains('is-open'), true));
+  if (childRows.length) {
+    childRows.forEach((row) => {
+      const head = row.querySelector('.nx-accordion-childhead');
+      if (!head) return;
+      head.addEventListener('click', (e) => {
+        e.preventDefault();
+        toggleChild(row);
+      });
+    });
+    // ensure closed by default
+    closeAllChildren();
+  }
   savePreviewState();
 }
 
@@ -1378,6 +1618,195 @@
   function bindAccordionPreviews() {
     canvas?.querySelectorAll('.nx-accordion').forEach(initAccordionPreview);
     canvas?.querySelectorAll('.nx-tabs').forEach(initTabsPreview);
+  }
+
+  function initTableBlock(el) {
+    if (!el || el.dataset.tableInit === '1') return;
+    el.dataset.tableInit = '1';
+    const bid = el.dataset.bid;
+    const blk = getBlockById(bid);
+    if (!blk) return;
+    ensureTableProps(blk);
+
+    const table = el.querySelector('table');
+    const addRowBtn = el.querySelector('.nx-table-add-row');
+    const addColBtn = el.querySelector('.nx-table-add-col');
+
+    const syncInspectorCounts = () => {
+      const rows = blk.props.data.length;
+      const cols = Math.max(...blk.props.data.map(r => r.length), 0);
+      el.dataset.rows = rows;
+      el.dataset.cols = cols;
+      if (getSelectedBlock()?.id === bid) renderInspector();
+    };
+
+    const persist = () => {
+      persistUnsaved();
+      render();
+    };
+
+    const onCellInput = (e) => {
+      const r = parseInt(e.target.dataset.row || '-1', 10);
+      const c = parseInt(e.target.dataset.col || '-1', 10);
+      if (r < 0 || c < 0) return;
+      startEditSession();
+      ensureTableProps(blk);
+      blk.props.data[r][c] = e.target.innerText;
+      persist();
+    };
+
+    const addRow = (pos = 'below') => {
+      startEditSession();
+      ensureTableProps(blk);
+      const cols = Math.max(...blk.props.data.map(r => r.length), 1);
+      const row = Array.from({ length: cols }).map(() => '');
+      if (pos === 'above') blk.props.data.unshift(row);
+      else blk.props.data.push(row);
+      persist();
+    };
+
+    const addCol = (pos = 'right') => {
+      startEditSession();
+      ensureTableProps(blk);
+      blk.props.data = blk.props.data.map((r) => {
+        const row = Array.isArray(r) ? r.slice() : [];
+        if (pos === 'left') row.unshift('');
+        else row.push('');
+        return row;
+      });
+      persist();
+    };
+
+    const deleteRow = (idx) => {
+      if (blk.props.data.length <= 1) return;
+      startEditSession();
+      blk.props.data.splice(idx, 1);
+      persist();
+    };
+
+    const deleteCol = (idx) => {
+      const cols = Math.max(...blk.props.data.map(r => r.length), 0);
+      if (cols <= 1) return;
+      startEditSession();
+      blk.props.data = blk.props.data.map((r) => {
+        const row = Array.isArray(r) ? r.slice() : [];
+        row.splice(idx, 1);
+        return row;
+      });
+      persist();
+    };
+
+    table?.querySelectorAll('.nx-table-cell').forEach((cell) => {
+      cell.addEventListener('input', onCellInput);
+      cell.addEventListener('keydown', (e) => {
+        const r = parseInt(cell.dataset.row || '0', 10);
+        const c = parseInt(cell.dataset.col || '0', 10);
+        const rows = blk.props.data.length;
+        const cols = Math.max(...blk.props.data.map(row => row.length), 1);
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const dir = e.shiftKey ? -1 : 1;
+          let nextIndex = r * cols + c + dir;
+          let max = rows * cols - 1;
+          if (nextIndex < 0) nextIndex = 0;
+          if (nextIndex > max) {
+            addRow('below');
+            return;
+          }
+          const nr = Math.floor(nextIndex / cols);
+          const nc = nextIndex % cols;
+          table.querySelector(`[data-row="${nr}"][data-col="${nc}"]`)?.focus();
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          if (r === rows - 1) {
+            addRow('below');
+            return;
+          }
+          table.querySelector(`[data-row="${r + 1}"][data-col="${c}"]`)?.focus();
+        }
+      });
+    });
+
+    table?.querySelectorAll('tr').forEach((rowEl, idx) => {
+      const addAbove = document.createElement('button');
+      addAbove.type = 'button';
+      addAbove.className = 'nx-table-rowbtn nx-row-add-above';
+      addAbove.textContent = '+';
+      addAbove.addEventListener('click', () => addRow('above'));
+
+      const addBelow = document.createElement('button');
+      addBelow.type = 'button';
+      addBelow.className = 'nx-table-rowbtn nx-row-add-below';
+      addBelow.textContent = '+';
+      addBelow.addEventListener('click', () => addRow('below'));
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'nx-table-rowbtn nx-row-del';
+      del.textContent = '×';
+      del.addEventListener('click', () => deleteRow(idx));
+
+      rowEl.appendChild(addAbove);
+      rowEl.appendChild(addBelow);
+      rowEl.appendChild(del);
+    });
+
+    if (addRowBtn) addRowBtn.addEventListener('click', () => addRow('below'));
+    if (addColBtn) addColBtn.addEventListener('click', () => addCol('right'));
+
+    // Column controls
+    const header = document.createElement('div');
+    header.className = 'nx-table-colbar';
+    const colsCount = Math.max(...blk.props.data.map(r => r.length), 1);
+    for (let i = 0; i < colsCount; i += 1) {
+      const colBtn = document.createElement('div');
+      colBtn.className = 'nx-table-colctrl';
+      colBtn.innerHTML = `
+        <button type="button" class="nx-table-col-add-left" data-col="${i}">+</button>
+        <button type="button" class="nx-table-col-del" data-col="${i}">×</button>
+        <button type="button" class="nx-table-col-add-right" data-col="${i}">+</button>
+      `;
+      header.appendChild(colBtn);
+    }
+    el.querySelector('.nx-table-scroller')?.prepend(header);
+
+    header.querySelectorAll('.nx-table-col-add-left').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(e.target.dataset.col || '0', 10);
+        startEditSession();
+        blk.props.data = blk.props.data.map((r) => {
+          const row = Array.isArray(r) ? r.slice() : [];
+          row.splice(idx, 0, '');
+          return row;
+        });
+        persist();
+      });
+    });
+    header.querySelectorAll('.nx-table-col-add-right').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(e.target.dataset.col || '0', 10);
+        startEditSession();
+        blk.props.data = blk.props.data.map((r) => {
+          const row = Array.isArray(r) ? r.slice() : [];
+          row.splice(idx + 1, 0, '');
+          return row;
+        });
+        persist();
+      });
+    });
+    header.querySelectorAll('.nx-table-col-del').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(e.target.dataset.col || '0', 10);
+        deleteCol(idx);
+      });
+    });
+
+    syncInspectorCounts();
+  }
+
+  function bindTableBlocks() {
+    canvas?.querySelectorAll('.nx-table-block').forEach(initTableBlock);
   }
 
   function initMCQPreview(el) {
@@ -1733,6 +2162,21 @@
   // Real hyperlink insertion uses contenteditable
   tLink?.addEventListener('mousedown', (e) => {
     e.preventDefault();
+
+    // If CTA text (hero banner) is active, set the CTA link directly
+    const active = document.activeElement;
+    if (active && active.id === 'p_hb_cta') {
+      const urlRaw = prompt('Enter URL for CTA (https://...)');
+      if (!urlRaw) return;
+      let url = urlRaw.trim();
+      if (!/^https?:\/\//i.test(url) && !/^mailto:/i.test(url)) url = 'https://' + url;
+      const linkInput = document.getElementById('p_hb_link');
+      if (linkInput) linkInput.value = url;
+      const blk = getSelectedBlock();
+      if (blk) { blk.props = blk.props || {}; blk.props.ctaLink = url; persistUnsaved(); updateBlockCard(blk); }
+      return;
+    }
+
     restoreTextSelection();
 
     const sel = window.getSelection();
@@ -2218,6 +2662,9 @@
       html += `
         <label class="nx-muted">Text</label><br>
         <div id="p_html" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:160px;white-space:pre-wrap"></div>
+        <br><br>
+        <label class="nx-muted">Background</label>
+        <div id="p_text_bg_palette" style="margin-top:6px;"></div>
       `;
     } else if (blk.type === 'image') {
       html += `
@@ -2251,6 +2698,15 @@
           <option value="img-top" ${p.layout === 'img-top' ? 'selected' : ''}>Image top / Text bottom</option>
           <option value="text-top" ${p.layout === 'text-top' ? 'selected' : ''}>Text top / Image bottom</option>
         </select>
+        <br><br>
+        <div id="panel_split_wrap" style="${(p.layout === 'img-left' || p.layout === 'img-right') ? '' : 'opacity:.4;pointer-events:none'}">
+          <label class="nx-muted">Split ratio (Image / Text)</label><br>
+          <input id="p_split_ratio_range" type="range" min="0" max="4" step="1" value="0" style="width:100%">
+          <div id="p_split_ratio_label" class="nx-muted" style="margin-top:6px;font-weight:700;"></div>
+          <div class="nx-muted" style="display:flex;justify-content:space-between;font-size:12px;margin-top:4px;">
+            <span>30/70</span><span>40/60</span><span>50/50</span><span>60/40</span><span>70/30</span>
+          </div>
+        </div>
       `;
     } else if (blk.type === 'testimonial') {
       html += `
@@ -2267,6 +2723,87 @@
         <br><br>
         <label class="nx-muted">Upload file</label><br>
         <input id="p_dl_file" type="file" style="color:#e6eaf2">
+      `;
+    } else if (blk.type === 'heroBanner') {
+      html += `
+        <label class="nx-muted">Heading</label><br>
+        <input id="p_hb_heading" value="${esc(p.heading || '')}" style="${inputStyle}">
+        <br><br>
+        <label class="nx-muted">CTA text</label><br>
+        <div id="p_hb_cta_rich" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:60px;white-space:pre-wrap">${esc(p.cta || '')}</div>
+        <br><br>
+        <label class="nx-muted">Background image URL</label><br>
+        <input id="p_hb_bg" value="${esc(p.bgImage || '')}" style="${inputStyle}">
+        <div style="display:flex;align-items:center;gap:8px;margin:8px 0 14px;">
+          <label for="p_hb_bg_file" class="btn small" style="margin:0;">Browse…</label>
+          <input id="p_hb_bg_file" type="file" accept="image/*" style="display:none">
+          <button type="button" class="btn small" id="p_hb_bg_clear">Remove</button>
+        </div>
+        <label class="nx-muted">Overlay opacity (0-1)</label><br>
+        <input id="p_hb_overlay" type="number" min="0" max="1" step="0.05" value="${p.overlayOpacity ?? 0.6}" style="${inputStyle}">
+      `;
+    } else if (blk.type === 'table') {
+      ensureTableProps(blk);
+      const rows = blk.props.data.length;
+      const cols = Math.max(...blk.props.data.map(r => r.length), 1);
+      html += `
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+          <div class="nx-muted">Rows: <b>${rows}</b></div>
+          <div class="nx-muted">Columns: <b>${cols}</b></div>
+        </div>
+        <div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));align-items:center">
+          <label class="nx-muted">Density
+            <select id="p_tbl_density" style="${inputStyle}">
+              <option value="compact" ${p.density==='compact'?'selected':''}>Compact</option>
+              <option value="default" ${p.density==='default'?'selected':''}>Default</option>
+              <option value="spacious" ${p.density==='spacious'?'selected':''}>Spacious</option>
+            </select>
+          </label>
+          <label class="nx-muted">Row styling
+            <select id="p_tbl_rowstyle" style="${inputStyle}">
+              <option value="none" ${p.rowStyle==='none'?'selected':''}>None</option>
+              <option value="striped" ${p.rowStyle==='striped'?'selected':''}>Striped</option>
+            </select>
+          </label>
+          <label class="nx-muted">Grid lines
+            <select id="p_tbl_grid" style="${inputStyle}">
+              <option value="none" ${p.gridLines==='none'?'selected':''}>None</option>
+              <option value="subtle" ${p.gridLines==='subtle'?'selected':''}>Subtle</option>
+              <option value="full" ${p.gridLines==='full'?'selected':''}>Full</option>
+            </select>
+          </label>
+          <label class="nx-muted">Text align
+            <select id="p_tbl_align" style="${inputStyle}">
+              <option value="left" ${p.textAlign==='left'?'selected':''}>Left</option>
+              <option value="center" ${p.textAlign==='center'?'selected':''}>Center</option>
+              <option value="right" ${p.textAlign==='right'?'selected':''}>Right</option>
+            </select>
+          </label>
+          <label class="nx-muted">Vertical align
+            <select id="p_tbl_valign" style="${inputStyle}">
+              <option value="top" ${p.vAlign==='top'?'selected':''}>Top</option>
+              <option value="middle" ${p.vAlign==='middle'?'selected':''}>Middle</option>
+              <option value="bottom" ${p.vAlign==='bottom'?'selected':''}>Bottom</option>
+            </select>
+          </label>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin:12px 0">
+          <label class="nx-toggle">
+            <input id="p_tbl_headerrow" type="checkbox" ${p.headerRow ? 'checked' : ''}>
+            <span class="nx-toggle-ui"></span>
+            <span class="nx-toggle-label">Header row</span>
+          </label>
+          <label class="nx-toggle">
+            <input id="p_tbl_headercol" type="checkbox" ${p.headerCol ? 'checked' : ''}>
+            <span class="nx-toggle-ui"></span>
+            <span class="nx-toggle-label">Header column</span>
+          </label>
+          <label class="nx-toggle">
+            <input id="p_tbl_resize" type="checkbox" ${p.colResize !== false ? 'checked' : ''}>
+            <span class="nx-toggle-ui"></span>
+            <span class="nx-toggle-label">Allow column resize</span>
+          </label>
+        </div>
       `;
     } else if (blk.type === 'video') {
       html += `
@@ -2501,6 +3038,8 @@
       const renderLen = acc.mode === 'tabs' ? tabCap : items.length;
       const activeIdx = getAccordionFocus(blk.id, renderLen);
       const activeItem = items[activeIdx] || items[0];
+      const activeSubs = Array.isArray(activeItem?.subItems) ? activeItem.subItems : [];
+      const isGrouped = acc.accStyle === 'grouped';
       const itemOptions = items.map((it,i) => `<option value="${i}" ${acc.defaultIndex===i ? 'selected' : ''}>Item ${i + 1}</option>`).join('');
       const tabOptions = items.slice(0, maxTabs).map((it,i) => `<option value="${i}" ${acc.tabsIndex===i ? 'selected' : ''}>Item ${i + 1}</option>`).join('');
       const titleForBtn = (t, i) => esc(t || `Item ${i + 1}`);
@@ -2540,26 +3079,62 @@
           </button>
         </div>
 
+        <div id="acc_style_mode_wrap" style="${acc.mode === 'accordion' ? '' : 'display:none'};margin-top:10px">
+          <label class="nx-muted">Accordion style</label>
+          <select id="acc_style_mode" class="nx-toolsel" style="width:100%;margin-top:6px">
+            <option value="standard" ${isGrouped ? '' : 'selected'}>Standard</option>
+            <option value="grouped" ${isGrouped ? 'selected' : ''}>Grouped (links list)</option>
+          </select>
+          <div class="nx-muted" style="margin-top:6px">Grouped turns the body into a simple list of sub-items.</div>
+        </div>
+
         <div class="nx-strong" style="margin-bottom:8px">Item content</div>
         <label class="nx-muted">Title</label><br>
         <input id="acc_item_title" value="${esc(activeItem?.title || '')}" style="${inputStyle}">
         <br><br>
-        <label class="nx-toggle" style="display:inline-flex;align-items:center;gap:8px;margin-bottom:8px">
-          <input id="acc_item_showimg" type="checkbox" ${activeItem?.showHeaderImg ? 'checked' : ''}>
-          <span class="nx-toggle-ui"></span>
-          <span class="nx-toggle-label">Show header image</span>
-        </label>
-        <div id="acc_item_img_wrap" style="${activeItem?.showHeaderImg ? '' : 'display:none'}">
-          <label class="nx-muted">Header image URL</label><br>
-          <input id="acc_item_img" value="${esc(activeItem?.headerImg || '')}" style="${inputStyle}" placeholder="https://...">
-          <br><br>
-          <label class="nx-muted">Alt text</label><br>
-          <input id="acc_item_alt" value="${esc(activeItem?.headerAlt || '')}" style="${inputStyle}">
+        <div id="acc_item_img_section" style="${isGrouped ? 'display:none' : ''}">
+          <label class="nx-toggle" style="display:inline-flex;align-items:center;gap:8px;margin-bottom:8px">
+            <input id="acc_item_showimg" type="checkbox" ${activeItem?.showHeaderImg ? 'checked' : ''}>
+            <span class="nx-toggle-ui"></span>
+            <span class="nx-toggle-label">Show header image</span>
+          </label>
+          <div id="acc_item_img_wrap" style="${activeItem?.showHeaderImg ? '' : 'display:none'}">
+            <label class="nx-muted">Header image URL</label><br>
+            <input id="acc_item_img" value="${esc(activeItem?.headerImg || '')}" style="${inputStyle}" placeholder="https://...">
+            <br><br>
+            <label class="nx-muted">Alt text</label><br>
+            <input id="acc_item_alt" value="${esc(activeItem?.headerAlt || '')}" style="${inputStyle}">
+          </div>
+          <br>
         </div>
-        <br>
-        <label class="nx-muted">Body</label><br>
-        <div id="acc_item_body" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:160px;white-space:pre-wrap"></div>
-        <br><br>
+
+        <div id="acc_body_wrap" style="${isGrouped ? 'display:none' : ''}">
+          <label class="nx-muted">Body</label><br>
+          <div id="acc_item_body" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:160px;white-space:pre-wrap"></div>
+          <br><br>
+        </div>
+
+        <div id="acc_subitems_wrap" style="${isGrouped ? '' : 'display:none'}">
+          <label class="nx-muted">Sub-items</label>
+          <div id="acc_subitems_list" class="nx-muted" style="margin-top:8px;display:grid;gap:8px">
+            ${activeSubs.length ? activeSubs.map((s, idx) => `
+              <div class="nx-subitem-row" data-idx="${idx}" style="display:grid;gap:6px;grid-template-columns:1fr 1fr auto;align-items:center">
+                <input class="nx-sub-label nx-toolsel" data-idx="${idx}" placeholder="Label" value="${esc(s.label || '')}" style="width:100%">
+                <input class="nx-sub-url nx-toolsel" data-idx="${idx}" placeholder="Link (optional)" value="${esc(s.url || '')}" style="width:100%">
+                <div style="display:flex;gap:6px;justify-content:flex-end">
+                  <button class="smallbtn" data-act="sub-up" data-idx="${idx}" title="Move up">↑</button>
+                  <button class="smallbtn" data-act="sub-down" data-idx="${idx}" title="Move down">↓</button>
+                  <button class="smallbtn" data-act="sub-del" data-idx="${idx}" title="Remove" style="border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.12)">✕</button>
+                </div>
+              </div>
+            `).join('') : '<div class="nx-muted">No sub-items yet.</div>'}
+          </div>
+          <div style="margin-top:10px">
+            <button class="smallbtn" id="acc_add_subitem" type="button">Add sub-item</button>
+          </div>
+          <br>
+        </div>
+
         <label class="nx-toggle" style="display:inline-flex;align-items:center;gap:8px">
           <input id="acc_item_open" type="checkbox" ${activeItem?.openDefault ? 'checked' : ''}>
           <span class="nx-toggle-ui"></span>
@@ -2631,26 +3206,30 @@
           <span class="nx-toggle-ui"></span>
           <span class="nx-toggle-label">Show dividers</span>
         </label>
-        <label class="nx-muted">Chevron / indicator (accordion)</label>
-        <select id="acc_indicator" class="nx-toolsel" style="width:100%;margin-top:6px">
-          <option value="right" ${acc.showIndicator && acc.indicatorPosition === 'right' ? 'selected' : ''}>Show (right)</option>
-          <option value="left" ${acc.showIndicator && acc.indicatorPosition === 'left' ? 'selected' : ''}>Show (left)</option>
-          <option value="none" ${!acc.showIndicator ? 'selected' : ''}>Hide</option>
-        </select>
-        <br><br>
-        <label class="nx-muted">Header image position</label>
-        <select id="acc_img_pos" class="nx-toolsel" style="width:100%;margin-top:6px">
-          <option value="left" ${acc.headerImgPos==='left'?'selected':''}>Left</option>
-          <option value="right" ${acc.headerImgPos==='right'?'selected':''}>Right</option>
-        </select>
-        <br><br>
-        <label class="nx-muted">Header image size</label>
-        <select id="acc_img_size" class="nx-toolsel" style="width:100%;margin-top:6px">
-          <option value="small" ${acc.headerImgSize==='small'?'selected':''}>Small</option>
-          <option value="medium" ${acc.headerImgSize==='medium'?'selected':''}>Medium</option>
-          <option value="large" ${acc.headerImgSize==='large'?'selected':''}>Large</option>
-        </select>
-        <br><br>
+        <div id="acc_indicator_wrap" style="${isGrouped ? 'display:none' : ''}">
+          <label class="nx-muted">Chevron / indicator (accordion)</label>
+          <select id="acc_indicator" class="nx-toolsel" style="width:100%;margin-top:6px">
+            <option value="right" ${acc.showIndicator && acc.indicatorPosition === 'right' ? 'selected' : ''}>Show (right)</option>
+            <option value="left" ${acc.showIndicator && acc.indicatorPosition === 'left' ? 'selected' : ''}>Show (left)</option>
+            <option value="none" ${!acc.showIndicator ? 'selected' : ''}>Hide</option>
+          </select>
+          <br><br>
+        </div>
+        <div id="acc_imgpos_wrap" style="${isGrouped ? 'display:none' : ''}">
+          <label class="nx-muted">Header image position</label>
+          <select id="acc_img_pos" class="nx-toolsel" style="width:100%;margin-top:6px">
+            <option value="left" ${acc.headerImgPos==='left'?'selected':''}>Left</option>
+            <option value="right" ${acc.headerImgPos==='right'?'selected':''}>Right</option>
+          </select>
+          <br><br>
+          <label class="nx-muted">Header image size</label>
+          <select id="acc_img_size" class="nx-toolsel" style="width:100%;margin-top:6px">
+            <option value="small" ${acc.headerImgSize==='small'?'selected':''}>Small</option>
+            <option value="medium" ${acc.headerImgSize==='medium'?'selected':''}>Medium</option>
+            <option value="large" ${acc.headerImgSize==='large'?'selected':''}>Large</option>
+          </select>
+          <br><br>
+        </div>
         <label class="nx-muted">Spacing</label>
         <select id="acc_spacing" class="nx-toolsel" style="width:100%;margin-top:6px">
           <option value="compact" ${acc.spacing === 'compact' ? 'selected' : ''}>Compact</option>
@@ -2866,6 +3445,9 @@
         <br><br>
         <label class="nx-muted">Lines (1-12)</label><br>
         <input id="p_lines" type="number" min="1" max="12" value="${parseInt(p.lines ?? 3,10) || 3}" style="${inputStyle}">
+        <br><br>
+        <label class="nx-muted">Background</label>
+        <div id="p_textbox_bg_palette" style="margin-top:6px;"></div>
       `;
     } else {
       html += `<div class="nx-muted">No editable fields.</div>`;
@@ -2918,15 +3500,28 @@
         : asHtml;
       el.innerHTML = initial;
 
-      el.addEventListener('focus', startEditSession);
-      el.addEventListener('input', () => {
+      const handleInput = () => {
         const htmlVal = el.innerHTML;
         const textVal = el.textContent || '';
         onChange(htmlVal, textVal);
         persistUnsaved();
         updateBlockCard(blk);
-      });
-      el.addEventListener('blur', endEditSession);
+      };
+
+      el.addEventListener('focus', startEditSession, true);
+      el.addEventListener('input', handleInput, true);
+      el.addEventListener('blur', endEditSession, true);
+
+      // allow tab insertion for accordion body instead of focus change
+      if (id === 'acc_item_body') {
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Tab') {
+            e.preventDefault();
+            document.execCommand('insertHTML', false, '&nbsp;&nbsp;');
+            handleInput();
+          }
+        }, true);
+      }
       return el;
     };
 
@@ -2962,6 +3557,7 @@
       if (blk.type === 'testimonial') return (p.bodyHtml ?? '') || (p.body ?? '');
       if (blk.type === 'download') return (p.bodyHtml ?? '') || (p.body ?? '');
       if (blk.type === 'heroCard' || blk.type === 'heroPage') return (p.bodyHtml ?? '') || (p.body ?? '');
+      if (blk.type === 'heroBanner') return (p.bodyHtml ?? '') || (p.body ?? '');
       return baseRichInitial;
     })(), (htmlVal, textVal) => {
       blk.props = blk.props || {};
@@ -2974,6 +3570,7 @@
       if (blk.type === 'panel') { blk.props.body = textVal; blk.props.bodyHtml = htmlVal; }
       if (blk.type === 'testimonial') { blk.props.body = textVal; blk.props.bodyHtml = htmlVal; }
       if (blk.type === 'download') { blk.props.body = textVal; blk.props.bodyHtml = htmlVal; }
+      if (blk.type === 'heroBanner') { blk.props.body = textVal; blk.props.bodyHtml = htmlVal; }
       if (blk.type === 'heroCard' || blk.type === 'heroPage') { blk.props.body = textVal; blk.props.bodyHtml = htmlVal; }
     });
 
@@ -2995,8 +3592,79 @@
 
     if (blk.type === 'heading') bind('p_level', 'level', (v) => parseInt(v || '2', 10));
     if (blk.type === 'image')  { bind('p_src', 'src'); bind('p_alt', 'alt'); }
-    if (blk.type === 'panel')  { bind('p_image', 'image'); bind('p_alt', 'alt'); bind('p_layout', 'layout'); }
+    if (blk.type === 'panel')  {
+      const ratioOptions = ['30-70','40-60','50-50','60-40','70-30'];
+      bind('p_image', 'image');
+      bind('p_alt', 'alt');
+      bind('p_layout', 'layout');
+      const splitWrap = document.getElementById('panel_split_wrap');
+      const splitRange = document.getElementById('p_split_ratio_range');
+      const splitLabel = document.getElementById('p_split_ratio_label');
+      if (splitRange) {
+        const idx = Math.max(0, ratioOptions.indexOf(p.splitRatio || '50-50'));
+        splitRange.value = String(idx);
+        if (splitLabel) splitLabel.textContent = ratioOptions[idx].replace('-', ' / ');
+      }
+      const toggleSplit = () => {
+        if (!splitWrap) return;
+        const isSide = (blk.props.layout === 'img-left' || blk.props.layout === 'img-right');
+        splitWrap.style.opacity = isSide ? '' : '.4';
+        splitWrap.style.pointerEvents = isSide ? '' : 'none';
+      };
+      if (splitRange) {
+        splitRange.addEventListener('input', (e) => {
+          const idx = Math.max(0, Math.min(ratioOptions.length - 1, parseInt(e.target.value || '0', 10) || 0));
+          const val = ratioOptions[idx];
+          if (splitLabel) splitLabel.textContent = val.replace('-', ' / ');
+          startEditSession();
+          blk.props = blk.props || {};
+          blk.props.splitRatio = val;
+          persistUnsaved();
+          render();
+        });
+      }
+      const layoutSel = document.getElementById('p_layout');
+      layoutSel?.addEventListener('change', toggleSplit);
+      toggleSplit();
+    }
     if (blk.type === 'download')  { bind('p_dl_label', 'label'); bind('p_dl_url', 'url'); }
+    if (blk.type === 'heroBanner')  {
+      bind('p_hb_heading', 'heading');
+      bind('p_hb_bg', 'bgImage');
+      bind('p_hb_overlay', 'overlayOpacity', (v) => parseFloat(v || 0.6));
+    }
+    if (blk.type === 'table') {
+      const updateSelect = (id, key) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', (e) => {
+          startEditSession();
+          ensureTableProps(blk);
+          blk.props[key] = e.target.value;
+          persistUnsaved();
+          render();
+        });
+      };
+      const updateToggle = (id, key) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', (e) => {
+          startEditSession();
+          ensureTableProps(blk);
+          blk.props[key] = !!e.target.checked;
+          persistUnsaved();
+          render();
+        });
+      };
+      updateSelect('p_tbl_density', 'density');
+      updateSelect('p_tbl_rowstyle', 'rowStyle');
+      updateSelect('p_tbl_grid', 'gridLines');
+      updateSelect('p_tbl_align', 'textAlign');
+      updateSelect('p_tbl_valign', 'vAlign');
+      updateToggle('p_tbl_headerrow', 'headerRow');
+      updateToggle('p_tbl_headercol', 'headerCol');
+      updateToggle('p_tbl_resize', 'colResize');
+    }
     if (blk.type === 'video')  bind('p_url', 'url');
     const imgFile = document.getElementById('p_src_file');
     if (imgFile) {
@@ -3015,6 +3683,36 @@
         const url = URL.createObjectURL(file);
         setProp('image', url);
       });
+    }
+    const heroBgFile = document.getElementById('p_hb_bg_file');
+    if (heroBgFile) {
+      heroBgFile.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file || !file.type.startsWith('image/')) return;
+        const url = URL.createObjectURL(file);
+        setProp('bgImage', url);
+      });
+    }
+    const heroBgClear = document.getElementById('p_hb_bg_clear');
+    if (heroBgClear) {
+      heroBgClear.addEventListener('click', () => {
+        setProp('bgImage', '');
+        const bgUrl = document.getElementById('p_hb_bg');
+        if (bgUrl) bgUrl.value = '';
+      });
+    }
+
+    const heroCtaRich = document.getElementById('p_hb_cta_rich');
+    if (heroCtaRich) {
+      heroCtaRich.addEventListener('focus', startEditSession);
+      heroCtaRich.addEventListener('input', () => {
+        blk.props = blk.props || {};
+        blk.props.cta = heroCtaRich.innerText || '';
+        blk.props.ctaHtml = heroCtaRich.innerHTML || '';
+        persistUnsaved();
+        updateBlockCard(blk);
+      });
+      heroCtaRich.addEventListener('blur', endEditSession);
     }
     const dlFile = document.getElementById('p_dl_file');
     if (dlFile) {
@@ -3357,6 +4055,7 @@
       const renderLen = acc.mode === 'tabs' ? tabCap : items.length;
       const activeIdx = getAccordionFocus(blk.id, renderLen);
       const activeItem = items[activeIdx] || items[0];
+      const isGrouped = acc.accStyle === 'grouped';
 
       const refreshAll = () => {
         persistUnsaved();
@@ -3449,12 +4148,20 @@
         });
       });
 
-      initRichField('acc_item_body', (activeItem?.bodyHtml ?? activeItem?.body ?? ''), (htmlVal, textVal) => {
-        startEditSession();
-        activeItem.bodyHtml = htmlVal;
-        activeItem.body = textVal;
-        refreshPreview();
-      });
+      if (!isGrouped) {
+        initRichField('acc_item_body', (activeItem?.bodyHtml ?? activeItem?.body ?? ''), (htmlVal, textVal) => {
+          startEditSession();
+          activeItem.bodyHtml = htmlVal;
+          activeItem.body = textVal;
+          refreshPreview();
+        });
+      } else {
+        const bodyEl = document.getElementById('acc_item_body');
+        if (bodyEl) {
+          bodyEl.textContent = '';
+          bodyEl.setAttribute('contenteditable', 'false');
+        }
+      }
 
       const titleInput = document.getElementById('acc_item_title');
       if (titleInput) {
@@ -3506,6 +4213,85 @@
           refreshPreview();
         });
         altInput.addEventListener('blur', endEditSession);
+      }
+
+      const styleModeSel = document.getElementById('acc_style_mode');
+      if (styleModeSel) {
+        styleModeSel.addEventListener('change', (e) => {
+          startEditSession();
+          const val = e.target.value === 'grouped' ? 'grouped' : 'standard';
+          acc.accStyle = val;
+          if (val === 'grouped') {
+            acc.allowMultiple = true;
+            acc.allowCollapseAll = true;
+            acc.showIndicator = true;
+            acc.indicatorPosition = 'right';
+            acc.spacing = 'compact';
+            acc.styleVariant = 'minimal';
+          }
+          persistUnsaved();
+          renderInspector();
+          updateBlockCard(blk);
+          bindAccordionPreviews();
+          endEditSession();
+        });
+      }
+
+      const addSubBtn = document.getElementById('acc_add_subitem');
+      const subList = document.getElementById('acc_subitems_list');
+      const bindSubInputs = () => {
+        if (!subList) return;
+        activeItem.subItems = Array.isArray(activeItem.subItems) ? activeItem.subItems : [];
+        subList.querySelectorAll('.nx-sub-label').forEach(inp => {
+          inp.addEventListener('input', (e) => {
+            const idx = parseInt(e.target.dataset.idx || '-1', 10);
+            if (!Number.isInteger(idx) || !activeItem.subItems[idx]) return;
+            startEditSession();
+            activeItem.subItems[idx].label = e.target.value;
+            refreshPreview();
+          });
+        });
+        subList.querySelectorAll('.nx-sub-url').forEach(inp => {
+          inp.addEventListener('input', (e) => {
+            const idx = parseInt(e.target.dataset.idx || '-1', 10);
+            if (!Number.isInteger(idx) || !activeItem.subItems[idx]) return;
+            startEditSession();
+            activeItem.subItems[idx].url = e.target.value;
+            refreshPreview();
+          });
+        });
+        subList.querySelectorAll('button[data-act^=\"sub-\"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.idx || '-1', 10);
+            if (!Number.isInteger(idx) || !activeItem.subItems[idx]) return;
+            startEditSession();
+            const act = btn.dataset.act;
+            if (act === 'sub-del') {
+              activeItem.subItems.splice(idx, 1);
+            } else if (act === 'sub-up' && idx > 0) {
+              const moved = activeItem.subItems.splice(idx, 1)[0];
+              activeItem.subItems.splice(idx - 1, 0, moved);
+            } else if (act === 'sub-down' && idx < activeItem.subItems.length - 1) {
+              const moved = activeItem.subItems.splice(idx, 1)[0];
+              activeItem.subItems.splice(idx + 1, 0, moved);
+            }
+            persistUnsaved();
+            renderInspector();
+            updateBlockCard(blk);
+          });
+        });
+      };
+      bindSubInputs();
+      if (addSubBtn) {
+        addSubBtn.addEventListener('click', () => {
+          startEditSession();
+          activeItem.subItems = Array.isArray(activeItem.subItems) ? activeItem.subItems : [];
+          activeItem.subItems.push({ label: '', url: '' });
+          persistUnsaved();
+          renderInspector();
+          updateBlockCard(blk);
+          endEditSession();
+        });
       }
 
       const allowMulti = document.getElementById('acc_allow_multi');
@@ -3728,10 +4514,34 @@
         return 0.35;
       });
     }
+    if (blk.type === 'text') {
+      const holder = document.getElementById('p_text_bg_palette');
+      if (holder) {
+        holder.innerHTML = renderColorPalette('p_text_bg_palette_inner', p.bgColor || '');
+        bindColorPalette('p_text_bg_palette_inner', (hex) => {
+          startEditSession();
+          blk.props = blk.props || {};
+          blk.props.bgColor = hex || '';
+          persistUnsaved();
+          updateBlockCard(blk);
+        });
+      }
+    }
     if (blk.type === 'textbox') {
       bind('p_label', 'label');
       bind('p_placeholder', 'placeholder');
       bind('p_lines', 'lines', (v) => Math.max(1, Math.min(12, parseInt(v || '3', 10) || 3)));
+      const holder = document.getElementById('p_textbox_bg_palette');
+      if (holder) {
+        holder.innerHTML = renderColorPalette('p_textbox_bg_palette_inner', p.bgColor || '');
+        bindColorPalette('p_textbox_bg_palette_inner', (hex) => {
+          startEditSession();
+          blk.props = blk.props || {};
+          blk.props.bgColor = hex || '';
+          persistUnsaved();
+          updateBlockCard(blk);
+        });
+      }
     }
     if (blk.type === 'carousel') {
       const bgPresets = [

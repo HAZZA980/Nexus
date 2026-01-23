@@ -7,6 +7,7 @@ use NexusCMS\Support\PartialsManager;
 use NexusCMS\Core\Security;
 
 $base = base_path();
+$activeNav = 'sites';
 $siteId = (int)($_GET['site_id'] ?? 0);
 $create = $_GET['create'] ?? null;
 $site = Site::find($siteId);
@@ -57,17 +58,31 @@ function rel_path(string $rootedPath): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Site partials — <?= Security::e($site['name']) ?></title>
+  <script>
+    (function(){
+      try{
+        const stored=localStorage.getItem('nexusTheme');
+        const theme=stored==='light'?'light':'dark';
+        localStorage.setItem('nexusTheme', theme);
+        document.documentElement.classList.toggle('theme-light', theme==='light');
+      }catch(e){}
+    })();
+  </script>
   <style>
     :root { --bg:#0b1224;--panel:#0f172a;--card:#111a32;--border:rgba(255,255,255,0.08);--muted:#9aa4b5;--text:#e7ecf4;--primary:#3b82f6;--radius:16px;--focus:0 0 0 3px rgba(59,130,246,0.45); }
     * { box-sizing:border-box; }
     body { margin:0; font-family:"Inter","Segoe UI",system-ui,-apple-system,sans-serif; background:radial-gradient(120% 120% at 50% 0%, rgba(59,130,246,0.15), rgba(59,130,246,0) 55%), var(--bg); color:var(--text); line-height:1.5; }
     a { color:inherit; text-decoration:none; }
     a:focus-visible, button:focus-visible { outline:none; box-shadow:var(--focus); }
-    .top-bar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 18px; background:linear-gradient(90deg, rgba(59,130,246,0.08), rgba(59,130,246,0)); border-bottom:1px solid var(--border); position:sticky; top:0; backdrop-filter:blur(10px); z-index:10; }
+    .top-bar { display:flex; align-items:center; gap:16px; padding:14px 18px; background:linear-gradient(90deg, rgba(59,130,246,0.08), rgba(59,130,246,0)); border-bottom:1px solid var(--border); position:sticky; top:0; backdrop-filter:blur(10px); z-index:10; }
     .brand { display:inline-flex; align-items:center; gap:10px; font-weight:600; }
     .brand-mark { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, #3b82f6, #22c55e); display:grid; place-items:center; font-weight:700; letter-spacing:-0.02em; }
     .brand-text { display:flex; flex-direction:column; line-height:1.2; }
     .brand-text small { color:var(--muted); font-weight:500; }
+    .top-nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;}
+    .top-nav .nav-link{display:inline-flex;align-items:center;justify-content:center;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.05);color:var(--text);font-weight:700;text-decoration:none;min-height:40px;}
+    .top-nav .nav-link:hover{background:rgba(255,255,255,0.1);}
+    .top-nav .nav-link.active{background:linear-gradient(135deg, var(--primary), #1d4ed8);color:#fff;border-color:transparent;box-shadow:0 10px 30px rgba(0,0,0,0.08);}
     main { max-width:1100px; margin:0 auto; padding:24px 20px 48px; }
     .back-link { display:inline-flex; align-items:center; gap:8px; color:var(--muted); min-height:44px; padding:8px 0; font-weight:600; }
     .page-head h1 { margin:0; font-size:30px; letter-spacing:-0.02em; }
@@ -85,14 +100,19 @@ function rel_path(string $rootedPath): string {
     .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
   </style>
 </head>
-<body>
-  <header class="top-bar">
-    <div class="brand">
-      <div class="brand-mark" aria-hidden="true">N</div>
-      <div class="brand-text"><span>NexusCMS</span><small>Partials</small></div>
-    </div>
-    <a class="back-link" href="<?= $base ?>/admin/site.php?id=<?= (int)$site['id'] ?>">← Back to site</a>
-  </header>
+  <body>
+    <header class="top-bar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">N</div>
+        <div class="brand-text"><span>NexusCMS</span><small>Partials</small></div>
+      </div>
+      <nav class="top-nav" aria-label="Admin navigation">
+        <a class="nav-link <?= $activeNav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
+        <a class="nav-link <?= $activeNav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
+        <a class="nav-link <?= $activeNav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Images</a>
+      </nav>
+      <a class="back-link" href="<?= $base ?>/admin/site.php?id=<?= (int)$site['id'] ?>">← Back to site</a>
+    </header>
   <main>
     <div class="page-head">
       <h1>Site partials</h1>

@@ -23,5 +23,13 @@ $sticky  = !empty($header['style']['sticky']);
         <?= Security::e($header['cta']['label']) ?>
       </a>
     <?php endif; ?>
+
+    <?php
+      $returnUrl = urlencode($_SERVER['REQUEST_URI'] ?? '/');
+      $loginHref = base_path() . "/login.php?return={$returnUrl}";
+    ?>
+    <a class="nx-btn-outline" href="<?= Security::e($loginHref) ?>" style="margin-left:10px;">
+      Login
+    </a>
   </div>
 </header>

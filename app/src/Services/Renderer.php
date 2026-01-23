@@ -280,12 +280,14 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
       case 'text': {
         $htmlRaw = (string)($p['html'] ?? '');
+        $bg = trim((string)($p['bgColor'] ?? ''));
+        $bgStyle = $bg !== '' ? "background:{$bg}; padding:10px; border-radius:10px; border:1px solid rgba(17,24,39,.12);" : '';
         if ($htmlRaw !== '') {
           $inner = self::safeInlineHtml($htmlRaw);
-          $html = "<div class=\"nx-text\">{$inner}</div>";
+          $html = "<div class=\"nx-text\" style=\"{$bgStyle}\">{$inner}</div>";
         } else {
           $txt = nl2br(Security::e((string)($p['text'] ?? '')));
-          $html = "<div class=\"nx-text\">{$txt}</div>";
+          $html = "<div class=\"nx-text\" style=\"{$bgStyle}\">{$txt}</div>";
         }
 
         return self::wrapWithStyles($html, $blk, true);
@@ -315,6 +317,13 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
           $layout = 'img-top';
         }
         $stacked = ($layout === 'img-top' || $layout === 'text-top');
+        $split = (string)($p['splitRatio'] ?? '50-50');
+        $colsMap = [
+          '50-50' => '1fr 1fr',
+          '60-40' => '3fr 2fr',
+          '70-30' => '7fr 3fr',
+        ];
+        $cols = $colsMap[$split] ?? '1fr 1fr';
 
         $bodyRaw = (string)($p['bodyHtml'] ?? ($p['html'] ?? ''));
         if ($bodyRaw !== '') {
@@ -337,7 +346,8 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         if ($layout === 'img-top')   { $first = $media; $second = $text; }
 
         $extra = $stacked ? ' nx-panel--stacked' : '';
-        $html = "<div class=\"nx-panel nx-panel--{$layout}{$extra}\">{$first}{$second}</div>";
+        $style = (!$stacked) ? "style=\"grid-template-columns:{$cols};\"" : '';
+        $html = "<div class=\"nx-panel nx-panel--{$layout}{$extra}\" {$style}>{$first}{$second}</div>";
 
         return self::wrapWithStyles($html, $blk, true);
       }
@@ -366,10 +376,12 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         $lines = (int)($p['lines'] ?? 3);
         if ($lines < 1) $lines = 1;
         if ($lines > 12) $lines = 12;
+        $bg = trim((string)($p['bgColor'] ?? ''));
+        $bgStyle = $bg !== '' ? "background:{$bg};" : '';
 
         $textarea = "<label class=\"nx-textbox\">"
           . "<div class=\"nx-textbox-label\">{$label}</div>"
-          . "<textarea rows=\"{$lines}\" placeholder=\"{$ph}\" aria-label=\"{$label}\"></textarea>"
+          . "<textarea rows=\"{$lines}\" placeholder=\"{$ph}\" aria-label=\"{$label}\" style=\"{$bgStyle}\"></textarea>"
           . "</label>";
 
         return self::wrapWithStyles($textarea, $blk, false);
@@ -474,6 +486,89 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         return self::wrapWithStyles($html, $blk, true);
       }
 
+      case 'heroBanner': {
+        $heading = Security::e((string)($p['heading'] ?? 'Welcome'));
+        $ctaText = (string)($p['cta'] ?? 'Learn more');
+        $ctaRaw = (string)($p['ctaHtml'] ?? '');
+        $cta = $ctaRaw !== '' ? (self::hasHtml($ctaRaw) ? self::safeInlineHtml($ctaRaw) : self::formatMarkedText($ctaRaw)) : Security::e($ctaText);
+        $bg = trim((string)($p['bgImage'] ?? ''));
+        $overlay = isset($p['overlayOpacity']) ? (float)$p['overlayOpacity'] : 0.6;
+        if ($overlay < 0) $overlay = 0;
+        if ($overlay > 1) $overlay = 1;
+
+        $bgStyle = $bg !== '' ? "background-image:url('".Security::e($bg)."');" : "background:linear-gradient(135deg,#1f2937,#111827);";
+
+        $html = "<div class=\"nx-herobanner\" style=\"{$bgStyle}\">"
+          . "<div class=\"nx-herobanner-inner\">"
+            . "<div class=\"nx-herobanner-card\" style=\"background:rgba(0,0,0,{$overlay});\">"
+              . "<div class=\"nx-herobanner-text\">{$heading}</div>"
+              . "<div class=\"nx-herobanner-cta\">{$cta}</div>"
+            . "</div>"
+          . "</div>"
+        . "</div>";
+
+        return self::wrapWithStyles($html, $blk, true);
+      }
+
+      case 'table': {
+        $data = isset($p['data']) && is_array($p['data']) ? $p['data'] : [['', '', ''], ['', '', '']];
+        $rows = count($data);
+        $cols = 0;
+        foreach ($data as $row) {
+          if (is_array($row)) $cols = max($cols, count($row));
+        }
+        if ($cols === 0) $cols = 1;
+        $headerRow = !empty($p['headerRow']);
+        $headerCol = !empty($p['headerCol']);
+        $density = $p['density'] ?? 'default';
+        $rowStyle = $p['rowStyle'] ?? 'none';
+        $gridLines = $p['gridLines'] ?? 'subtle';
+        $textAlign = $p['textAlign'] ?? 'left';
+        $vAlign = $p['vAlign'] ?? 'middle';
+        $colWidths = isset($p['colWidths']) && is_array($p['colWidths']) ? $p['colWidths'] : [];
+
+        $classes = [
+          'nx-table',
+          'density-' . Security::e($density),
+          'grid-' . Security::e($gridLines),
+          'rowstyle-' . Security::e($rowStyle),
+          'valign-' . Security::e($vAlign),
+          'align-' . Security::e($textAlign),
+        ];
+
+        $colgroup = '';
+        for ($c = 0; $c < $cols; $c++) {
+          $w = $colWidths[$c] ?? 'auto';
+          $w = $w === '' ? 'auto' : Security::e($w);
+          $colgroup .= "<col style=\"width:{$w}\">";
+        }
+
+        $tbody = '';
+        foreach ($data as $rIdx => $row) {
+          if (!is_array($row)) $row = [];
+          while (count($row) < $cols) $row[] = '';
+          $cells = '';
+          foreach ($row as $cIdx => $cell) {
+            $isHead = ($headerRow && $rIdx === 0) || ($headerCol && $cIdx === 0);
+            $tag = $isHead ? 'th' : 'td';
+            $cellHtml = self::formatMarkedText((string)$cell);
+            $cells .= "<{$tag}>{$cellHtml}</{$tag}>";
+          }
+          $tbody .= "<tr>{$cells}</tr>";
+        }
+
+        $html = "<div class=\"" . implode(' ', $classes) . "\">"
+          . "<div class=\"nx-table-wrap\">"
+            . "<table>"
+              . "<colgroup>{$colgroup}</colgroup>"
+              . "<tbody>{$tbody}</tbody>"
+            . "</table>"
+          . "</div>"
+        . "</div>";
+
+        return self::wrapWithStyles($html, $blk, true);
+      }
+
       case 'heroCard':
       case 'heroPage': { // legacy name kept for existing docs
         $title = Security::e((string)($p['title'] ?? ''));
@@ -568,6 +663,14 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         }
         $items = [];
         foreach ($itemsIn as $i => $it) {
+          $subsIn = is_array($it['subItems'] ?? null) ? $it['subItems'] : [];
+          $subs = [];
+          foreach ($subsIn as $sub) {
+            $label = trim((string)($sub['label'] ?? ''));
+            $url = trim((string)($sub['url'] ?? ''));
+            if ($label === '') continue;
+            $subs[] = ['label' => $label, 'url' => $url];
+          }
           $items[] = [
             'title' => (string)($it['title'] ?? ('Item ' . ($i + 1))),
             'body' => (string)($it['body'] ?? ''),
@@ -575,13 +678,18 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
             'openDefault' => !empty($it['openDefault']),
             'headerImg' => (string)($it['headerImg'] ?? ''),
             'headerAlt' => (string)($it['headerAlt'] ?? ''),
-            'showHeaderImg' => !empty($it['showHeaderImg'])
+            'showHeaderImg' => !empty($it['showHeaderImg']),
+            'subItems' => $subs,
           ];
         }
 
         $mode = ($p['mode'] ?? 'accordion') === 'tabs' ? 'tabs' : 'accordion';
-        $allowMultiple = !empty($p['allowMultiple']);
-        $allowCollapseAll = !array_key_exists('allowCollapseAll', $p) || (bool)$p['allowCollapseAll'];
+        $accStyle = in_array($p['accStyle'] ?? 'standard', ['standard','grouped'], true) ? $p['accStyle'] : 'standard';
+        if ($mode === 'tabs') $accStyle = 'standard';
+        $isGrouped = $mode === 'accordion' && $accStyle === 'grouped';
+
+        $allowMultiple = $isGrouped ? true : !empty($p['allowMultiple']);
+        $allowCollapseAll = $isGrouped ? true : (!array_key_exists('allowCollapseAll', $p) || (bool)$p['allowCollapseAll']);
         $defaultOpen = in_array($p['defaultOpen'] ?? 'none', ['none','first','custom'], true) ? $p['defaultOpen'] : 'none';
         $defaultIndex = (int)($p['defaultIndex'] ?? 0);
         if ($defaultIndex < 0) $defaultIndex = 0;
@@ -602,6 +710,14 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         $headerImgPos = in_array($p['headerImgPos'] ?? 'left', ['left','right'], true) ? $p['headerImgPos'] : 'left';
         $headerImgSize = in_array($p['headerImgSize'] ?? 'medium', ['small','medium','large'], true) ? $p['headerImgSize'] : 'medium';
         $showBorder = !array_key_exists('showBorder', $p) || (bool)$p['showBorder'];
+
+        if ($isGrouped) {
+          $showIndicator = true;
+          $indicatorPosition = 'right';
+          $styleVariant = 'minimal';
+          $spacing = 'compact';
+          $showDividers = true;
+        }
 
         $styleVars = [];
         $colors = [
@@ -693,44 +809,144 @@ HTML;
         }
 
         $itemsHtml = '';
-        foreach ($items as $i => $it) {
-          $isOpen = isset($open[$i]);
-          $headId = "acc-head-{$accId}-{$i}";
-          $panelId = "acc-panel-{$accId}-{$i}";
-
-          $bodyRaw = $it['bodyHtml'] !== '' ? $it['bodyHtml'] : $it['body'];
-          $body = $bodyRaw !== '' ? self::safeInlineHtml($bodyRaw) : '';
-          $thumb = ($it['showHeaderImg'] && $it['headerImg'])
-            ? '<span class="nx-acc-thumb size-' . Security::e($headerImgSize) . '" style="background-image:url(\'' . Security::e($it['headerImg']) . '\')" aria-hidden="true"></span>'
-            : '';
-          $itemsHtml .= "<div class=\"nx-accordion-item" . ($isOpen ? " is-open" : "") . "\" data-idx=\"{$i}\">"
+        if ($isGrouped) {
+          $parent = $items[0] ?? ['title' => 'Group', 'subItems' => []];
+          $children = array_slice($items, 1);
+          $isOpen = isset($open[0]);
+          $headId = "acc-head-{$accId}-0";
+          $panelId = "acc-panel-{$accId}-0";
+          $subs = $parent['subItems'] ?? [];
+          $parentList = '';
+          if ($subs) {
+            $parentList .= '<ul class="nx-accordion-sublist">';
+            foreach ($subs as $s) {
+              $label = $s['label'] ?? '';
+              $url = $s['url'] ?? '';
+              if ($label === '') continue;
+              $parentList .= $url !== ''
+                ? '<li><a href="' . Security::e($url) . '">' . Security::e($label) . '</a></li>'
+                : '<li>' . Security::e($label) . '</li>';
+            }
+            $parentList .= '</ul>';
+          }
+          $childHtml = '';
+          foreach ($children as $i => $it) {
+            $subs2 = $it['subItems'] ?? [];
+            $list = '';
+            if ($subs2) {
+              $list .= '<ul class="nx-accordion-sublist">';
+              foreach ($subs2 as $s) {
+                $label = $s['label'] ?? '';
+                $url = $s['url'] ?? '';
+                if ($label === '') continue;
+                $list .= $url !== ''
+                  ? '<li><a href="' . Security::e($url) . '">' . Security::e($label) . '</a></li>'
+                  : '<li>' . Security::e($label) . '</li>';
+              }
+              $list .= '</ul>';
+            } else {
+              $list = '<div class="nx-muted" style="padding:6px 0;">Add sub-items…</div>';
+            }
+            $childHtml .= '<div class="nx-accordion-childrow">'
+              . '<button type="button" class="nx-accordion-childhead" data-idx="' . $i . '">'
+              . '<span class="nx-accordion-title">' . Security::e($it['title'] ?? ('Item ' . ($i + 2))) . '</span>'
+              . '<span class="nx-accordion-plus" aria-hidden="true">+</span>'
+              . '</button>'
+              . '<div class="nx-accordion-childpanel" hidden>'
+              . '<div class="nx-accordion-body">' . $list . '</div>'
+              . '</div>'
+              . '</div>';
+          }
+          $itemsHtml = "<div class=\"nx-accordion-item nx-accordion-parent" . ($isOpen ? " is-open" : "") . "\" data-idx=\"0\">"
             . "<button type=\"button\" class=\"nx-accordion-head\" id=\"{$headId}\" aria-expanded=\"" . ($isOpen ? 'true' : 'false') . "\" aria-controls=\"{$panelId}\">"
-            . ($showIndicator && $indicatorPosition === 'left' ? '<span class="nx-accordion-chevron" aria-hidden="true">▸</span>' : '')
-            . ($headerImgPos === 'left' ? $thumb : '')
-            . "<span class=\"nx-accordion-title\">" . Security::e($it['title']) . "</span>"
-            . ($headerImgPos === 'right' ? $thumb : '')
-            . ($showIndicator && $indicatorPosition === 'right' ? '<span class="nx-accordion-chevron" aria-hidden="true">▸</span>' : '')
+            . "<span class=\"nx-accordion-title\">" . Security::e($parent['title'] ?? 'Group') . "</span>"
+            . "<span class=\"nx-accordion-plus\" aria-hidden=\"true\">" . ($isOpen ? '−' : '+') . "</span>"
             . "</button>"
             . "<div class=\"nx-accordion-panel\" id=\"{$panelId}\" role=\"region\" aria-labelledby=\"{$headId}\"" . ($isOpen ? '' : ' hidden') . ">"
-            . "<div class=\"nx-accordion-body\">" . ($body !== '' ? $body : '<span class="nx-muted">Add content…</span>') . "</div>"
+            . "<div class=\"nx-accordion-body\">" . $parentList . "<div class=\"nx-accordion-childlist\">{$childHtml}</div></div>"
             . "</div>"
             . "</div>";
+        } else {
+          foreach ($items as $i => $it) {
+            $isOpen = isset($open[$i]);
+            $headId = "acc-head-{$accId}-{$i}";
+            $panelId = "acc-panel-{$accId}-{$i}";
+
+            $bodyRaw = $it['bodyHtml'] !== '' ? $it['bodyHtml'] : $it['body'];
+            $body = $bodyRaw !== '' ? self::safeInlineHtml($bodyRaw) : '';
+            $thumb = ($it['showHeaderImg'] && $it['headerImg'])
+              ? '<span class="nx-acc-thumb size-' . Security::e($headerImgSize) . '" style="background-image:url(\'' . Security::e($it['headerImg']) . '\')" aria-hidden="true"></span>'
+              : '';
+            $itemsHtml .= "<div class=\"nx-accordion-item" . ($isOpen ? " is-open" : "") . "\" data-idx=\"{$i}\">"
+              . "<button type=\"button\" class=\"nx-accordion-head\" id=\"{$headId}\" aria-expanded=\"" . ($isOpen ? 'true' : 'false') . "\" aria-controls=\"{$panelId}\">"
+              . ($showIndicator && $indicatorPosition === 'left' ? '<span class="nx-accordion-chevron" aria-hidden="true">▸</span>' : '')
+              . ($headerImgPos === 'left' ? $thumb : '')
+              . "<span class=\"nx-accordion-title\">" . Security::e($it['title']) . "</span>"
+              . ($headerImgPos === 'right' ? $thumb : '')
+              . ($showIndicator && $indicatorPosition === 'right' ? '<span class="nx-accordion-chevron" aria-hidden="true">▸</span>' : '')
+              . "</button>"
+              . "<div class=\"nx-accordion-panel\" id=\"{$panelId}\" role=\"region\" aria-labelledby=\"{$headId}\"" . ($isOpen ? '' : ' hidden') . ">"
+              . "<div class=\"nx-accordion-body\">" . ($body !== '' ? $body : '<span class="nx-muted">Add content…</span>') . "</div>"
+              . "</div>"
+              . "</div>";
+          }
         }
 
-        $accordion = "<div class=\"nx-accordion\" id=\"{$accId}\" data-allow=\"" . ($allowMultiple ? 'multiple' : 'single') . "\" data-collapse=\"" . ($allowCollapseAll ? 'allow' : 'force') . "\" data-indicator=\"" . ($showIndicator ? $indicatorPosition : 'none') . "\" data-spacing=\"{$spacing}\" data-style=\"{$styleVariant}\" data-dividers=\"" . ($showDividers ? 'on' : 'off') . "\" data-border=\"" . ($showBorder ? 'on' : 'off') . "\"{$styleInline}>{$itemsHtml}</div>";
+        if ($isGrouped) {
+          $accordion = "<div class=\"nx-accordion nx-accordion--grouped\" id=\"{$accId}\" data-grouped=\"1\" data-allow=\"multiple\" data-collapse=\"allow\" data-indicator=\"right\" data-spacing=\"compact\" data-style=\"minimal\" data-dividers=\"on\" data-border=\"" . ($showBorder ? 'on' : 'off') . "\"{$styleInline}>{$itemsHtml}</div>";
+        } else {
+          $accordion = "<div class=\"nx-accordion\" id=\"{$accId}\" data-allow=\"" . ($allowMultiple ? 'multiple' : 'single') . "\" data-collapse=\"" . ($allowCollapseAll ? 'allow' : 'force') . "\" data-indicator=\"" . ($showIndicator ? $indicatorPosition : 'none') . "\" data-spacing=\"{$spacing}\" data-style=\"{$styleVariant}\" data-dividers=\"" . ($showDividers ? 'on' : 'off') . "\" data-border=\"" . ($showBorder ? 'on' : 'off') . "\"{$styleInline}>{$itemsHtml}</div>";
+        }
         $accordion .= <<<HTML
 <script>(function(){
   const root=document.getElementById("{$accId}");
   if(!root)return;
+  const isGrouped=root.dataset.grouped==="1";
   const allowMultiple=root.dataset.allow==="multiple";
   const allowCollapse=root.dataset.collapse!=="force";
   const items=[...root.querySelectorAll('.nx-accordion-item')];
+  const childRows=isGrouped?[...root.querySelectorAll('.nx-accordion-childrow')]:[];
+  const closeAllChildren=()=>{
+    childRows.forEach(row=>{
+      const panel=row.querySelector('.nx-accordion-childpanel');
+      const plus=row.querySelector('.nx-accordion-plus');
+      if(!panel)return;
+      panel.hidden=true;
+      panel.style.maxHeight='0px';
+      if(plus) plus.textContent='+';
+      row.classList.remove('is-open');
+    });
+  };
+  const toggleChild=(row)=>{
+    const panel=row.querySelector('.nx-accordion-childpanel');
+    const plus=row.querySelector('.nx-accordion-plus');
+    if(!panel)return;
+    const open=panel.hidden!==false;
+    panel.hidden=!open;
+    if(open){
+      panel.style.maxHeight=panel.scrollHeight+'px';
+      setTimeout(()=>{panel.style.maxHeight='none';},160);
+      row.classList.add('is-open');
+    }else{
+      panel.style.maxHeight=panel.scrollHeight+'px';
+      requestAnimationFrame(()=>{panel.style.maxHeight='0px';});
+      panel.addEventListener('transitionend',function h(){panel.hidden=true;panel.removeEventListener('transitionend',h);});
+      setTimeout(()=>{panel.hidden=true;},220);
+      row.classList.remove('is-open');
+    }
+    if(plus) plus.textContent=open?'−':'+';
+  };
   function setOpen(item, open){
     const btn=item.querySelector('.nx-accordion-head');
     const panel=item.querySelector('.nx-accordion-panel');
+    const plus=item.querySelector('.nx-accordion-plus');
     if(!btn||!panel)return;
     btn.setAttribute('aria-expanded', open?'true':'false');
     panel.setAttribute('aria-hidden', open?'false':'true');
+    if(plus) plus.textContent=open?'−':'+';
+    if(isGrouped && item.classList.contains('nx-accordion-parent') && !open){
+      closeAllChildren();
+    }
     if(open){
       item.classList.add('is-open');
       panel.hidden=false;
@@ -752,12 +968,26 @@ HTML;
       if(!open && !allowMultiple){
         items.forEach(it=>{ if(it!==item) setOpen(it,false); });
       }
+      if(isGrouped && item.dataset.idx==="0" && open){
+        // collapsing parent closes all children
+        items.forEach(it=>setOpen(it,false));
+        return;
+      }
       setOpen(item,!open);
     };
     btn.addEventListener('click',e=>{e.preventDefault();toggle();});
     btn.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}});
     setOpen(item, item.classList.contains('is-open'));
   });
+  if(childRows.length){
+    childRows.forEach(row=>{
+      const head=row.querySelector('.nx-accordion-childhead');
+      if(head){
+        head.addEventListener('click',e=>{e.preventDefault();toggleChild(row);});
+      }
+    });
+    closeAllChildren();
+  }
 })();</script>
 HTML;
 

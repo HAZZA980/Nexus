@@ -32,7 +32,11 @@ function json_response($data, int $status=200): void {
 }
 
 function require_admin(): void {
-  if (!isset($_SESSION['user_id'])) {
-    redirect('/admin/login.php');
+  $uid = $_SESSION['user_id'] ?? null;
+  $role = $_SESSION['user_role'] ?? '';
+  $allowedRoles = ['admin', 'super_admin', 'staff_admin', 'user_admin'];
+  if (!$uid || !in_array($role, $allowedRoles, true)) {
+    $return = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/';
+    redirect('/login.php?return=' . urlencode($return));
   }
 }

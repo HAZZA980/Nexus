@@ -3,9 +3,20 @@ CREATE TABLE users (
   email VARCHAR(190) UNIQUE,
   password_hash VARCHAR(255),
   display_name VARCHAR(190),
-  role VARCHAR(50),
+  role ENUM('super_admin','admin','student') DEFAULT 'student',
+  access JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS user_site_access (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  site_id INT NOT NULL,
+  UNIQUE KEY uniq_user_site (user_id, site_id),
+  INDEX idx_site (site_id),
+  CONSTRAINT fk_user_site_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_user_site_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE sites (
   id INT AUTO_INCREMENT PRIMARY KEY,

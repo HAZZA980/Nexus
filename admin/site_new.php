@@ -8,6 +8,7 @@ use NexusCMS\Models\ShellPreset;
 use NexusCMS\Core\Security;
 
 $base = base_path();
+$activeNav = 'sites';
 $errors = [];
 $values = [
   'name' => '',
@@ -99,7 +100,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Create new website</title>
   <script>
-    (function(){try{if(localStorage.getItem('nexusTheme')==='light'){document.documentElement.classList.add('theme-light');}}catch(e){}})();
+    (function(){
+      try{
+        const stored=localStorage.getItem('nexusTheme');
+        const theme=stored==='light'?'light':'dark';
+        localStorage.setItem('nexusTheme', theme);
+        document.documentElement.classList.toggle('theme-light', theme==='light');
+      }catch(e){}
+    })();
   </script>
   <style>
     :root {
@@ -146,7 +154,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .top-bar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: 16px;
       padding: 14px 18px;
       background: linear-gradient(90deg, rgba(91,33,182,0.12), rgba(91,33,182,0));
@@ -173,6 +180,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
     .brand-text small { color: var(--muted); font-weight: 500; }
+
+    .top-nav{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-left:auto;
+    }
+    .top-nav .nav-link{
+      display:inline-flex;align-items:center;justify-content:center;
+      padding:10px 12px;border-radius:10px;border:1px solid var(--border);
+      background:rgba(255,255,255,0.05);color:var(--text);font-weight:700;text-decoration:none;min-height:40px;
+    }
+    .top-nav .nav-link:hover{background:rgba(255,255,255,0.1);}
+    .top-nav .nav-link.active{
+      background:linear-gradient(135deg, var(--primary), var(--primary-strong));
+      color:#fff;border-color:transparent;box-shadow:var(--shadow);
+    }
+
+    .top-nav{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-left:auto;
+    }
+    .top-nav .nav-link{
+      display:inline-flex;align-items:center;justify-content:center;
+      padding:10px 12px;border-radius:10px;border:1px solid var(--border);
+      background:rgba(255,255,255,0.05);color:var(--text);font-weight:700;text-decoration:none;min-height:40px;
+    }
+    .top-nav .nav-link:hover{background:rgba(255,255,255,0.1);}
+    .top-nav .nav-link.active{
+      background:linear-gradient(135deg, var(--primary), var(--primary-strong));
+      color:#fff;border-color:transparent;box-shadow:var(--shadow);
+    }
 
     main { max-width: 1200px; margin: 0 auto; padding: 24px 20px 48px; }
     .back-link {
@@ -275,20 +318,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   </style>
 </head>
-<body>
-  <header class="top-bar" role="banner">
-    <div class="brand" aria-label="NexusCMS Admin">
-      <div class="brand-mark" aria-hidden="true">N</div>
-      <div class="brand-text">
-        <span>NexusCMS</span>
-        <small>Admin</small>
+  <body>
+    <header class="top-bar" role="banner">
+      <div class="brand" aria-label="NexusCMS Admin">
+        <div class="brand-mark" aria-hidden="true">N</div>
+        <div class="brand-text">
+          <span>NexusCMS</span>
+          <small>Admin</small>
+        </div>
       </div>
-    </div>
-    <a class="back-link" href="<?= $base ?>/admin/">
-      <span aria-hidden="true">←</span>
-      <span>Back to websites</span>
-    </a>
-    <button class="btn" type="button" id="themeToggleBtn" style="min-height:40px;padding:10px 12px;">☀️/🌙</button>
+      <nav class="top-nav" aria-label="Admin navigation">
+        <a class="nav-link <?= $activeNav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
+        <a class="nav-link <?= $activeNav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
+        <a class="nav-link <?= $activeNav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Images</a>
+      </nav>
+      <a class="back-link" href="<?= $base ?>/admin/">
+        <span aria-hidden="true">←</span>
+        <span>Back to websites</span>
+      </a>
+      <button class="btn" type="button" id="themeToggleBtn" style="min-height:40px;padding:10px 12px;">☀️/🌙</button>
   </header>
 
   <main>

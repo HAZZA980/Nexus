@@ -125,6 +125,12 @@ $base = base_path();
         </span>
         <span class="nx-item-label">Hero Card</span>
       </div>
+      <div class="nx-item" draggable="true" data-type="heroBanner" tabindex="0" title="Hero Banner">
+        <span class="nx-item-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 10h12M6 14h8"/></svg>
+        </span>
+        <span class="nx-item-label">Hero Banner</span>
+      </div>
       <div class="nx-item" draggable="true" data-type="image" tabindex="0" title="Image">
         <span class="nx-item-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 13l3-3 5 5"/><circle cx="9" cy="9" r="1.2"/></svg>

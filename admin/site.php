@@ -1093,6 +1093,7 @@ if ($siteSlug === 'cite-them-right') {
 }
 
 $base = base_path();
+$activeNav = 'sites';
 
 // Fetch current user for header menu
 $currentUser = null;
@@ -1116,12 +1117,9 @@ if (isset($_SESSION['user_id'])) {
     (function() {
       try {
         const stored = localStorage.getItem('nexusTheme');
-        if (!stored) {
-          localStorage.setItem('nexusTheme','light');
-          document.documentElement.classList.add('theme-light');
-        } else if (stored === 'light') {
-          document.documentElement.classList.add('theme-light');
-        }
+        const theme = stored === 'light' ? 'light' : 'dark';
+        localStorage.setItem('nexusTheme', theme);
+        document.documentElement.classList.toggle('theme-light', theme === 'light');
       } catch(e) {}
     })();
   </script>
@@ -1167,7 +1165,7 @@ if (isset($_SESSION['user_id'])) {
     a{color:inherit;text-decoration:none}
     a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline:none; box-shadow:var(--focus); border-color:var(--primary); }
     .top-bar {
-      display:flex; align-items:center; justify-content:space-between; gap:16px;
+      display:flex; align-items:center; gap:16px;
       padding:14px 18px;
       background: linear-gradient(90deg, rgba(91,33,182,0.12), rgba(91,33,182,0));
       border-bottom:1px solid var(--border);
@@ -1184,6 +1182,19 @@ if (isset($_SESSION['user_id'])) {
     }
     .brand-text { display:flex; flex-direction:column; line-height:1.2; }
     .brand-text small { color:var(--muted); font-weight:500; }
+    .top-nav{
+      display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;
+    }
+    .top-nav .nav-link{
+      display:inline-flex;align-items:center;justify-content:center;
+      padding:10px 12px;border-radius:10px;border:1px solid var(--border);
+      background:rgba(255,255,255,0.05);color:var(--text);font-weight:700;text-decoration:none;min-height:40px;
+    }
+    .top-nav .nav-link:hover{background:rgba(255,255,255,0.1);}
+    .top-nav .nav-link.active{
+      background:linear-gradient(135deg, var(--primary), var(--primary-strong));
+      color:#fff;border-color:transparent;box-shadow:var(--shadow);
+    }
     .top-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--border);
       background:rgba(255,255,255,.06);text-decoration:none;font-weight:700;cursor:pointer;min-height:44px}
@@ -1222,7 +1233,7 @@ if (isset($_SESSION['user_id'])) {
       background:rgba(34,197,94,.10)}
     .tabs{
       display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;
-      position:sticky;top:10px;z-index:20;align-items:center;
+      position:sticky;top:10px;z-index:5;align-items:center;
       padding:12px;
       background:var(--bg);
       border-radius:14px;
@@ -1368,20 +1379,25 @@ if (isset($_SESSION['user_id'])) {
   .cite-viewer .callout{padding:10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,0.03);width:100%;}
   </style>
 </head>
-<body>
-  <header class="top-bar" role="banner">
-    <a class="brand" aria-label="NexusCMS Admin" href="<?= $base ?>/admin/">
-      <div class="brand-mark" aria-hidden="true">N</div>
-      <div class="brand-text">
-        <span>NexusCMS</span>
-        <small>Admin</small>
-      </div>
-    </a>
-    <div class="top-actions">
-      <a class="btn primary" href="<?= $base ?>/admin/site_new.php">+ Create new website</a>
-      <div class="user-menu">
-        <details>
-          <summary aria-haspopup="menu">
+  <body>
+    <header class="top-bar" role="banner">
+      <a class="brand" aria-label="NexusCMS Admin" href="<?= $base ?>/admin/">
+        <div class="brand-mark" aria-hidden="true">N</div>
+        <div class="brand-text">
+          <span>NexusCMS</span>
+          <small>Admin</small>
+        </div>
+      </a>
+      <nav class="top-nav" aria-label="Admin navigation">
+        <a class="nav-link <?= $activeNav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
+        <a class="nav-link <?= $activeNav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
+        <a class="nav-link <?= $activeNav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Images</a>
+      </nav>
+      <div class="top-actions">
+        <a class="btn primary" href="<?= $base ?>/admin/site_new.php">+ Create new website</a>
+        <div class="user-menu">
+          <details>
+            <summary aria-haspopup="menu">
             <span class="user-avatar" aria-hidden="true">
               <?php
                 $initial = $currentUser['display_name'] ?? $currentUser['email'] ?? 'U';
@@ -1433,14 +1449,18 @@ if (isset($_SESSION['user_id'])) {
             <button class="tab" data-tab="citations" type="button">Citation DB</button>
           <?php endif; ?>
         </div>
-        <button class="btn primary" type="button" id="addPageBtnTop">Add new page</button>
       </div>
 
       <!-- PAGES -->
       <div class="panel active" id="panel-pages">
       <div class="card" style="margin-top:14px">
-        <h2>Pages</h2>
-        <div class="muted">Search and filter pages. Templates are starting points only.</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div>
+            <h2 style="margin:0">Pages</h2>
+            <div class="muted">Search and filter pages. Templates are starting points only.</div>
+          </div>
+          <button class="btn primary" type="button" id="addPageBtnTop">Add new page</button>
+        </div>
         <div class="row" style="margin-top:12px">
           <div>
             <label class="muted">Search</label>
@@ -2106,38 +2126,135 @@ if (isset($_SESSION['user_id'])) {
       <!-- CITATION DATABASE (read-only) -->
       <div class="panel" id="panel-citations">
         <div class="card" style="margin-top:14px">
-          <h2>Citation database</h2>
-          <div class="muted">Manage citation records that power Citation order, Example, and You try blocks.</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div>
+              <h2 style="margin:0">Citation database</h2>
+              <div class="muted">Manage citation records that power Citation order, Example, and You try blocks.</div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn primary" type="button" id="openCitationModal">+ Add citation</button>
+            </div>
+          </div>
 
           <div class="citation-subtabs" role="tablist" aria-label="Citation DB subtabs">
             <button class="citation-subtab active" data-subtab="entries" type="button">Entries</button>
             <button class="citation-subtab" data-subtab="revisions" type="button">Revisions</button>
             <button class="citation-subtab" data-subtab="releases" type="button">Releases</button>
-            <span class="pill-muted">Staging to: <?= Security::e($currentReleaseTag) ?></span>
-            <span class="pill-muted"><?= (int)$stagedCount ?> staged</span>
           </div>
-
-          <div class="row citation-panel active" style="margin-top:10px" data-subtab-panel="entries">
-            <div>
-              <label>Filter by style</label>
-              <select id="citationStyleFilter">
+          <div class="citation-searchbar" style="margin:12px 0 16px; display:flex; gap:12px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:240px;">
+              <label for="revSearch" class="muted" style="display:block;margin-bottom:6px;">Search</label>
+              <input id="revSearch" type="search" placeholder="Search by citation title or key" style="width:100%;">
+            </div>
+            <div style="min-width:180px;">
+              <label for="globalStyleFilter" class="muted" style="display:block;margin-bottom:6px;">Referencing style</label>
+              <select id="globalStyleFilter" style="width:100%;">
                 <option value="">All styles</option>
                 <?php foreach ($citationStyles as $style): ?>
                   <option value="<?= Security::e($style) ?>"><?= Security::e($style) ?></option>
                 <?php endforeach; ?>
               </select>
             </div>
-            <div style="display:flex;align-items:flex-end;gap:10px">
-              <button class="btn primary" type="button" id="openCitationModal">+ Add citation</button>
+            <div style="display:flex;align-items:flex-end">
+              <button type="button" class="btn" id="advFiltersToggle">Advanced filters</button>
             </div>
           </div>
 
-          <div class="section citation-panel" style="margin-top:12px;display:grid;gap:10px" data-subtab-panel="releases">
-            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div class="row citation-panel active" style="margin-top:10px" data-subtab-panel="entries">
+            <div style="height:1px"></div>
+          </div>
+
+          <!-- Advanced filters container (content switches per tab) -->
+          <div id="advFiltersPanel" class="rev-filters" style="display:none; margin:0 0 12px 0;">
+            <div id="advFiltersEntries" style="display:none; gap:12px; flex-wrap:wrap;">
+              <div class="field" style="min-width:180px;">
+                <label for="citationStatusFilter">Status</label>
+                <select id="citationStatusFilter">
+                  <option value="">All statuses</option>
+                  <option value="staged">Staged in current release</option>
+                  <option value="edited">Edited (other release)</option>
+                  <option value="clean">Clean</option>
+                </select>
+              </div>
+            </div>
+            <div id="advFiltersRevs" style="display:none; gap:12px; flex-wrap:wrap;">
+              <div class="field" style="min-width:160px;">
+                <label for="revIdFilter">Citation ID</label>
+                <input id="revIdFilter" type="number" placeholder="e.g. 12" min="1" step="1">
+              </div>
+              <div class="field">
+                <label for="revReleaseFilter">Release tag</label>
+                <select id="revReleaseFilter">
+                  <option value="">All releases</option>
+                  <option value="__unreleased">Unreleased / Not staged</option>
+                  <?php foreach ($revTags as $tag): ?>
+                    <option value="<?= Security::e($tag) ?>"><?= Security::e($tag) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="field">
+                <label for="revActionFilter">Action</label>
+                <select id="revActionFilter">
+                  <option value="">All</option>
+                  <option value="create">Create</option>
+                  <option value="update">Update</option>
+                  <option value="delete">Delete</option>
+                  <option value="rollback">Rollback</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="revDateRange">Date</label>
+                <select id="revDateRange">
+                  <option value="">Any time</option>
+                  <option value="24h">Last 24 hours</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d">Last 30 days</option>
+                  <option value="custom">Custom range</option>
+                </select>
+              </div>
+              <div class="field" id="revCustomDates" style="display:none;flex-direction:row;gap:8px;align-items:flex-end;">
+                <div style="flex:1">
+                  <label for="revDateStart">From</label>
+                  <input type="date" id="revDateStart">
+                </div>
+                <div style="flex:1">
+                  <label for="revDateEnd">To</label>
+                  <input type="date" id="revDateEnd">
+                </div>
+              </div>
+              <?php if ($revUsers): ?>
+                <div class="field">
+                  <label for="revUserFilter">User</label>
+                  <select id="revUserFilter">
+                    <option value="">All users</option>
+                    <?php foreach ($revUsers as $u): ?>
+                      <option value="<?= Security::e($u) ?>"><?= Security::e($u) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+              <?php endif; ?>
+            </div>
+          </div>
+
+          <div class="section citation-panel" style="margin-top:12px" data-subtab-panel="releases">
+            <?php
+              $currentTagRevs = CitationRevision::listByRelease($siteSlug, $currentReleaseTag);
+              // Group staged citations by referencing style (unique citation per key)
+              $byStyle = [];
+              foreach ($currentTagRevs as $r) {
+                $after = json_decode($r['after_json'] ?? 'null', true);
+                $before = json_decode($r['before_json'] ?? 'null', true);
+                $style = $after['referencing_style'] ?? $before['referencing_style'] ?? 'Unknown';
+                $label = $after['label'] ?? $before['label'] ?? $r['citation_key'] ?? 'Untitled';
+                $key = $r['citation_key'] ?? '';
+                $uniq = $style . '|' . $key;
+                $byStyle[$style][$uniq] = $label;
+              }
+            ?>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
               <div>
-                <label>Current release tag</label>
-                <div class="citation-style-pill"><?= Security::e($currentReleaseTag) ?></div>
-                <div class="muted" style="font-size:12px;margin-top:4px;">Auto-assigned; next tag set after export.</div>
+                <h3 style="margin:0">Staged citations by style</h3>
+                <div class="muted">Only citations staged for export are shown.</div>
               </div>
               <form method="post" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
                 <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
@@ -2146,15 +2263,21 @@ if (isset($_SESSION['user_id'])) {
                 <button class="btn primary" type="submit">Export bundle</button>
               </form>
             </div>
-            <?php if ($citationReleases): ?>
-              <div class="citation-field">
-                <strong>Release history</strong>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
-                  <?php foreach ($citationReleases as $rel): ?>
-                    <span class="citation-style-pill"><?= Security::e($rel['tag']) ?> — <?= Security::e($rel['status']) ?></span>
-                  <?php endforeach; ?>
-                </div>
+            <?php if ($byStyle): ?>
+              <div style="display:grid;gap:12px">
+                <?php foreach ($byStyle as $style => $items): ?>
+                  <div class="citation-field">
+                    <strong><?= Security::e($style) ?></strong>
+                    <ul style="margin:6px 0 0 16px; padding:0; list-style:disc;">
+                      <?php foreach ($items as $label): ?>
+                        <li><?= Security::e($label) ?></li>
+                      <?php endforeach; ?>
+                    </ul>
+                  </div>
+                <?php endforeach; ?>
               </div>
+            <?php else: ?>
+              <div class="muted">No staged citations for export.</div>
             <?php endif; ?>
           </div>
 
@@ -2179,8 +2302,9 @@ if (isset($_SESSION['user_id'])) {
                     $statusTone = 'muted';
                     if ($staged) { $statusLabel = 'Staged in current release'; $statusTone = 'badge-chip staged'; }
                     elseif ($hasRevision) { $statusLabel = 'Edited (other release)'; $statusTone = 'badge-chip'; }
+                    $statusValue = $staged ? 'staged' : ($hasRevision ? 'edited' : 'clean');
                   ?>
-                    <tr class="citation-row" data-style="<?= Security::e($ex['referencing_style'] ?? '') ?>">
+                    <tr class="citation-row" data-style="<?= Security::e($ex['referencing_style'] ?? '') ?>" data-status="<?= Security::e($statusValue) ?>">
                       <td>
                         <div class="citation-label"><?= Security::e($ex['label'] ?? '') ?></div>
                       </td>
@@ -2241,82 +2365,12 @@ if (isset($_SESSION['user_id'])) {
                 sort($revUsers);
               ?>
               <?php if ($citationRevisions): ?>
-                <div class="rev-filters" id="revFilters">
-                  <div class="field" style="flex:1;min-width:220px;">
-                    <label for="revSearch">Search</label>
-                    <input id="revSearch" type="search" placeholder="Search by citation title or key">
-                  </div>
-                  <div class="field">
-                    <label for="revStyleFilter">Referencing style</label>
-                    <select id="revStyleFilter">
-                      <option value="">All styles</option>
-                      <?php foreach ($revStyles as $style): ?>
-                        <option value="<?= Security::e($style) ?>"><?= Security::e($style) ?></option>
-                      <?php endforeach; ?>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="revReleaseFilter">Release tag</label>
-                    <select id="revReleaseFilter">
-                      <option value="">All releases</option>
-                      <option value="__unreleased">Unreleased / Not staged</option>
-                      <?php foreach ($revTags as $tag): ?>
-                        <option value="<?= Security::e($tag) ?>"><?= Security::e($tag) ?></option>
-                      <?php endforeach; ?>
-                    </select>
-                  </div>
-                  <div class="field" style="min-width:140px;">
-                    <label>&nbsp;</label>
-                    <button type="button" class="btn" id="revAdvancedToggle">Advanced filters</button>
-                  </div>
-                  <div class="rev-advanced" id="revAdvanced">
-                    <div class="field">
-                      <label for="revActionFilter">Action</label>
-                      <select id="revActionFilter">
-                        <option value="">All</option>
-                        <option value="create">Create</option>
-                        <option value="update">Update</option>
-                        <option value="delete">Delete</option>
-                      </select>
-                    </div>
-                    <div class="field">
-                      <label for="revDateRange">Date</label>
-                      <select id="revDateRange">
-                        <option value="">Any time</option>
-                        <option value="24h">Last 24 hours</option>
-                        <option value="7d">Last 7 days</option>
-                        <option value="30d">Last 30 days</option>
-                        <option value="custom">Custom range</option>
-                      </select>
-                    </div>
-                    <div class="field" id="revCustomDates" style="display:none;flex-direction:row;gap:8px;align-items:flex-end;">
-                      <div style="flex:1">
-                        <label for="revDateStart">From</label>
-                        <input type="date" id="revDateStart">
-                      </div>
-                      <div style="flex:1">
-                        <label for="revDateEnd">To</label>
-                        <input type="date" id="revDateEnd">
-                      </div>
-                    </div>
-                    <?php if ($revUsers): ?>
-                      <div class="field">
-                        <label for="revUserFilter">User</label>
-                        <select id="revUserFilter">
-                          <option value="">All users</option>
-                          <?php foreach ($revUsers as $u): ?>
-                            <option value="<?= Security::e($u) ?>"><?= Security::e($u) ?></option>
-                          <?php endforeach; ?>
-                        </select>
-                      </div>
-                    <?php endif; ?>
-                  </div>
-                </div>
+                <div class="rev-filters" id="revFilters"></div>
                 <div style="overflow:auto">
                   <table class="collection-table" aria-label="Citation revisions" id="revisionTable">
                     <thead>
                       <tr>
-                        <th>ID</th>
+                        <th>Citation ID</th>
                         <th>Action</th>
                         <th>Citation</th>
                         <th>Referencing style</th>
@@ -2342,6 +2396,7 @@ if (isset($_SESSION['user_id'])) {
                           data-id="<?= (int)$rev['id'] ?>"
                           data-key="<?= Security::e($key) ?>"
                           data-label="<?= Security::e($label) ?>"
+                          data-citation-id="<?= (int)($rev['citation_id'] ?? 0) ?>"
                           data-style="<?= Security::e($style) ?>"
                           data-release="<?= Security::e($releaseTag) ?>"
                           data-action="<?= Security::e(strtolower($rev['action'] ?? '')) ?>"
@@ -2350,7 +2405,7 @@ if (isset($_SESSION['user_id'])) {
                           data-after="<?= Security::e($rev['after_json'] ?? '') ?>"
                           data-before="<?= Security::e($rev['before_json'] ?? '') ?>"
                         >
-                          <td class="muted">#<?= (int)$rev['id'] ?></td>
+                          <td class="muted">#<?= (int)($rev['citation_id'] ?? 0) ?></td>
                           <td><?= Security::e($rev['action']) ?></td>
                           <td>
                             <div class="collection-name"><?= Security::e($label) ?></div>
@@ -2540,6 +2595,10 @@ if (isset($_SESSION['user_id'])) {
       <div class="citation-field">
         <strong>Style</strong>
         <div id="viewStyle" class="muted">—</div>
+      </div>
+      <div class="citation-field">
+        <strong>ID</strong>
+        <div id="viewId" class="muted">—</div>
       </div>
       <div class="citation-field">
         <strong>Key</strong>
@@ -2733,27 +2792,26 @@ if (isset($_SESSION['user_id'])) {
       applyPageFilters();
     });
 
-    // Citation style filter
-    const citationFilter = document.getElementById('citationStyleFilter');
-    if (citationFilter) {
-      citationFilter.addEventListener('change', () => {
-        const val = citationFilter.value;
-        document.querySelectorAll('#citationList .citation-card').forEach(card => {
-          const style = card.dataset.style || '';
-          card.style.display = (!val || style === val) ? '' : 'none';
-        });
-      });
-    }
-
     // Citation subtabs
     const subtabButtons = Array.from(document.querySelectorAll('.citation-subtab'));
     const subtabPanels = Array.from(document.querySelectorAll('[data-subtab-panel]'));
+    const advPanel = document.getElementById('advFiltersPanel');
+    const advEntries = document.getElementById('advFiltersEntries');
+    const advRevs = document.getElementById('advFiltersRevs');
+    const advToggleBtn = document.getElementById('advFiltersToggle');
     const showSubtab = (name) => {
       subtabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.subtab === name));
       subtabPanels.forEach(p => {
         const isMatch = p.dataset.subtabPanel === name;
         p.classList.toggle('active', isMatch);
       });
+      if (advPanel && advEntries && advRevs) {
+        const isEntries = name === 'entries';
+        const isRevs = name === 'revisions';
+        advPanel.style.display = (isEntries || isRevs) ? 'flex' : 'none';
+        advEntries.style.display = isEntries ? 'flex' : 'none';
+        advRevs.style.display = isRevs ? 'flex' : 'none';
+      }
       try { localStorage.setItem('citationSubtab', name); } catch(e){}
     };
     subtabButtons.forEach(btn => btn.addEventListener('click', () => showSubtab(btn.dataset.subtab)));
@@ -2897,6 +2955,7 @@ if (isset($_SESSION['user_id'])) {
         fillHtml('viewLabel', title);
         fill('viewSubtitle', 'Read-only view');
         fill('viewStyle', data.style);
+        fill('viewId', data.id ? `#${data.id}` : '—');
         fill('viewKey', data.key);
         fillHtml('viewOrder', data.order);
         fillHtml('viewExampleHeading', data.heading);
@@ -2987,12 +3046,12 @@ if (isset($_SESSION['user_id'])) {
       });
     })();
 
-    // Revision filters + viewer
-    (function(){
-      const rows = Array.from(document.querySelectorAll('[data-revision-row]'));
-      if (!rows.length) return;
+      // Revision filters + viewer
+      (function(){
+        const rows = Array.from(document.querySelectorAll('[data-revision-row]'));
       const search = document.getElementById('revSearch');
-      const styleFilter = document.getElementById('revStyleFilter');
+      const styleFilter = document.getElementById('globalStyleFilter');
+      const idFilter = document.getElementById('revIdFilter');
       const releaseFilter = document.getElementById('revReleaseFilter');
       const actionFilter = document.getElementById('revActionFilter');
       const dateRange = document.getElementById('revDateRange');
@@ -3000,8 +3059,6 @@ if (isset($_SESSION['user_id'])) {
       const dateEnd = document.getElementById('revDateEnd');
       const userFilter = document.getElementById('revUserFilter');
       const noResults = document.getElementById('revNoResults');
-      const advToggle = document.getElementById('revAdvancedToggle');
-      const advPanel = document.getElementById('revAdvanced');
       const customDatesWrap = document.getElementById('revCustomDates');
 
       const parseDate = (str) => {
@@ -3035,6 +3092,7 @@ if (isset($_SESSION['user_id'])) {
 
       const applyFilters = () => {
         const q = (search?.value || '').toLowerCase();
+        const cid = (idFilter?.value || '').trim();
         const style = styleFilter?.value || '';
         const rel = releaseFilter?.value || '';
         const act = actionFilter?.value || '';
@@ -3047,36 +3105,68 @@ if (isset($_SESSION['user_id'])) {
           const label = (r.dataset.label || '').toLowerCase();
           const key = (r.dataset.key || '').toLowerCase();
           const styleVal = (r.dataset.style || '');
+          const cidVal = (r.dataset.citationId || '');
           const relVal = r.dataset.release || '';
           const actVal = (r.dataset.action || '').toLowerCase();
           const userVal = r.dataset.user || '';
           const dateVal = parseDate(r.dataset.date || '');
 
-          const matchesSearch = !q || label.includes(q) || key.includes(q);
+          const matchesSearch = !q || label.includes(q) || key.includes(q) || cidVal === q;
           const matchesStyle = !style || style === styleVal;
+          const matchesId = !cid || cidVal === cid;
           const matchesRelease = !rel || (rel === '__unreleased' ? relVal === '' : rel === relVal);
           const matchesAction = !act || act === actVal;
           const matchesUser = !user || user === userVal;
           const matchesDate = withinCustomRange(dateVal);
 
-          const match = matchesSearch && matchesStyle && matchesRelease && matchesAction && matchesUser && matchesDate;
+          const match = matchesSearch && matchesStyle && matchesId && matchesRelease && matchesAction && matchesUser && matchesDate;
           r.style.display = match ? '' : 'none';
           if (match) visible++;
         });
         if (noResults) noResults.style.display = visible ? 'none' : '';
       };
 
-      [search, styleFilter, releaseFilter, actionFilter, dateRange, dateStart, dateEnd, userFilter].forEach(el => {
+      [search, idFilter, styleFilter, releaseFilter, actionFilter, dateRange, dateStart, dateEnd, userFilter].forEach(el => {
         el?.addEventListener(el?.type === 'search' ? 'input' : 'change', applyFilters);
-      });
-      advToggle?.addEventListener('click', () => {
-        advPanel?.classList.toggle('visible');
       });
       applyFilters();
 
+      // Entries filtering via the shared search/style/status
+      const entries = Array.from(document.querySelectorAll('.citation-row'));
+      const globalStyle = document.getElementById('globalStyleFilter');
+      const statusSelect = document.getElementById('citationStatusFilter');
+      const entryFilter = () => {
+        const q = (search?.value || '').toLowerCase();
+        const styleSel = globalStyle?.value || '';
+        const statusSel = statusSelect?.value || '';
+        entries.forEach(row => {
+          const label = (row.querySelector('.citation-label')?.textContent || '').toLowerCase();
+          const key = (row.querySelector('.collection-slug')?.textContent || '').toLowerCase();
+          const style = row.dataset.style || '';
+          const status = row.dataset.status || '';
+          const matchesText = !q || label.includes(q) || key.includes(q);
+          const matchesStyle = !styleSel || styleSel === style;
+          const matchesStatus = !statusSel || statusSel === status;
+          row.style.display = (matchesText && matchesStyle && matchesStatus) ? '' : 'none';
+        });
+      };
+      if (entries.length) {
+        search?.addEventListener('input', entryFilter);
+        globalStyle?.addEventListener('change', entryFilter);
+        statusSelect?.addEventListener('change', entryFilter);
+        entryFilter();
+      }
+
+      // Advanced filters toggle (tab-specific)
+      advToggleBtn?.addEventListener('click', () => {
+        if (!advPanel || !advEntries || !advRevs) return;
+        const isEntries = advEntries.style.display !== 'none';
+        const isRevs = advRevs.style.display !== 'none';
+        advPanel.style.display = (advPanel.style.display === 'none' || !advPanel.style.display) ? 'flex' : 'none';
+      });
+
       // Revision viewer
       const viewer = document.getElementById('revisionViewer');
-      if (!viewer) return;
       const closeBtn = document.getElementById('closeRevisionViewer');
       const revCloseBtn = document.getElementById('revCloseBtn');
       const restoreId = document.getElementById('revRestoreId');
