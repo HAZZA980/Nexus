@@ -240,6 +240,22 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     return $html;
   }
 
+  /**
+   * Plain-text markup: escape, convert *italic* to <em>, preserve newlines.
+   */
+  private static function formatMarkedText(string $text): string
+  {
+    if ($text === '') return '';
+    $escaped = Security::e($text);
+    $withItalics = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $escaped);
+    return nl2br($withItalics);
+  }
+
+  private static function hasHtml(string $str): bool
+  {
+    return preg_match('/<[^>]+>/', $str) === 1;
+  }
+
   private static function block(array $blk): string
   {
     $type = (string)($blk['type'] ?? 'text');
@@ -331,9 +347,9 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
         $bodyRaw = (string)($p['html'] ?? '');
         if ($bodyRaw !== '') {
-          $body = self::safeInlineHtml($bodyRaw);
+          $body = self::hasHtml($bodyRaw) ? self::safeInlineHtml($bodyRaw) : self::formatMarkedText($bodyRaw);
         } else {
-          $body = nl2br(Security::e((string)($p['body'] ?? '')));
+          $body = self::formatMarkedText((string)($p['body'] ?? ''));
         }
 
         $html = "<div class=\"nx-citation\">"
@@ -349,12 +365,13 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
         $bodyRaw = (string)($p['bodyHtml'] ?? ($p['html'] ?? ''));
         if ($bodyRaw !== '') {
-          $body = self::safeInlineHtml($bodyRaw);
+          $body = self::hasHtml($bodyRaw) ? self::safeInlineHtml($bodyRaw) : self::formatMarkedText($bodyRaw);
         } else {
-          $body = nl2br(Security::e((string)($p['body'] ?? '')));
+          $body = self::formatMarkedText((string)($p['body'] ?? ''));
         }
 
-        $youTry = Security::e((string)($p['youTry'] ?? ''));
+        $youTryRaw = (string)($p['youTry'] ?? '');
+        $youTry = self::hasHtml($youTryRaw) ? self::safeInlineHtml($youTryRaw) : self::formatMarkedText($youTryRaw);
         $showTry = !array_key_exists('showYouTry', $p) || (bool)$p['showYouTry'];
         $extraClass = $showTry ? '' : ' nx-examplecard--single';
 
@@ -367,12 +384,13 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         if ($showTry) {
           $uid = uniqid('yt_', false);
           $expected = (string)($p['youTry'] ?? '');
-          $expectedSafe = self::safeInlineHtml($expected);
+          $expectedHtml = self::hasHtml($expected) ? self::safeInlineHtml($expected) : self::formatMarkedText($expected);
+          $expectedPlain = self::normalizeCitation($expected);
 
           $html .= "<div class=\"nx-examplecard-right\">"
             . "<div class=\"nx-examplecard-try-title\">You try</div>"
             . "<div class=\"nx-trybox\">"
-              . "<textarea id=\"{$uid}_input\" class=\"nx-try-input\" aria-label=\"Enter your citation\">{$expectedSafe}</textarea>"
+              . "<div id=\"{$uid}_input\" class=\"nx-try-input\" aria-label=\"Enter your citation\" contenteditable=\"true\">{$expectedHtml}</div>"
               . "<div class=\"nx-try-actions\">"
                 . "<button type=\"button\" class=\"nx-try-check\" data-target=\"{$uid}\">Check</button>"
                 . "<span class=\"nx-try-status\" id=\"{$uid}_status\" aria-live=\"polite\"></span>"
@@ -380,14 +398,33 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
             . "</div>"
             . "</div>"
             . "<script>(function(){"
-              . "const expected=" . self::jsonInline(self::normalizeCitation($expected)) . ";"
+              . "const expected=" . self::jsonInline($expectedPlain) . ";"
+              . "const expectedRaw=" . self::jsonInline($expected) . ";"
               . "const input=document.getElementById('{$uid}_input');"
               . "const status=document.getElementById('{$uid}_status');"
               . "const btn=document.querySelector('[data-target=\"{$uid}\"]');"
+              . "const hasHtml=(str)=>/<[^>]+>/.test(str||'');"
+              . "const renderMarked=(str)=>{"
+                  . "const raw=str||'';"
+                  . "if(hasHtml(raw)) return raw;"
+                  . "const escaped=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');"
+                  . "return escaped.replace(/\\*(.+?)\\*/g,'<em>$1</em>').replace(/\\n/g,'<br>');"
+              . "};"
+              . "if(input){"
+                  . "input.innerHTML = renderMarked(expectedRaw);"
+                  . "input.addEventListener('input',()=>{"
+                      . "const txt=input.innerText||input.textContent||'';"
+                      . "if(txt.includes('*')) input.innerHTML=renderMarked(txt);"
+                  . "});"
+                  . "input.addEventListener('blur',()=>{"
+                      . "const txt=input.innerText||input.textContent||'';"
+                      . "if(txt.includes('*')) input.innerHTML=renderMarked(txt);"
+                  . "});"
+              . "}"
               . "if(btn&&input&&status){"
                 . "btn.addEventListener('click',()=>{"
                   . "const norm=(s)=>s.toLowerCase().replace(/<[^>]+>/g,'').replace(/\\s+/g,' ').trim();"
-                  . "const val=norm(input.value);"
+                  . "const val=norm(input.innerText||input.textContent||'');"
                   . "const ok=val===expected.toLowerCase();"
                   . "status.textContent=ok?'Correct format!':'Not quite, try again.';"
                   . "status.classList.remove('ok','no');"

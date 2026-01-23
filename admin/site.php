@@ -7,6 +7,9 @@ use NexusCMS\Models\Page;
 use NexusCMS\Core\Security;
 use NexusCMS\Core\DB;
 use NexusCMS\Support\PartialsManager;
+use NexusCMS\Models\CitationExample;
+use NexusCMS\Models\CitationRevision;
+use NexusCMS\Models\CitationRelease;
 
 // -----------------------------
 // Site loading
@@ -40,6 +43,24 @@ function nx_update_site_json(int $siteId, string $col, array $payload): void {
   $db = nx_db();
   $stmt = $db->prepare("UPDATE sites SET {$col} = :json WHERE id = :id LIMIT 1");
   $stmt->execute([':json' => $json, ':id' => $siteId]);
+}
+
+function nx_safe_rollback($pdo): void {
+  if ($pdo instanceof \PDO && $pdo->inTransaction()) {
+    try { $pdo->rollBack(); } catch (\Throwable $e) {}
+  }
+}
+
+// Simple semantic tag bump: returns next patch version (e.g., 1.0.0 -> 1.0.1)
+function nx_next_release_tag(array $tags): string {
+  $latest = '1.0.0';
+  $versionTags = array_filter(array_column($tags, 'tag' ?? ''), fn($t) => is_string($t) && preg_match('/^\d+\.\d+\.\d+$/', $t));
+  if ($versionTags) {
+    usort($versionTags, 'version_compare');
+    $latest = end($versionTags);
+  }
+  if (!preg_match('/^(\d+)\.(\d+)\.(\d+)$/', $latest, $m)) return '1.0.0';
+  return $m[1] . '.' . $m[2] . '.' . ((int)$m[3] + 1);
 }
 
 // -----------------------------
@@ -347,6 +368,28 @@ $partialStatus = [
   'css'    => file_exists($partialPaths['css']) ? 'exists' : 'missing',
   'js'     => file_exists($partialPaths['js']) ? 'exists' : 'missing',
 ];
+$citationStyles = [
+  'Harvard',
+  'APA',
+  'MLA',
+  'Chicago Author-Date',
+  'Chicago Notes & Bibliography',
+  'Vancouver',
+  'IEEE',
+  'OSCOLA',
+  'AMA',
+  'Bluebook'
+];
+
+// Citation release context (needed before POST handlers)
+$citationReleases = [];
+$currentReleaseTag = '';
+if ($siteSlug === 'cite-them-right') {
+  $citationReleases = CitationRelease::listAll($siteSlug);
+  $latestTag = $citationReleases ? nx_next_release_tag($citationReleases) : '1.0.0';
+  $currentReleaseTag = $_SESSION['citation_release_tag_'.$siteSlug] ?? $latestTag;
+  if ($currentReleaseTag === '') $currentReleaseTag = $latestTag;
+}
 
 // -----------------------------
 // Handle POST saves
@@ -738,6 +781,235 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: site.php?id=' . $siteId . '&saved=footer');
     exit;
   }
+
+  // Change page collection (from kebab menu)
+  if (isset($_POST['change_collection'])) {
+    try {
+      $pageId = (int)($_POST['page_id'] ?? 0);
+      $collectionId = (int)($_POST['collection_id'] ?? 0);
+      $cid = $collectionId > 0 ? $collectionId : null;
+      $stmt = nx_db()->prepare("UPDATE pages SET collection_id = :cid WHERE id = :pid AND site_id = :sid LIMIT 1");
+      $stmt->execute([':cid' => $cid, ':pid' => $pageId, ':sid' => $siteId]);
+      $notice = 'Collection updated.';
+      $pages = Page::listBySite($siteId); // refresh
+    } catch (\Throwable $e) {
+      $notice = 'Error updating collection: ' . $e->getMessage();
+    }
+  }
+
+  // Citation database CRUD + revisions (Cite Them Right only)
+  if ($siteSlug === 'cite-them-right') {
+    $currentReleaseTag = $_SESSION['citation_release_tag_'.$siteSlug] ?? $currentReleaseTag;
+    $currentUserId = $_SESSION['user_id'] ?? null;
+    $currentUserEmail = $currentUser['email'] ?? null;
+
+    $diffFn = function(array $before, array $after): array {
+      $fields = ['example_key','label','referencing_style','citation_order','example_heading','example_body','you_try','notes'];
+      $diff = [];
+      foreach ($fields as $f) {
+        $b = $before[$f] ?? null;
+        $a = $after[$f] ?? null;
+        if ($b !== $a) $diff[] = ['field'=>$f,'before'=>$b,'after'=>$a];
+      }
+      return $diff;
+    };
+    $recordRevision = function($action, $before, $after, $releaseTag) use ($siteSlug, $currentUserId, $currentUserEmail, $diffFn) {
+      $diff = $diffFn($before ?? [], $after ?? []);
+      CitationRevision::record([
+        'site_slug' => $siteSlug,
+        'citation_id' => $after['id'] ?? $before['id'] ?? null,
+        'citation_key' => $after['example_key'] ?? $before['example_key'] ?? '',
+        'action' => $action,
+        'user_id' => $currentUserId,
+        'user_email' => $currentUserEmail,
+        'release_tag' => $releaseTag ?: null,
+        'before_json' => $before ? json_encode($before, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+        'after_json' => $after ? json_encode($after, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+        'diff_json' => $diff ? json_encode($diff, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+      ]);
+    };
+    $applySnapshot = function(array $snapshot) use ($siteSlug) {
+      if (!$snapshot) return null;
+      $row = CitationExample::find($siteSlug, $snapshot['example_key']);
+      if ($row) {
+        CitationExample::update((int)$row['id'], [
+          'referencing_style' => $snapshot['referencing_style'],
+          'example_key' => $snapshot['example_key'],
+          'label' => $snapshot['label'],
+          'citation_order' => $snapshot['citation_order'],
+          'example_heading' => $snapshot['example_heading'],
+          'example_body' => $snapshot['example_body'],
+          'you_try' => $snapshot['you_try'],
+          'notes' => $snapshot['notes'] ?? null,
+        ]);
+        $snapshot['id'] = $row['id'];
+      } else {
+        $newId = CitationExample::create([
+          'site_slug' => $siteSlug,
+          'referencing_style' => $snapshot['referencing_style'],
+          'example_key' => $snapshot['example_key'],
+          'label' => $snapshot['label'],
+          'citation_order' => $snapshot['citation_order'],
+          'example_heading' => $snapshot['example_heading'],
+          'example_body' => $snapshot['example_body'],
+          'you_try' => $snapshot['you_try'],
+          'notes' => $snapshot['notes'] ?? null,
+        ]);
+        $snapshot['id'] = $newId;
+      }
+      return $snapshot;
+    };
+
+    if (isset($_POST['add_citation'])) {
+      try {
+        $pdo = nx_db();
+        $pdo->beginTransaction();
+        $style = trim((string)($_POST['citation_style'] ?? ''));
+        if (!in_array($style, $citationStyles, true)) $style = $citationStyles[0];
+        $data = [
+          'site_slug' => $siteSlug,
+          'referencing_style' => $style,
+          'example_key' => trim((string)($_POST['citation_key'] ?? '')),
+          'label' => trim((string)($_POST['citation_label'] ?? '')),
+          'citation_order' => trim((string)($_POST['citation_order'] ?? '')),
+          'example_heading' => trim((string)($_POST['citation_heading'] ?? '')),
+          'example_body' => trim((string)($_POST['citation_body'] ?? '')),
+          'you_try' => trim((string)($_POST['citation_youtry'] ?? '')),
+          'notes' => trim((string)($_POST['citation_notes'] ?? ''))
+        ];
+        if ($data['example_key'] === '' || $data['label'] === '') throw new Exception('Key and label are required');
+        $newId = CitationExample::create($data);
+        $after = array_merge($data, ['id'=>$newId]);
+        $recordRevision('create', null, $after, $currentReleaseTag);
+        if ($pdo->inTransaction()) $pdo->commit();
+        $notice = 'Citation saved.';
+      } catch (\Throwable $e) {
+        nx_safe_rollback($pdo ?? null);
+        $notice = 'Error saving citation: ' . $e->getMessage();
+      }
+    }
+    if (isset($_POST['update_citation'])) {
+      try {
+        $pdo = nx_db();
+        $pdo->beginTransaction();
+        $id = (int)($_POST['citation_id'] ?? 0);
+        if ($id <= 0) throw new Exception('Invalid citation ID');
+        $style = trim((string)($_POST['citation_style'] ?? ''));
+        if (!in_array($style, $citationStyles, true)) $style = $citationStyles[0];
+        $before = CitationExample::findById($id);
+        $data = [
+          'referencing_style' => $style,
+          'example_key' => trim((string)($_POST['citation_key'] ?? '')),
+          'label' => trim((string)($_POST['citation_label'] ?? '')),
+          'citation_order' => trim((string)($_POST['citation_order'] ?? '')),
+          'example_heading' => trim((string)($_POST['citation_heading'] ?? '')),
+          'example_body' => trim((string)($_POST['citation_body'] ?? '')),
+          'you_try' => trim((string)($_POST['citation_youtry'] ?? '')),
+          'notes' => trim((string)($_POST['citation_notes'] ?? ''))
+        ];
+        CitationExample::update($id, $data);
+        $after = array_merge($data, ['id'=>$id, 'site_slug'=>$siteSlug]);
+        $recordRevision('update', $before ?? [], $after, $currentReleaseTag);
+        if ($pdo->inTransaction()) $pdo->commit();
+        $notice = 'Citation updated.';
+      } catch (\Throwable $e) {
+        nx_safe_rollback($pdo ?? null);
+        $notice = 'Error updating citation: ' . $e->getMessage();
+      }
+    }
+    if (isset($_POST['delete_citation'])) {
+      try {
+        $pdo = nx_db();
+        $pdo->beginTransaction();
+        $id = (int)($_POST['citation_id'] ?? 0);
+        if ($id > 0) {
+          $before = CitationExample::findById($id);
+          CitationExample::delete($id, $siteSlug);
+          $recordRevision('delete', $before ?? [], null, $currentReleaseTag);
+          if ($pdo->inTransaction()) $pdo->commit();
+          $notice = 'Citation deleted.';
+        }
+      } catch (\Throwable $e) {
+        nx_safe_rollback($pdo ?? null);
+        $notice = 'Error deleting citation: ' . $e->getMessage();
+      }
+    }
+
+    if (isset($_POST['rollback_citation'])) {
+      try {
+        $pdo = nx_db();
+        $pdo->beginTransaction();
+        $revId = (int)($_POST['revision_id'] ?? 0);
+        $stmt = $pdo->prepare("SELECT * FROM citation_revisions WHERE id=? AND site_slug=? LIMIT 1");
+        $stmt->execute([$revId, $siteSlug]);
+        $rev = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$rev) throw new Exception('Revision not found');
+        $before = CitationExample::find($siteSlug, $rev['citation_key']);
+        $target = json_decode($rev['before_json'] ?? 'null', true);
+        if ($target) {
+          $after = $applySnapshot($target);
+          $recordRevision('rollback', $before ?? [], $after ?? [], $currentReleaseTag);
+        } else {
+          if ($before && isset($before['id'])) {
+            CitationExample::delete((int)$before['id'], $siteSlug);
+          }
+          $recordRevision('rollback', $before ?? [], null, $currentReleaseTag);
+        }
+        $pdo->commit();
+        $notice = 'Rolled back.';
+      } catch (\Throwable $e) {
+        nx_safe_rollback($pdo ?? null);
+        $notice = 'Error during rollback: ' . $e->getMessage();
+      }
+    }
+
+    if (isset($_POST['export_release'])) {
+      try {
+        $tag = trim((string)($_POST['release_tag'] ?? ''));
+        if ($tag === '') $tag = $currentReleaseTag ?: '1.0.0';
+        $revs = CitationRevision::listByRelease($siteSlug, $tag);
+        if (!$revs) {
+          // Auto-stage unstaged revisions to this tag
+          $pdo = nx_db();
+          $pdo->prepare("UPDATE citation_revisions SET release_tag=? WHERE site_slug=? AND (release_tag IS NULL OR release_tag='')")->execute([$tag, $siteSlug]);
+          $revs = CitationRevision::listByRelease($siteSlug, $tag);
+        }
+        if (!$revs) throw new Exception('No revisions available to export.');
+        $final = [];
+        foreach ($revs as $r) {
+          $key = $r['citation_key'];
+          $after = json_decode($r['after_json'] ?? 'null', true);
+          $final[$key] = $after;
+        }
+        $root = PartialsManager::projectRoot();
+        $updatesRoot = $root . '/updates';
+        if (!is_dir($updatesRoot)) mkdir($updatesRoot, 0777, true);
+        $dir = $updatesRoot . '/' . $tag;
+        if (!is_dir($dir)) mkdir($dir, 0777, true);
+        $manifest = [
+          'tag' => $tag,
+          'exported_at' => date('c'),
+          'exported_by' => $currentUserEmail,
+          'revision_count' => count($revs),
+          'citation_count' => count($final),
+          'site_slug' => $siteSlug,
+        ];
+        file_put_contents($dir . '/manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $ndjson = '';
+        foreach ($revs as $r) {
+          $ndjson .= json_encode($r, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n";
+        }
+        file_put_contents($dir . '/revisions.ndjson', $ndjson);
+        file_put_contents($dir . '/final_state.json', json_encode($final, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        CitationRelease::markExported($siteSlug, $tag, $currentUserEmail ?? 'unknown');
+        $notice = "Exported release {$tag}.";
+        $_SESSION['citation_release_tag_'.$siteSlug] = nx_next_release_tag(array_merge($citationReleases, [['tag'=>$tag]]));
+        $currentReleaseTag = $_SESSION['citation_release_tag_'.$siteSlug];
+      } catch (\Throwable $e) {
+        $notice = 'Export failed: ' . $e->getMessage();
+      }
+    }
+  }
 }
 
 if (!empty($_GET['saved'])) {
@@ -770,6 +1042,54 @@ try {
 } catch (\Throwable $e) {
   $collections = [];
   $collectionUsage = [];
+}
+
+$citationExamples = [];
+if ($siteSlug === 'cite-them-right') {
+  try {
+    $citationExamples = CitationExample::listForSiteSlug($siteSlug);
+  } catch (\Throwable $e) {
+    $citationExamples = [];
+  }
+}
+$citationRevisions = [];
+$citationReleases = [];
+if ($siteSlug === 'cite-them-right') {
+  $citationRevisions = CitationRevision::recent($siteSlug, 100);
+  $citationReleases = CitationRelease::listAll($siteSlug);
+}
+$currentReleaseTag = '';
+if ($siteSlug === 'cite-them-right') {
+  $latestTag = $citationReleases ? nx_next_release_tag($citationReleases) : '1.0.0';
+  $currentReleaseTag = $_SESSION['citation_release_tag_'.$siteSlug] ?? $latestTag;
+  if ($currentReleaseTag === '') $currentReleaseTag = $latestTag;
+}
+$stagedCount = 0;
+$stagedByTag = [];
+$netEffects = [];
+$latestByKey = [];
+$stagedKeys = [];
+if ($siteSlug === 'cite-them-right') {
+  foreach ($citationRevisions as $rev) {
+    $tag = $rev['release_tag'] ?? '';
+    if ($tag) {
+      $stagedByTag[$tag] = ($stagedByTag[$tag] ?? 0) + 1;
+      if ($tag === $currentReleaseTag) $stagedCount++;
+    }
+    $key = $rev['citation_key'];
+    if (!isset($latestByKey[$key])) {
+      $latestByKey[$key] = $rev;
+      if ($tag === $currentReleaseTag) $stagedKeys[$key] = true;
+    }
+  }
+  if ($currentReleaseTag) {
+    $currentTagRevs = CitationRevision::listByRelease($siteSlug, $currentReleaseTag);
+    foreach ($currentTagRevs as $r) {
+      $key = $r['citation_key'];
+      $after = json_decode($r['after_json'] ?? 'null', true);
+      $netEffects[$key] = $after;
+    }
+  }
 }
 
 $base = base_path();
@@ -892,6 +1212,7 @@ if (isset($_SESSION['user_id'])) {
     .muted{color:var(--muted);font-size:13px}
     label{display:block;margin:10px 0 6px 0;color:var(--muted);font-size:13px}
     input,select,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid var(--field-border);background:var(--field-bg);color:var(--text);font-weight:600;}
+    textarea{overflow:hidden;resize:vertical;min-height:40px;}
     ::placeholder{color:var(--muted);opacity:0.9;}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
@@ -938,7 +1259,6 @@ if (isset($_SESSION['user_id'])) {
       box-shadow:var(--shadow);
       max-width:760px;
       width:100%;
-      max-height:90vh;
       overflow:auto;
       padding:18px;
     }
@@ -983,7 +1303,69 @@ if (isset($_SESSION['user_id'])) {
     .collection-table tbody tr{border-top:1px solid rgba(255,255,255,.06);}
     .collection-table tbody tr:hover{background:rgba(255,255,255,.04);}
     .collection-name{font-weight:800;font-size:15px;}
-    .collection-slug{font-family:"SFMono-Regular","Menlo",monospace;font-size:12px;color:var(--muted);}
+  .collection-slug{font-family:"SFMono-Regular","Menlo",monospace;font-size:12px;color:var(--muted);}
+  .citations-list{margin-top:12px;}
+  .citation-table{width:100%;border-collapse:collapse;}
+  .citation-table th,.citation-table td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;}
+  .citation-table th{color:var(--muted);font-size:12px;letter-spacing:0.3px;text-transform:uppercase;}
+  .citation-row:hover{background:rgba(255,255,255,0.04);}
+  .citation-label{font-weight:800;font-size:15px;}
+  .citation-style-pill{border-radius:999px;padding:6px 10px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;}
+  .badge-chip{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--border);}
+  .badge-chip.staged{background:rgba(37,99,235,0.12);color:#bfdbfe;border-color:rgba(59,130,246,0.4);}
+  .cite-viewer{position:fixed;top:0;right:0;width:520px;max-width:90vw;height:100vh;background:var(--panel);border-left:1px solid var(--border);box-shadow:-12px 0 24px rgba(0,0,0,0.25);transition:transform 0.25s ease;z-index:1500;display:flex;flex-direction:column;transform:translateX(100%);}
+  .cite-viewer.active{transform:translateX(0);}
+  .cite-viewer header{padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .cite-viewer .actions-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border);padding:10px 14px;}
+  .cite-viewer main{padding:14px;overflow:auto;flex:1;display:grid;gap:10px;max-width:100%;margin:0;width:100%;}
+  .cite-viewer .section{margin:0;}
+  .cite-viewer footer{padding:12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
+  .cite-viewer main.viewer-body{display:flex;flex-direction:column;align-items:stretch;}
+  .cite-viewer .viewer-body{padding:14px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:12px;background:var(--panel);align-items:stretch;}
+  .cite-viewer .viewer-body > *{width:100%;max-width:none;}
+  .cite-viewer .viewer-body .citation-field{width:100%;max-width:none;}
+  .cite-viewer .viewer-body .callout{width:100%;max-width:none;}
+  .cite-viewer .edit-body{gap:12px;}
+  .cite-viewer.edit-mode{background:var(--panel);}
+  .cite-readonly-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;}
+  .citation-edit-field input,
+  .citation-edit-field textarea{
+    background:var(--card);
+    border:1px solid var(--border);
+    color:inherit;
+    font:inherit;
+    padding:10px;
+    border-radius:10px;
+    line-height:1.6;
+    box-shadow:0 1px 0 rgba(0,0,0,0.04);
+    height:auto;
+    min-height:44px;
+  }
+  .citation-edit-field input:focus,
+  .citation-edit-field textarea:focus{border-color:var(--primary);}
+  .citation-edit-field textarea{
+    min-height:0;
+    resize:none;
+    overflow:hidden;
+  }
+  .citation-edit-field strong{display:block;margin-bottom:6px;}
+  .citation-subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;}
+  .citation-subtab{padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text);cursor:pointer;font-weight:700;min-height:36px;}
+  .citation-subtab.active{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border-color:transparent;}
+  .pill-muted{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;}
+  .grid-2{display:grid;grid-template-columns:2fr 1fr;gap:12px;}
+  @media(max-width:960px){.grid-2{grid-template-columns:1fr;}}
+  .citation-panel{display:none;}
+  .citation-panel.active{display:block;}
+  .rev-filters{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 12px;border:1px solid var(--border);border-radius:12px;padding:12px;background:rgba(255,255,255,0.02);}
+  .rev-filters .field{display:flex;flex-direction:column;gap:6px;min-width:180px;}
+  .rev-filters .field label{margin:0;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;}
+  .rev-advanced{display:none;flex-wrap:wrap;gap:10px;width:100%;margin-top:6px;}
+  .rev-advanced.visible{display:flex;}
+  .rev-no-results{margin-top:8px;color:var(--muted);}
+  .revision-row{cursor:pointer;}
+  .revision-row:hover{background:rgba(255,255,255,0.04);}
+  .cite-viewer .callout{padding:10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,0.03);width:100%;}
   </style>
 </head>
 <body>
@@ -1047,6 +1429,9 @@ if (isset($_SESSION['user_id'])) {
           <button class="tab" data-tab="collections" type="button">Collections</button>
           <button class="tab" data-tab="appearance" type="button">Appearance</button>
           <button class="tab" data-tab="settings" type="button">Settings</button>
+          <?php if ($siteSlug === 'cite-them-right'): ?>
+            <button class="tab" data-tab="citations" type="button">Citation DB</button>
+          <?php endif; ?>
         </div>
         <button class="btn primary" type="button" id="addPageBtnTop">Add new page</button>
       </div>
@@ -1131,6 +1516,21 @@ if (isset($_SESSION['user_id'])) {
                       <button class="kebab-btn" type="button" aria-haspopup="true" aria-expanded="false">⋯</button>
                       <div class="kebab-menu" role="menu">
                         <button type="button" data-duplicate-page data-page-id="<?= (int)$p['id'] ?>" aria-label="Duplicate page">Duplicate</button>
+                        <div style="padding:8px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+                          <div class="muted" style="font-size:12px;margin-bottom:6px;">Change collection</div>
+                          <form method="post" action="site.php?id=<?= (int)$site['id'] ?>" style="display:grid;gap:6px">
+                            <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+                            <input type="hidden" name="change_collection" value="1">
+                            <input type="hidden" name="page_id" value="<?= (int)$p['id'] ?>">
+                            <select name="collection_id" style="width:100%;padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);">
+                              <option value="0">No collection</option>
+                              <?php foreach ($collections as $col): ?>
+                                <option value="<?= (int)$col['id'] ?>" <?= ((int)($p['collection_id'] ?? 0) === (int)$col['id']) ? 'selected' : '' ?>><?= Security::e($col['name']) ?></option>
+                              <?php endforeach; ?>
+                            </select>
+                            <button class="btn small" type="submit" aria-label="Save collection">Save</button>
+                          </form>
+                        </div>
                         <button type="button" class="danger" data-delete-page data-page-id="<?= (int)$p['id'] ?>" data-page-title="<?= Security::e($p['title']) ?>" aria-label="Delete page">Delete</button>
                       </div>
                     </div>
@@ -1701,6 +2101,327 @@ if (isset($_SESSION['user_id'])) {
           </div>
         </div>
       </div>
+
+      <?php if ($siteSlug === 'cite-them-right'): ?>
+      <!-- CITATION DATABASE (read-only) -->
+      <div class="panel" id="panel-citations">
+        <div class="card" style="margin-top:14px">
+          <h2>Citation database</h2>
+          <div class="muted">Manage citation records that power Citation order, Example, and You try blocks.</div>
+
+          <div class="citation-subtabs" role="tablist" aria-label="Citation DB subtabs">
+            <button class="citation-subtab active" data-subtab="entries" type="button">Entries</button>
+            <button class="citation-subtab" data-subtab="revisions" type="button">Revisions</button>
+            <button class="citation-subtab" data-subtab="releases" type="button">Releases</button>
+            <span class="pill-muted">Staging to: <?= Security::e($currentReleaseTag) ?></span>
+            <span class="pill-muted"><?= (int)$stagedCount ?> staged</span>
+          </div>
+
+          <div class="row citation-panel active" style="margin-top:10px" data-subtab-panel="entries">
+            <div>
+              <label>Filter by style</label>
+              <select id="citationStyleFilter">
+                <option value="">All styles</option>
+                <?php foreach ($citationStyles as $style): ?>
+                  <option value="<?= Security::e($style) ?>"><?= Security::e($style) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:10px">
+              <button class="btn primary" type="button" id="openCitationModal">+ Add citation</button>
+            </div>
+          </div>
+
+          <div class="section citation-panel" style="margin-top:12px;display:grid;gap:10px" data-subtab-panel="releases">
+            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+              <div>
+                <label>Current release tag</label>
+                <div class="citation-style-pill"><?= Security::e($currentReleaseTag) ?></div>
+                <div class="muted" style="font-size:12px;margin-top:4px;">Auto-assigned; next tag set after export.</div>
+              </div>
+              <form method="post" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+                <input type="hidden" name="export_release" value="1">
+                <input type="hidden" name="release_tag" value="<?= Security::e($currentReleaseTag) ?>">
+                <button class="btn primary" type="submit">Export bundle</button>
+              </form>
+            </div>
+            <?php if ($citationReleases): ?>
+              <div class="citation-field">
+                <strong>Release history</strong>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+                  <?php foreach ($citationReleases as $rel): ?>
+                    <span class="citation-style-pill"><?= Security::e($rel['tag']) ?> — <?= Security::e($rel['status']) ?></span>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            <?php endif; ?>
+          </div>
+
+          <?php if ($citationExamples): ?>
+            <div class="citations-list citation-panel active" id="citationList" data-subtab-panel="entries">
+              <table class="citation-table">
+                <thead>
+                  <tr>
+                    <th>Reference type</th>
+                    <th>Style</th>
+                    <th>Key</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($citationExamples as $ex): 
+                    $key = $ex['example_key'] ?? '';
+                    $staged = isset($stagedKeys[$key]);
+                    $hasRevision = isset($latestByKey[$key]);
+                    $statusLabel = 'Clean';
+                    $statusTone = 'muted';
+                    if ($staged) { $statusLabel = 'Staged in current release'; $statusTone = 'badge-chip staged'; }
+                    elseif ($hasRevision) { $statusLabel = 'Edited (other release)'; $statusTone = 'badge-chip'; }
+                  ?>
+                    <tr class="citation-row" data-style="<?= Security::e($ex['referencing_style'] ?? '') ?>">
+                      <td>
+                        <div class="citation-label"><?= Security::e($ex['label'] ?? '') ?></div>
+                      </td>
+                      <td><span class="citation-style-pill"><?= Security::e($ex['referencing_style'] ?? '') ?></span></td>
+                      <td class="muted collection-slug"><?= Security::e($key) ?></td>
+                      <td>
+                        <span class="<?= $statusTone ?>"><?= Security::e($statusLabel) ?></span>
+                      </td>
+                      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+                        <button
+                          class="btn small"
+                          type="button"
+                          data-view-citation
+                          data-style="<?= Security::e($ex['referencing_style'] ?? '') ?>"
+                          data-key="<?= Security::e($ex['example_key'] ?? '') ?>"
+                          data-label="<?= Security::e($ex['label'] ?? '') ?>"
+                          data-order="<?= Security::e($ex['citation_order'] ?? '') ?>"
+                          data-heading="<?= Security::e($ex['example_heading'] ?? '') ?>"
+                          data-body="<?= Security::e($ex['example_body'] ?? '') ?>"
+                          data-youtry="<?= Security::e($ex['you_try'] ?? '') ?>"
+                          data-notes="<?= Security::e($ex['notes'] ?? '') ?>"
+                          data-id="<?= (int)($ex['id'] ?? 0) ?>"
+                        >View</button>
+                        <form method="post" style="margin:0">
+                          <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+                          <input type="hidden" name="delete_citation" value="1">
+                          <input type="hidden" name="citation_id" value="<?= (int)($ex['id'] ?? 0) ?>">
+                          <button class="btn danger" type="submit" onclick="return confirm('Delete this citation?')">Delete</button>
+                        </form>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+            <div class="section citation-panel" style="margin-top:14px" data-subtab-panel="revisions">
+              <h3>Revisions (latest 100)</h3>
+              <?php
+                $revStyles = [];
+                $revUsers = [];
+                $revTags = [];
+                foreach ($citationRevisions as $r) {
+                  $after = json_decode($r['after_json'] ?? 'null', true);
+                  $before = json_decode($r['before_json'] ?? 'null', true);
+                  $style = $after['referencing_style'] ?? $before['referencing_style'] ?? '';
+                  if ($style) $revStyles[$style] = true;
+                  $tag = $r['release_tag'] ?? '';
+                  if ($tag !== '') $revTags[$tag] = true;
+                  $userEmail = $r['user_email'] ?? '';
+                  if ($userEmail) $revUsers[$userEmail] = true;
+                }
+                $revStyles = array_keys($revStyles);
+                sort($revStyles);
+                $revTags = array_keys($revTags);
+                usort($revTags, 'version_compare');
+                $revTags = array_reverse($revTags);
+                $revUsers = array_keys($revUsers);
+                sort($revUsers);
+              ?>
+              <?php if ($citationRevisions): ?>
+                <div class="rev-filters" id="revFilters">
+                  <div class="field" style="flex:1;min-width:220px;">
+                    <label for="revSearch">Search</label>
+                    <input id="revSearch" type="search" placeholder="Search by citation title or key">
+                  </div>
+                  <div class="field">
+                    <label for="revStyleFilter">Referencing style</label>
+                    <select id="revStyleFilter">
+                      <option value="">All styles</option>
+                      <?php foreach ($revStyles as $style): ?>
+                        <option value="<?= Security::e($style) ?>"><?= Security::e($style) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="revReleaseFilter">Release tag</label>
+                    <select id="revReleaseFilter">
+                      <option value="">All releases</option>
+                      <option value="__unreleased">Unreleased / Not staged</option>
+                      <?php foreach ($revTags as $tag): ?>
+                        <option value="<?= Security::e($tag) ?>"><?= Security::e($tag) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                  </div>
+                  <div class="field" style="min-width:140px;">
+                    <label>&nbsp;</label>
+                    <button type="button" class="btn" id="revAdvancedToggle">Advanced filters</button>
+                  </div>
+                  <div class="rev-advanced" id="revAdvanced">
+                    <div class="field">
+                      <label for="revActionFilter">Action</label>
+                      <select id="revActionFilter">
+                        <option value="">All</option>
+                        <option value="create">Create</option>
+                        <option value="update">Update</option>
+                        <option value="delete">Delete</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="revDateRange">Date</label>
+                      <select id="revDateRange">
+                        <option value="">Any time</option>
+                        <option value="24h">Last 24 hours</option>
+                        <option value="7d">Last 7 days</option>
+                        <option value="30d">Last 30 days</option>
+                        <option value="custom">Custom range</option>
+                      </select>
+                    </div>
+                    <div class="field" id="revCustomDates" style="display:none;flex-direction:row;gap:8px;align-items:flex-end;">
+                      <div style="flex:1">
+                        <label for="revDateStart">From</label>
+                        <input type="date" id="revDateStart">
+                      </div>
+                      <div style="flex:1">
+                        <label for="revDateEnd">To</label>
+                        <input type="date" id="revDateEnd">
+                      </div>
+                    </div>
+                    <?php if ($revUsers): ?>
+                      <div class="field">
+                        <label for="revUserFilter">User</label>
+                        <select id="revUserFilter">
+                          <option value="">All users</option>
+                          <?php foreach ($revUsers as $u): ?>
+                            <option value="<?= Security::e($u) ?>"><?= Security::e($u) ?></option>
+                          <?php endforeach; ?>
+                        </select>
+                      </div>
+                    <?php endif; ?>
+                  </div>
+                </div>
+                <div style="overflow:auto">
+                  <table class="collection-table" aria-label="Citation revisions" id="revisionTable">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Action</th>
+                        <th>Citation</th>
+                        <th>Referencing style</th>
+                        <th>Release tag</th>
+                        <th>User</th>
+                        <th>When</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <?php foreach ($citationRevisions as $rev):
+                        $after = json_decode($rev['after_json'] ?? 'null', true);
+                        $before = json_decode($rev['before_json'] ?? 'null', true);
+                        $label = $after['label'] ?? $before['label'] ?? $rev['citation_key'];
+                        $style = $after['referencing_style'] ?? $before['referencing_style'] ?? '';
+                        $key = $rev['citation_key'] ?? '';
+                        $releaseTag = $rev['release_tag'] ?? '';
+                        $userEmail = $rev['user_email'] ?? '—';
+                        $created = $rev['created_at'] ?? '';
+                      ?>
+                        <tr
+                          class="revision-row"
+                          data-revision-row
+                          data-id="<?= (int)$rev['id'] ?>"
+                          data-key="<?= Security::e($key) ?>"
+                          data-label="<?= Security::e($label) ?>"
+                          data-style="<?= Security::e($style) ?>"
+                          data-release="<?= Security::e($releaseTag) ?>"
+                          data-action="<?= Security::e(strtolower($rev['action'] ?? '')) ?>"
+                          data-user="<?= Security::e($userEmail) ?>"
+                          data-date="<?= Security::e($created) ?>"
+                          data-after="<?= Security::e($rev['after_json'] ?? '') ?>"
+                          data-before="<?= Security::e($rev['before_json'] ?? '') ?>"
+                        >
+                          <td class="muted">#<?= (int)$rev['id'] ?></td>
+                          <td><?= Security::e($rev['action']) ?></td>
+                          <td>
+                            <div class="collection-name"><?= Security::e($label) ?></div>
+                          </td>
+                          <td class="muted"><?= Security::e($style) ?></td>
+                          <td class="muted"><?= Security::e($releaseTag ?: '—') ?></td>
+                          <td class="muted"><?= Security::e($userEmail) ?></td>
+                          <td class="muted"><?= Security::e($created) ?></td>
+                        </tr>
+                      <?php endforeach; ?>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="rev-no-results" id="revNoResults" style="display:none;">No revisions match your filters.</div>
+              <?php else: ?>
+                <div class="muted">No revisions yet.</div>
+              <?php endif; ?>
+            </div>
+            <div class="section citation-panel" style="margin-top:14px" data-subtab-panel="releases">
+              <h3>Release details (<?= Security::e($currentReleaseTag) ?>)</h3>
+              <?php
+                $currentTagRevs = CitationRevision::listByRelease($siteSlug, $currentReleaseTag);
+              ?>
+              <?php if ($currentTagRevs): ?>
+                <div class="citation-field">
+                  <strong>Staged revisions</strong>
+                  <div style="display:grid;gap:6px;margin-top:6px">
+                    <?php foreach ($currentTagRevs as $r): ?>
+                      <div class="citation-field" style="padding:6px 8px;background:rgba(255,255,255,0.02);">
+                        <div class="collection-name">#<?= (int)$r['id'] ?> — <?= Security::e($r['action']) ?> — <?= Security::e($r['citation_key']) ?></div>
+                        <div class="muted" style="font-size:12px;display:flex;gap:10px;flex-wrap:wrap;">
+                          <span><?= Security::e($r['user_email'] ?? '—') ?></span>
+                          <span><?= Security::e($r['created_at'] ?? '') ?></span>
+                          <span>Release: <?= Security::e($r['release_tag'] ?? '') ?></span>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
+                </div>
+                <div class="citation-field">
+                  <strong>Net effect</strong>
+                  <?php if ($netEffects): ?>
+                    <div style="display:grid;gap:6px;margin-top:6px">
+                      <?php foreach ($netEffects as $key => $state): ?>
+                        <div class="citation-field" style="padding:6px 8px;">
+                          <div class="collection-name"><?= Security::e($key) ?></div>
+                          <?php if ($state): ?>
+                            <div class="muted" style="white-space:pre-line"><?= Security::e($state['label'] ?? '') ?></div>
+                          <?php else: ?>
+                            <div class="muted">Deleted</div>
+                          <?php endif; ?>
+                        </div>
+                      <?php endforeach; ?>
+                    </div>
+                  <?php else: ?>
+                    <div class="muted" style="margin-top:4px">No net changes.</div>
+                  <?php endif; ?>
+                </div>
+              <?php else: ?>
+                <div class="muted">No staged revisions for this release.</div>
+              <?php endif; ?>
+            </div>
+          <?php else: ?>
+            <div class="muted" style="margin-top:12px;display:flex;align-items:center;gap:10px">
+              <span style="font-size:20px">📚</span>
+              <div>No citation entries found. Populate via SQL seed file.</div>
+            </div>
+          <?php endif; ?>
+        </div>
+      </div>
+      <?php endif; ?>
     </div>
   </main>
 
@@ -1730,6 +2451,214 @@ if (isset($_SESSION['user_id'])) {
     <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
     <input type="hidden" name="delete_site" value="1">
   </form>
+
+  <div class="modal-backdrop" id="citationModalBackdrop" style="display:none">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="citationModalTitle">
+      <header style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div>
+          <h3 id="citationModalTitle" style="margin:0">Add citation</h3>
+          <div class="muted" style="font-size:13px">Reference type, formatting, and “You try” guidance in one place.</div>
+        </div>
+        <button type="button" class="close-btn" id="closeCitationModal" aria-label="Close">×</button>
+      </header>
+      <form method="post" id="citationModalForm" style="display:grid;gap:12px">
+        <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+        <input type="hidden" name="add_citation" id="citationActionAdd" value="1">
+        <input type="hidden" name="update_citation" id="citationActionUpdate" value="">
+        <input type="hidden" name="citation_id" id="citationIdField" value="">
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+          <label class="citation-field" style="display:block">
+            <strong>Referencing style</strong>
+            <select name="citation_style" id="citationStyleField" style="margin-top:6px;width:100%">
+              <?php foreach ($citationStyles as $style): ?>
+                <option value="<?= Security::e($style) ?>"><?= Security::e($style) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label class="citation-field" style="display:block">
+            <strong>Key (unique)</strong>
+            <input name="citation_key" id="citationKeyField" placeholder="book_one_author" required style="margin-top:6px;width:100%">
+            <div class="muted" style="font-size:12px;margin-top:4px">Stable identifier used in templates.</div>
+          </label>
+          <label class="citation-field" style="display:block">
+            <strong>Label</strong>
+            <input name="citation_label" id="citationLabelField" placeholder="Book with one author" required style="margin-top:6px;width:100%">
+          </label>
+        </div>
+
+        <div class="citation-field" style="display:grid;gap:8px">
+          <strong>Citation order</strong>
+          <textarea name="citation_order" id="citationOrderField" rows="3" placeholder="• Author/editor&#10;• Year..." required style="width:100%"></textarea>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
+          <label class="citation-field" style="display:block">
+            <strong>Example heading</strong>
+            <input name="citation_heading" id="citationHeadingField" placeholder="Example: book with one author" required style="margin-top:6px;width:100%">
+            <div class="muted" style="font-size:12px;margin-top:4px">Short descriptor shown above the example.</div>
+          </label>
+          <label class="citation-field" style="display:block">
+            <strong>Example body</strong>
+            <textarea name="citation_body" id="citationBodyField" rows="4" placeholder="In-text citations&#10;... Reference list" required style="margin-top:6px;width:100%"></textarea>
+          </label>
+          <label class="citation-field" style="display:block">
+            <strong>You try</strong>
+            <textarea name="citation_youtry" id="citationYouTryField" rows="4" placeholder="Surname, Initial. (Year)..." required style="margin-top:6px;width:100%"></textarea>
+          </label>
+        </div>
+
+        <div class="citation-field" style="display:block">
+          <strong>Editorial notes (optional)</strong>
+          <textarea name="citation_notes" id="citationNotesField" rows="3" placeholder="House style notes, reminders…" style="margin-top:6px;width:100%"></textarea>
+        </div>
+
+        <div class="actions" style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+          <button class="btn" type="button" id="cancelCitationModal">Cancel</button>
+          <button class="btn primary" type="submit" id="citationSubmitBtn">Add citation</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <aside class="cite-viewer" id="citationViewer" aria-label="Citation details">
+    <header>
+      <div>
+        <div class="citation-label" id="viewLabel">Citation</div>
+        <div class="muted" id="viewSubtitle" style="font-size:12px;">Read-only view</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="cite-readonly-badge" id="viewBadge">Read-only</span>
+        <button class="close-btn" type="button" id="closeCitationViewer" aria-label="Close">×</button>
+      </div>
+    </header>
+    <div class="actions-bar" id="viewActions">
+      <button class="btn primary" type="button" id="viewerEdit">Edit citation</button>
+      <button class="btn" type="button" id="viewerRevisions">View revisions</button>
+    </div>
+    <main id="viewBody" class="viewer-body">
+      <div class="citation-field">
+        <strong>Style</strong>
+        <div id="viewStyle" class="muted">—</div>
+      </div>
+      <div class="citation-field">
+        <strong>Key</strong>
+        <div id="viewKey" class="collection-slug">—</div>
+      </div>
+      <div class="citation-field">
+        <strong>Citation order</strong>
+        <div id="viewOrder" class="muted" style="white-space:pre-line">—</div>
+      </div>
+      <div class="citation-field">
+        <strong>Example</strong>
+        <div id="viewExampleHeading" class="collection-name">—</div>
+        <div id="viewExampleBody" class="muted" style="white-space:pre-line">—</div>
+      </div>
+      <div class="citation-field">
+        <strong>You try</strong>
+        <div id="viewYouTry" class="muted" style="white-space:pre-line">—</div>
+      </div>
+      <div class="citation-field">
+        <strong>Editorial notes</strong>
+        <div id="viewNotes" class="muted" style="white-space:pre-line">—</div>
+      </div>
+    </main>
+
+    <form id="editBody" class="viewer-body edit-body" style="display:none;" method="post">
+      <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+      <input type="hidden" name="update_citation" value="1">
+      <input type="hidden" name="citation_id" id="editIdField">
+      <input type="hidden" name="citation_style" id="editStyleField">
+      <input type="hidden" name="citation_key" id="editKeyField">
+      <div class="citation-field citation-edit-field">
+        <strong>Label</strong>
+        <input name="citation_label" id="editLabelField" required>
+      </div>
+      <div class="citation-field citation-edit-field">
+        <strong>Citation order</strong>
+        <textarea name="citation_order" id="editOrderField" rows="4" required></textarea>
+      </div>
+      <div class="citation-field citation-edit-field">
+        <strong>Example heading</strong>
+        <input name="citation_heading" id="editHeadingField" required>
+        <strong style="margin-top:12px;display:block;">Example body</strong>
+        <textarea name="citation_body" id="editBodyField" rows="4" required></textarea>
+      </div>
+      <div class="citation-field citation-edit-field">
+        <strong>You try</strong>
+        <textarea name="citation_youtry" id="editYouTryField" rows="4" required></textarea>
+      </div>
+      <div class="citation-field citation-edit-field">
+        <strong>Editorial notes</strong>
+        <textarea name="citation_notes" id="editNotesField" rows="3"></textarea>
+      </div>
+    </form>
+    <footer id="editFooter" style="display:none;">
+      <button class="btn" type="button" id="editCancel">Cancel</button>
+      <button class="btn primary" type="submit" form="editBody">Save changes</button>
+    </footer>
+  </aside>
+
+  <aside class="cite-viewer" id="revisionViewer" aria-label="Revision details">
+    <header>
+      <div>
+        <div class="citation-label" id="revViewLabel">Revision</div>
+        <div class="muted" id="revViewSubtitle" style="font-size:12px;">Audit trail</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="cite-readonly-badge" id="revViewBadge">Read-only</span>
+        <button class="close-btn" type="button" id="closeRevisionViewer" aria-label="Close">×</button>
+      </div>
+    </header>
+    <div class="actions-bar" id="revActions">
+      <div class="pill-muted" id="revActionPill">—</div>
+      <div class="pill-muted" id="revReleasePill">Release: —</div>
+    </div>
+    <main class="viewer-body" id="revViewBody">
+      <div class="citation-field">
+        <strong>Citation</strong>
+        <div class="collection-name" id="revCitationLabel">—</div>
+        <div class="muted collection-slug" id="revCitationKey">—</div>
+        <div class="muted" id="revCitationStyle">—</div>
+      </div>
+      <div class="citation-field">
+        <strong>Metadata</strong>
+        <div class="muted" id="revMetaUser">User: —</div>
+        <div class="muted" id="revMetaTime">When: —</div>
+      </div>
+      <div class="citation-field">
+        <strong>Resulting state</strong>
+        <div class="callout" id="revAfterBlock">
+          <div><strong>Label</strong><div id="revAfterLabel" class="muted">—</div></div>
+          <div style="margin-top:8px"><strong>Citation order</strong><div id="revAfterOrder" class="muted" style="white-space:pre-line">—</div></div>
+          <div style="margin-top:8px"><strong>Example heading</strong><div id="revAfterHeading" class="muted">—</div></div>
+          <div style="margin-top:8px"><strong>Example body</strong><div id="revAfterBody" class="muted" style="white-space:pre-line">—</div></div>
+          <div style="margin-top:8px"><strong>You try</strong><div id="revAfterYouTry" class="muted" style="white-space:pre-line">—</div></div>
+          <div style="margin-top:8px"><strong>Editorial notes</strong><div id="revAfterNotes" class="muted" style="white-space:pre-line">—</div></div>
+        </div>
+      </div>
+      <div class="citation-field">
+        <strong>Prior state</strong>
+        <div class="callout" id="revBeforeBlock">
+          <div><strong>Label</strong><div id="revBeforeLabel" class="muted">—</div></div>
+          <div style="margin-top:8px"><strong>Citation order</strong><div id="revBeforeOrder" class="muted" style="white-space:pre-line">—</div></div>
+          <div style="margin-top:8px"><strong>Example heading</strong><div id="revBeforeHeading" class="muted">—</div></div>
+          <div style="margin-top:8px"><strong>Example body</strong><div id="revBeforeBody" class="muted" style="white-space:pre-line">—</div></div>
+          <div style="margin-top:8px"><strong>You try</strong><div id="revBeforeYouTry" class="muted" style="white-space:pre-line">—</div></div>
+          <div style="margin-top:8px"><strong>Editorial notes</strong><div id="revBeforeNotes" class="muted" style="white-space:pre-line">—</div></div>
+        </div>
+      </div>
+    </main>
+    <footer>
+      <form method="post" style="display:flex;gap:8px;align-items:center;margin:0" id="revRestoreForm">
+        <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+        <input type="hidden" name="rollback_citation" value="1">
+        <input type="hidden" name="revision_id" id="revRestoreId" value="">
+        <button class="btn" type="button" id="revCloseBtn">Close</button>
+        <button class="btn primary" type="submit" onclick="return confirm('Restore this revision and stage it?')">Restore</button>
+      </form>
+    </footer>
+  </aside>
 
   <script>
     (function(){
@@ -1804,9 +2733,476 @@ if (isset($_SESSION['user_id'])) {
       applyPageFilters();
     });
 
+    // Citation style filter
+    const citationFilter = document.getElementById('citationStyleFilter');
+    if (citationFilter) {
+      citationFilter.addEventListener('change', () => {
+        const val = citationFilter.value;
+        document.querySelectorAll('#citationList .citation-card').forEach(card => {
+          const style = card.dataset.style || '';
+          card.style.display = (!val || style === val) ? '' : 'none';
+        });
+      });
+    }
+
+    // Citation subtabs
+    const subtabButtons = Array.from(document.querySelectorAll('.citation-subtab'));
+    const subtabPanels = Array.from(document.querySelectorAll('[data-subtab-panel]'));
+    const showSubtab = (name) => {
+      subtabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.subtab === name));
+      subtabPanels.forEach(p => {
+        const isMatch = p.dataset.subtabPanel === name;
+        p.classList.toggle('active', isMatch);
+      });
+      try { localStorage.setItem('citationSubtab', name); } catch(e){}
+    };
+    subtabButtons.forEach(btn => btn.addEventListener('click', () => showSubtab(btn.dataset.subtab)));
+    const storedSubtab = (()=>{try{return localStorage.getItem('citationSubtab');}catch(e){return null;}})();
+    if (storedSubtab && subtabButtons.find(b => b.dataset.subtab === storedSubtab)) showSubtab(storedSubtab);
+    else showSubtab('entries');
+
+    // Citation modal
+    const citationBackdrop = document.getElementById('citationModalBackdrop');
+    const openCitationModal = document.getElementById('openCitationModal');
+    const closeCitationModal = document.getElementById('closeCitationModal');
+    const cancelCitationModal = document.getElementById('cancelCitationModal');
+    const citationTitle = document.getElementById('citationModalTitle');
+    const citationActionAdd = document.getElementById('citationActionAdd');
+    const citationActionUpdate = document.getElementById('citationActionUpdate');
+    const citationSubmitBtn = document.getElementById('citationSubmitBtn');
+    const citationIdField = document.getElementById('citationIdField');
+    const citationStyleField = document.getElementById('citationStyleField');
+    const citationKeyField = document.getElementById('citationKeyField');
+    const citationLabelField = document.getElementById('citationLabelField');
+    const citationOrderField = document.getElementById('citationOrderField');
+    const citationHeadingField = document.getElementById('citationHeadingField');
+    const citationBodyField = document.getElementById('citationBodyField');
+    const citationYouTryField = document.getElementById('citationYouTryField');
+    const citationNotesField = document.getElementById('citationNotesField');
+    const resetCitationForm = () => {
+      if (citationTitle) citationTitle.textContent = 'Add citation';
+      if (citationActionAdd) citationActionAdd.value = '1';
+      if (citationActionUpdate) citationActionUpdate.value = '';
+      if (citationSubmitBtn) citationSubmitBtn.textContent = 'Add citation';
+      if (citationIdField) citationIdField.value = '';
+      if (citationStyleField) citationStyleField.value = citationStyleField.options?.[0]?.value || '';
+      if (citationKeyField) citationKeyField.value = '';
+      if (citationLabelField) citationLabelField.value = '';
+      if (citationOrderField) citationOrderField.value = '';
+      if (citationHeadingField) citationHeadingField.value = '';
+      if (citationBodyField) citationBodyField.value = '';
+      if (citationYouTryField) citationYouTryField.value = '';
+      if (citationNotesField) citationNotesField.value = '';
+    };
+    const showCitationModal = () => { if (citationBackdrop) citationBackdrop.style.display = 'flex'; };
+    const hideCitationModal = () => { if (citationBackdrop) citationBackdrop.style.display = 'none'; };
+    openCitationModal?.addEventListener('click', () => { resetCitationForm(); showCitationModal(); });
+    closeCitationModal?.addEventListener('click', hideCitationModal);
+    cancelCitationModal?.addEventListener('click', hideCitationModal);
+    citationBackdrop?.addEventListener('click', (e) => { if (e.target === citationBackdrop) hideCitationModal(); });
+    document.querySelectorAll('[data-edit-citation]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        resetCitationForm();
+        if (citationTitle) citationTitle.textContent = 'Edit citation';
+        if (citationActionAdd) citationActionAdd.value = '';
+        if (citationActionUpdate) citationActionUpdate.value = '1';
+        if (citationSubmitBtn) citationSubmitBtn.textContent = 'Save changes';
+        const get = (attr) => btn.getAttribute(attr) || '';
+        if (citationIdField) citationIdField.value = get('data-id');
+        if (citationStyleField) citationStyleField.value = get('data-style');
+        if (citationKeyField) citationKeyField.value = get('data-key');
+        if (citationLabelField) citationLabelField.value = get('data-label');
+        if (citationOrderField) citationOrderField.value = get('data-order');
+        if (citationHeadingField) citationHeadingField.value = get('data-heading');
+        if (citationBodyField) citationBodyField.value = get('data-body');
+        if (citationYouTryField) citationYouTryField.value = get('data-youtry');
+        if (citationNotesField) citationNotesField.value = get('data-notes');
+        showCitationModal();
+      });
+    });
+
+    // Citation view/edit drawer
+    (function(){
+      const viewer = document.getElementById('citationViewer');
+      if (!viewer) return;
+      const viewerClose = document.getElementById('closeCitationViewer');
+      const viewerEdit = document.getElementById('viewerEdit');
+      const viewerRevisions = document.getElementById('viewerRevisions');
+      const viewBody = document.getElementById('viewBody');
+      const editBody = document.getElementById('editBody');
+      const editFooter = document.getElementById('editFooter');
+      const editIdField = document.getElementById('editIdField');
+      const editStyleField = document.getElementById('editStyleField');
+      const editLabelField = document.getElementById('editLabelField');
+      const editOrderField = document.getElementById('editOrderField');
+      const editHeadingField = document.getElementById('editHeadingField');
+      const editBodyField = document.getElementById('editBodyField');
+      const editYouTryField = document.getElementById('editYouTryField');
+      const editNotesField = document.getElementById('editNotesField');
+      const autoGrow = (el) => {
+        if (!el) return;
+        el.style.height = 'auto';
+        const h = el.scrollHeight > 0 ? el.scrollHeight : el.getBoundingClientRect().height;
+        el.style.height = (h + 2) + 'px';
+      };
+      const autoGrowAll = () => {
+        [editLabelField, editOrderField, editHeadingField, editBodyField, editYouTryField, editNotesField].forEach(el => {
+          if (el && (el.tagName === 'TEXTAREA' || el.dataset.autogrow === '1')) autoGrow(el);
+        });
+      };
+
+      let viewerMode = 'view';
+      let viewerEditId = null;
+      let editDirty = false;
+      const setMode = (mode) => {
+        viewerMode = mode;
+        viewer.classList.toggle('edit-mode', mode === 'edit');
+        if (mode === 'view') {
+          if (viewBody) viewBody.style.display = 'grid';
+          if (editBody) editBody.style.display = 'none';
+          if (editFooter) editFooter.style.display = 'none';
+          editDirty = false;
+        } else {
+          if (viewBody) viewBody.style.display = 'none';
+          if (editBody) editBody.style.display = 'grid';
+          if (editFooter) editFooter.style.display = 'flex';
+          viewer.scrollTop = 0;
+          requestAnimationFrame(autoGrowAll);
+        }
+      };
+
+      const setView = (data) => {
+        const formatMarked = (str) => {
+          if (!str) return '—';
+          const escaped = String(str)
+            .replace(/&/g,'&amp;')
+            .replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;')
+            .replace(/'/g,'&#39;');
+          const withItalics = escaped.replace(/\*(.+?)\*/g,'<em>$1</em>');
+          return withItalics.replace(/\r?\n/g,'<br>');
+        };
+        const fill = (id, val) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.textContent = val || '—';
+        };
+        const fillHtml = (id, val) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.innerHTML = formatMarked(val);
+        };
+        const title = data.label && data.style ? `${data.label} — ${data.style}` : (data.label || 'Citation');
+        fillHtml('viewLabel', title);
+        fill('viewSubtitle', 'Read-only view');
+        fill('viewStyle', data.style);
+        fill('viewKey', data.key);
+        fillHtml('viewOrder', data.order);
+        fillHtml('viewExampleHeading', data.heading);
+        fillHtml('viewExampleBody', data.body);
+        fillHtml('viewYouTry', data.youtry);
+        fillHtml('viewNotes', data.notes);
+        viewerEditId = data.id || null;
+        if (editIdField) editIdField.value = data.id || '';
+        if (editStyleField) editStyleField.value = data.style || '';
+        const keyVal = data.key || '';
+        const keyInputModal = document.getElementById('citationKeyField');
+        const keyInputEdit = document.getElementById('editKeyField');
+        if (keyInputEdit) keyInputEdit.value = keyVal;
+        if (keyInputModal && !keyInputModal.value) keyInputModal.value = keyVal;
+        if (editLabelField) { editLabelField.value = data.label || ''; editLabelField.dataset.autogrow = '1'; }
+        if (editOrderField) { editOrderField.value = data.order || ''; }
+        if (editHeadingField) { editHeadingField.value = data.heading || ''; editHeadingField.dataset.autogrow = '1'; }
+        if (editBodyField) { editBodyField.value = data.body || ''; }
+        if (editYouTryField) { editYouTryField.value = data.youtry || ''; }
+        if (editNotesField) { editNotesField.value = data.notes || ''; }
+        setMode('view');
+        viewer.classList.add('active');
+      };
+
+      document.querySelectorAll('[data-view-citation]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const get = (attr) => btn.getAttribute(attr) || '';
+          setView({
+            id: btn.getAttribute('data-id'),
+            label: get('data-label'),
+            style: get('data-style'),
+            key: get('data-key'),
+            order: get('data-order'),
+            heading: get('data-heading'),
+            body: get('data-body'),
+            youtry: get('data-youtry'),
+            notes: get('data-notes'),
+          });
+        });
+      });
+
+      viewerClose?.addEventListener('click', () => {
+        if (viewerMode === 'edit' && editDirty && !confirm('Discard unsaved changes?')) return;
+        viewer.classList.remove('active');
+        setMode('view');
+      });
+
+      document.addEventListener('click', (e) => {
+        const withinViewer = viewer.contains(e.target);
+        const isViewBtn = (e.target.closest?.('[data-view-citation]') ?? null) !== null;
+        if (!withinViewer && !isViewBtn) {
+          if (viewerMode === 'edit' && editDirty && !confirm('Discard unsaved changes?')) return;
+          viewer.classList.remove('active');
+          setMode('view');
+        }
+      });
+
+      viewerEdit?.addEventListener('click', () => {
+        if (!viewerEditId) return;
+        setMode('edit');
+        editDirty = false;
+      });
+
+      const markDirty = () => { if (viewerMode === 'edit') editDirty = true; };
+      [editLabelField, editOrderField, editHeadingField, editBodyField, editYouTryField, editNotesField].forEach(el => {
+        el?.addEventListener('input', (e) => {
+          markDirty();
+          autoGrow(e.target);
+        });
+      });
+
+      const confirmExitEdit = () => {
+        if (!editDirty) return true;
+        return confirm('Discard unsaved changes?');
+      };
+
+      document.getElementById('editCancel')?.addEventListener('click', () => {
+        if (!confirmExitEdit()) return;
+        setMode('view');
+      });
+
+      viewerRevisions?.addEventListener('click', (e) => {
+        e.preventDefault();
+        showSubtab('revisions');
+        viewer.classList.remove('active');
+        setMode('view');
+        document.getElementById('panel-citations')?.scrollIntoView({behavior:'smooth'});
+      });
+    })();
+
+    // Revision filters + viewer
+    (function(){
+      const rows = Array.from(document.querySelectorAll('[data-revision-row]'));
+      if (!rows.length) return;
+      const search = document.getElementById('revSearch');
+      const styleFilter = document.getElementById('revStyleFilter');
+      const releaseFilter = document.getElementById('revReleaseFilter');
+      const actionFilter = document.getElementById('revActionFilter');
+      const dateRange = document.getElementById('revDateRange');
+      const dateStart = document.getElementById('revDateStart');
+      const dateEnd = document.getElementById('revDateEnd');
+      const userFilter = document.getElementById('revUserFilter');
+      const noResults = document.getElementById('revNoResults');
+      const advToggle = document.getElementById('revAdvancedToggle');
+      const advPanel = document.getElementById('revAdvanced');
+      const customDatesWrap = document.getElementById('revCustomDates');
+
+      const parseDate = (str) => {
+        if (!str) return null;
+        const s = str.replace(' ', 'T');
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? null : d;
+      };
+
+      const withinCustomRange = (d) => {
+        if (!d) return true;
+        if (dateRange?.value === 'custom') {
+          const start = dateStart?.value ? new Date(dateStart.value) : null;
+          const end = dateEnd?.value ? new Date(dateEnd.value) : null;
+          if (start && d < start) return false;
+          if (end) {
+            const endDay = new Date(end);
+            endDay.setHours(23,59,59,999);
+            if (d > endDay) return false;
+          }
+        } else if (dateRange?.value) {
+          const now = new Date();
+          let cutoff = null;
+          if (dateRange.value === '24h') cutoff = new Date(now.getTime() - 24*60*60*1000);
+          if (dateRange.value === '7d') cutoff = new Date(now.getTime() - 7*24*60*60*1000);
+          if (dateRange.value === '30d') cutoff = new Date(now.getTime() - 30*24*60*60*1000);
+          if (cutoff && d < cutoff) return false;
+        }
+        return true;
+      };
+
+      const applyFilters = () => {
+        const q = (search?.value || '').toLowerCase();
+        const style = styleFilter?.value || '';
+        const rel = releaseFilter?.value || '';
+        const act = actionFilter?.value || '';
+        const user = userFilter?.value || '';
+        const custom = dateRange?.value === 'custom';
+        if (customDatesWrap) customDatesWrap.style.display = custom ? 'flex' : 'none';
+
+        let visible = 0;
+        rows.forEach(r => {
+          const label = (r.dataset.label || '').toLowerCase();
+          const key = (r.dataset.key || '').toLowerCase();
+          const styleVal = (r.dataset.style || '');
+          const relVal = r.dataset.release || '';
+          const actVal = (r.dataset.action || '').toLowerCase();
+          const userVal = r.dataset.user || '';
+          const dateVal = parseDate(r.dataset.date || '');
+
+          const matchesSearch = !q || label.includes(q) || key.includes(q);
+          const matchesStyle = !style || style === styleVal;
+          const matchesRelease = !rel || (rel === '__unreleased' ? relVal === '' : rel === relVal);
+          const matchesAction = !act || act === actVal;
+          const matchesUser = !user || user === userVal;
+          const matchesDate = withinCustomRange(dateVal);
+
+          const match = matchesSearch && matchesStyle && matchesRelease && matchesAction && matchesUser && matchesDate;
+          r.style.display = match ? '' : 'none';
+          if (match) visible++;
+        });
+        if (noResults) noResults.style.display = visible ? 'none' : '';
+      };
+
+      [search, styleFilter, releaseFilter, actionFilter, dateRange, dateStart, dateEnd, userFilter].forEach(el => {
+        el?.addEventListener(el?.type === 'search' ? 'input' : 'change', applyFilters);
+      });
+      advToggle?.addEventListener('click', () => {
+        advPanel?.classList.toggle('visible');
+      });
+      applyFilters();
+
+      // Revision viewer
+      const viewer = document.getElementById('revisionViewer');
+      if (!viewer) return;
+      const closeBtn = document.getElementById('closeRevisionViewer');
+      const revCloseBtn = document.getElementById('revCloseBtn');
+      const restoreId = document.getElementById('revRestoreId');
+      const badge = document.getElementById('revViewBadge');
+      const actionPill = document.getElementById('revActionPill');
+      const releasePill = document.getElementById('revReleasePill');
+
+      const fillText = (id, val, fallback='—') => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val || fallback;
+      };
+      const formatMarked = (str, fallback='—') => {
+        if (!str) return fallback;
+        const escaped = String(str)
+          .replace(/&/g,'&amp;')
+          .replace(/</g,'&lt;')
+          .replace(/>/g,'&gt;')
+          .replace(/"/g,'&quot;')
+          .replace(/'/g,'&#39;');
+        const withItalics = escaped.replace(/\*(.+?)\*/g,'<em>$1</em>');
+        return withItalics.replace(/\r?\n/g,'<br>');
+      };
+      const fillHtml = (id, val, fallback='—') => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = formatMarked(val, fallback);
+      };
+      const fillBlock = (prefix, snap, emptyLabel) => {
+        const exists = !!snap;
+        document.getElementById(prefix + 'Block')?.classList.toggle('muted', !exists);
+        fillHtml(prefix + 'Label', snap?.label || (exists ? '' : emptyLabel));
+        fillHtml(prefix + 'Order', snap?.citation_order || '');
+        fillHtml(prefix + 'Heading', snap?.example_heading || '');
+        fillHtml(prefix + 'Body', snap?.example_body || '');
+        fillHtml(prefix + 'YouTry', snap?.you_try || '');
+        fillHtml(prefix + 'Notes', snap?.notes || '');
+      };
+
+      const openRevision = (row) => {
+        const id = row.dataset.id;
+        let after = null;
+        let before = null;
+        try { after = JSON.parse(row.dataset.after || 'null'); } catch(e){}
+        try { before = JSON.parse(row.dataset.before || 'null'); } catch(e){}
+        const preferred = after ?? before ?? {};
+        fillText('revViewLabel', preferred.label || 'Revision #' + id);
+        fillText('revCitationLabel', preferred.label || '—');
+        fillText('revCitationKey', row.dataset.key || '—');
+        fillText('revCitationStyle', (preferred.referencing_style || row.dataset.style || '—'));
+        fillText('revViewSubtitle', (row.dataset.action || '').toUpperCase() + ' • #' + id);
+        fillText('revMetaUser', 'User: ' + (row.dataset.user || '—'));
+        fillText('revMetaTime', 'When: ' + (row.dataset.date || '—'));
+        badge.textContent = 'Read-only';
+        actionPill.textContent = (row.dataset.action || '—').toUpperCase();
+        releasePill.textContent = 'Release: ' + (row.dataset.release || 'Unreleased');
+        fillBlock('revAfter', after, 'Deleted');
+        fillBlock('revBefore', before, 'Not available');
+        if (restoreId) restoreId.value = id || '';
+        viewer.classList.add('active');
+      };
+
+      const closeRevision = () => viewer.classList.remove('active');
+      closeBtn?.addEventListener('click', closeRevision);
+      revCloseBtn?.addEventListener('click', closeRevision);
+      document.addEventListener('click', (e) => {
+        if (!viewer.classList.contains('active')) return;
+        const isRow = e.target.closest?.('[data-revision-row]');
+        const insideViewer = viewer.contains(e.target);
+        if (!insideViewer && !isRow) closeRevision();
+      });
+
+      rows.forEach(r => {
+        r.addEventListener('click', (e) => {
+          if (e.target.closest('button') || e.target.closest('form')) return;
+          openRevision(r);
+        });
+      });
+    })();
+
+    // Plain-text italics (using *text* markup) for citation fields
+    (function(){
+      try {
+        var targets = [
+          'citationLabelField','citationOrderField','citationHeadingField','citationBodyField','citationYouTryField','citationNotesField',
+          'editLabelField','editOrderField','editHeadingField','editBodyField','editYouTryField','editNotesField'
+        ];
+        var idSet = new Set(targets);
+        function toggleItalic(el){
+          if (!el || typeof el.value !== 'string') return;
+          var start = el.selectionStart || 0;
+          var end = el.selectionEnd || 0;
+          var val = el.value || '';
+          var sel = val.slice(start,end);
+          var replacement = sel;
+          var newStart = start;
+          var newEnd = end;
+          if (sel && sel.startsWith('*') && sel.endsWith('*') && sel.length>1){
+            replacement = sel.slice(1,-1);
+            newEnd = start + replacement.length;
+          } else if (sel){
+            replacement = '*' + sel + '*';
+            newEnd = start + replacement.length;
+          } else {
+            replacement = '**';
+            newStart = start + 1;
+            newEnd = newStart;
+          }
+          el.value = val.slice(0,start) + replacement + val.slice(end);
+          el.focus();
+          el.setSelectionRange(newStart,newEnd);
+          el.dispatchEvent(new Event('input',{bubbles:true}));
+        }
+        document.querySelectorAll('[data-italic-btn]').forEach(function(btn){
+          btn.addEventListener('click', function(e){
+            e.preventDefault();
+            var active = document.activeElement;
+            if (!active || (active.tagName !== 'INPUT' && active.tagName !== 'TEXTAREA')) return;
+            if (!idSet.has(active.id)) return;
+            toggleItalic(active);
+          });
+        });
+      } catch(err){ console.error('Italic handler error', err); }
+    })();
+
     // Appearance autosave
-    const appearanceForm = document.querySelector('#panel-appearance form');
-    const appearanceStatus = document.getElementById('appearanceStatus');
+      const appearanceForm = document.querySelector('#panel-appearance form');
+      const appearanceStatus = document.getElementById('appearanceStatus');
     const setAppearanceStatus = (text, tone='muted') => {
       if (!appearanceStatus) return;
       appearanceStatus.textContent = text;

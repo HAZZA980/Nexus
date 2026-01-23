@@ -7,6 +7,7 @@ require __DIR__ . '/app/bootstrap.php';
 
 use NexusCMS\Models\Site;
 use NexusCMS\Models\Page;
+use NexusCMS\Models\CitationExample;
 use NexusCMS\Services\Renderer;
 use NexusCMS\Core\Security;
 
@@ -132,6 +133,43 @@ if ($method === 'GET' && preg_match('#^/s/([^/]+)/([^/]+)$#', $uri, $m)) {
     'content' => $content,
     'is_preview' => false
   ]);
+}
+
+// API: Citation examples (admin only, read-only)
+if ($method === 'GET' && $uri === '/api/citation/examples') {
+  require_admin();
+
+  $siteSlug = trim((string)($_GET['site_slug'] ?? ''));
+  if ($siteSlug === '') json_response(['ok' => false, 'error' => 'Missing site'], 400);
+
+  $site = Site::findBySlug($siteSlug);
+  if (!$site) json_response(['ok' => false, 'error' => 'Site not found'], 404);
+
+  $rows = [];
+  $refStyle = trim((string)($_GET['referencing_style'] ?? ''));
+  try {
+    $rows = CitationExample::listForSiteSlug($siteSlug, $refStyle !== '' ? $refStyle : null);
+  } catch (\Throwable $e) {
+    json_response(['ok' => false, 'error' => 'Unable to load citation examples'], 500);
+  }
+
+  $examples = array_map(function ($r) {
+    return [
+      'id' => $r['example_key'] ?? $r['id'],
+      'style' => $r['referencing_style'] ?? '',
+      'label' => $r['label'] ?? '',
+      'heading' => $r['example_heading'] ?? '',
+      'body' => $r['example_body'] ?? '',
+      'bodyHtml' => $r['example_body'] ?? '',
+      'youTry' => $r['you_try'] ?? '',
+      'youTryHtml' => $r['you_try'] ?? '',
+      'citationOrder' => $r['citation_order'] ?? '',
+      'citationOrderHtml' => $r['citation_order'] ?? '',
+      'notes' => $r['notes'] ?? ''
+    ];
+  }, $rows);
+
+  json_response(['ok' => true, 'examples' => $examples]);
 }
 
 // API: Save draft doc

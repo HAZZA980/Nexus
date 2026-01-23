@@ -18,6 +18,11 @@
   font-size:var(--nexus-font-size);
   line-height:var(--nexus-line-height);
 }
+.nexus-page img{
+  max-width:100%;
+  height:auto;
+  display:block;
+}
 
 /* Make your existing rendered classes adapt to light pages */
 .nexus-page .nx-text{ color:inherit; }
@@ -76,7 +81,7 @@
 
 .nexus-page .nx-examplecard{
   display:grid;
-  grid-template-columns:2fr 1fr;
+  grid-template-columns:1fr 1fr;
   gap:14px;
   border:1px solid var(--nexus-border);
   border-radius:16px;
@@ -126,6 +131,7 @@
   font:inherit;
   line-height:1.5;
   background:#fff;
+  white-space:pre-wrap;
 }
 .nexus-page .nx-try-input.ok{background:#ecfdf3;border-color:#22c55e;}
 .nexus-page .nx-try-input.no{background:#fef2f2;border-color:#ef4444;}
@@ -481,8 +487,9 @@
   display:inline-flex;
   flex-direction:column;
   align-items:flex-start;
-  gap:10px;
-  padding:10px 12px;
+  justify-content:flex-end;
+  gap:8px;
+  padding:10px 12px 8px;
   border-radius:10px;
   border:1px solid transparent;
   background:transparent;
@@ -491,6 +498,7 @@
   font-weight:700;
   white-space:normal;
   width:100%;
+  min-height:72px;
 }
 .nexus-page .nx-tab .nx-tab-label{
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;
@@ -498,13 +506,23 @@
 .nexus-page .nx-tabs .nx-acc-thumb{
   display:block;
   width:100%;
-  aspect-ratio:16/9;
+  height:300px;
   background-size:cover;
-  background-position:center;
-  border-radius:8px;
+  background-repeat:no-repeat;
+  background-position:center center;
+  border-radius:12px;
   border:1px solid var(--nexus-border);
   margin:0;
   flex-shrink:0;
+  position:relative;
+  overflow:hidden;
+  background-color:var(--nexus-surface);
+}
+@media (max-width:1024px){
+  .nexus-page .nx-tabs .nx-acc-thumb{height:240px;}
+}
+@media (max-width:640px){
+  .nexus-page .nx-tabs .nx-acc-thumb{height:200px;}
 }
 .nexus-page .nx-tabs[data-style="underline"] .nx-tab{
   border-radius:0;border:0;border-bottom:2px solid transparent;
@@ -532,7 +550,8 @@
   border-color:rgba(37,99,235,.35);
   color:#1d4ed8;
 }
-.nexus-page .nx-tabs-panels{padding:14px 16px;}
+.nexus-page .nx-tabs-panels{padding:0 16px 16px;}
+.nexus-page .nx-tabs .nx-accordion-body{padding-top:0;}
 .nexus-page .nx-tab-panel[hidden]{display:none;}
 
 .nexus-page .nx-mcq{
@@ -551,7 +570,14 @@
 .nexus-page .nx-mcq[data-spacing="compact"]{padding:12px;}
 .nexus-page .nx-mcq[data-spacing="spacious"]{padding:20px;}
 .nexus-page .nx-mcq-head{display:grid;gap:10px;}
-.nexus-page .nx-mcq-head .nx-mcq-media img{width:100%;height:auto;border-radius:10px;display:block;}
+.nexus-page .nx-mcq-head .nx-mcq-media img{
+  width:100%;
+  height:100%;
+  border-radius:10px;
+  display:block;
+  object-fit:cover;
+  object-position:center;
+}
 .nexus-page .nx-mcq-question{font-weight:800;font-size:17px;line-height:1.4;}
 .nexus-page .nx-mcq-options{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
 .nexus-page .nx-mcq-option{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--nexus-border);border-radius:10px;}

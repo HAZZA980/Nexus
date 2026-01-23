@@ -28,3 +28,52 @@ CREATE TABLE pages (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+-- Citation examples (Cite Them Right)
+CREATE TABLE IF NOT EXISTS citation_examples (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  site_slug VARCHAR(190) NOT NULL,
+  referencing_style VARCHAR(100) NOT NULL DEFAULT 'Harvard',
+  example_key VARCHAR(190) NOT NULL,
+  label VARCHAR(190) NOT NULL,
+  citation_order TEXT NOT NULL,
+  example_heading VARCHAR(255) NOT NULL,
+  example_body TEXT NOT NULL,
+  you_try TEXT NOT NULL,
+  notes TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_site_example (site_slug, example_key),
+  INDEX idx_site_slug (site_slug)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Citation revisions (append-only audit trail)
+CREATE TABLE IF NOT EXISTS citation_revisions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  site_slug VARCHAR(190) NOT NULL,
+  citation_id INT NULL,
+  citation_key VARCHAR(190) NOT NULL,
+  action ENUM('create','update','delete','rollback') NOT NULL,
+  user_id INT NULL,
+  user_email VARCHAR(190) NULL,
+  release_tag VARCHAR(50) NULL,
+  before_json JSON NULL,
+  after_json JSON NULL,
+  diff_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_site_action (site_slug, action),
+  INDEX idx_site_release (site_slug, release_tag),
+  INDEX idx_site_citation (site_slug, citation_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Citation releases (staging batches)
+CREATE TABLE IF NOT EXISTS citation_releases (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  site_slug VARCHAR(190) NOT NULL,
+  tag VARCHAR(50) NOT NULL,
+  status ENUM('open','exported') NOT NULL DEFAULT 'open',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  exported_at DATETIME NULL,
+  exported_by_email VARCHAR(190) NULL,
+  UNIQUE KEY uniq_site_tag (site_slug, tag),
+  INDEX idx_site_status (site_slug, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

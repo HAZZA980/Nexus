@@ -117,6 +117,7 @@
     doc.page.textColor ??= "";
     doc.page.fontFamily ??= "";
     doc.page.fontSize ??= "";
+    doc.page.citationExampleId ??= "";
 
     doc.rows = Array.isArray(doc.rows) ? doc.rows : [];
     return doc;
@@ -196,41 +197,47 @@
   pushInitialHistory();
   updateUndoRedoButtons();
 
-  const HARVARD_URL = `${shell.dataset.base}/public/assets/harvard_examples.json`;
-  const HARVARD_FALLBACK = [
+  const siteSlug = (shell?.dataset?.siteSlug || '').toLowerCase();
+  const collectionStyle = (shell?.dataset?.collectionStyle || '').trim();
+  const CITATION_URL = `${shell.dataset.base}/api/citation/examples?site_slug=${encodeURIComponent(siteSlug)}${collectionStyle ? `&referencing_style=${encodeURIComponent(collectionStyle)}` : ''}`;
+  const CITATION_FALLBACK = [
     {
       id: 'book_one_author',
       label: 'Book with one author',
       heading: 'Example: book with one author',
       body: 'In-text citations\\n\\nThe overview by McCormick (2023) confirms Hill’s experience (2023, pp. 46–52).\\n\\nNB: No page number citation for McCormick because the reference is to the whole book.\\n\\nSpecific pages are being cited in Hill’s book.\\n\\nReference list\\n\\nHill, F. (2023) There’s nothing for you here: finding opportunity in the twenty-first century. Mariner Books.\\n\\nMcCormick, J.M. (2023) American foreign policy and process. 7th edn. Cambridge University Press.',
-      youTry: 'Surname, Initial. (Year of publication) Title. Edition. Publisher.'
+      youTry: 'Surname, Initial. (Year of publication) Title. Edition. Publisher.',
+      citationOrder: 'Author/editor\\nYear of publication (in round brackets)\\nTitle (in italics)\\nEdition (if not the first)\\nPublisher\\nSeries and volume number (where relevant)'
     }
   ];
-  let harvardExamplesCache = null;
+  let citationExamplesCache = null;
 
-  async function loadHarvardExamples() {
-    if (harvardExamplesCache) return harvardExamplesCache;
-    try {
-      const res = await fetch(HARVARD_URL, { credentials: 'same-origin' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      if (Array.isArray(data) && data.length) {
-        harvardExamplesCache = data;
-        return data;
-      }
-    } catch (e) {}
-    harvardExamplesCache = HARVARD_FALLBACK;
-    return HARVARD_FALLBACK;
-  }
-
-  function applyHarvardExample(blk, ex) {
-    if (!ex) return;
-    blk.props = blk.props || {};
-    blk.props.exampleId = ex.id;
-    blk.props.heading = ex.heading || '';
-    blk.props.body = ex.body || '';
-    blk.props.bodyHtml = ex.bodyHtml || '';
-    blk.props.youTry = ex.youTry || '';
+  async function loadCitationExamples() {
+    if (citationExamplesCache) return citationExamplesCache;
+    if (siteSlug === 'cite-them-right') {
+      try {
+        const res = await fetch(CITATION_URL, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (data && data.ok && Array.isArray(data.examples) && data.examples.length) {
+          citationExamplesCache = data.examples;
+          return citationExamplesCache;
+        }
+      } catch (e) {}
+    } else {
+      try {
+        const res = await fetch(`${shell.dataset.base}/public/assets/harvard_examples.json`, { credentials: 'same-origin' });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length) {
+            citationExamplesCache = data;
+            return citationExamplesCache;
+          }
+        }
+      } catch (e) {}
+    }
+    citationExamplesCache = CITATION_FALLBACK;
+    return CITATION_FALLBACK;
   }
 
   const uuid = () => 'b_' + Math.random().toString(16).slice(2) + Date.now().toString(16);
@@ -241,6 +248,74 @@
     s = String(s || '');
     if (s.length <= n) return s;
     return s.slice(0, n) + '…';
+  };
+  const formatCitationOrder = (val) => {
+    return (val || '').split('\n').map(line => line.trim()).filter(Boolean).map(l => l.startsWith('•') ? l : `• ${l}`).join('\n');
+  };
+  const setPageCitationExample = (id) => {
+    doc.page = doc.page || {};
+    doc.page.citationExampleId = id || '';
+  };
+  const getPageCitationExample = () => {
+    return (doc.page && doc.page.citationExampleId) ? doc.page.citationExampleId : '';
+  };
+  const applyExampleData = (blk, ex) => {
+    if (!ex) return;
+    blk.props = blk.props || {};
+    blk.props.exampleId = ex.id;
+    blk.props.heading = ex.heading || '';
+    blk.props.body = ex.body || ex.bodyHtml || '';
+    blk.props.bodyHtml = ex.bodyHtml || ex.body || '';
+    blk.props.youTry = ex.youTry || ex.youTryHtml || '';
+  };
+  const applyCitationOrderToBlock = (blk, ex) => {
+    if (!ex) return;
+    const formatted = formatCitationOrder(ex.citationOrder || ex.citationOrderHtml || ex.body || '');
+    blk.props = blk.props || {};
+    blk.props.exampleId = ex.id;
+    blk.props.body = formatted;
+    blk.props.html = formatted.replace(/\n/g, '<br>');
+  };
+  const applyYouTryToBlock = (blk, ex) => {
+    if (!ex) return;
+    const youTryText = ex.youTry || ex.youTryHtml || '';
+    blk.props = blk.props || {};
+    blk.props.exampleId = ex.id;
+    blk.props.body = youTryText;
+    blk.props.html = youTryText.replace(/\n/g, '<br>');
+  };
+  const ensureDefaultCitationExample = (examples) => {
+    if (!examples || !examples.length) return;
+    const current = getPageCitationExample();
+    const firstId = examples[0].id;
+    if (!current && firstId) {
+      propagateCitationExample(firstId, examples, { onlyUnset: true });
+    }
+  };
+  const propagateCitationExample = (selId, examples, opts = {}) => {
+    if (!selId) return;
+    setPageCitationExample(selId);
+    const skipId = opts.skipId;
+    const onlyUnset = opts.onlyUnset === true;
+    const ex = (examples || []).find(x => x.id === selId) || (examples || [])[0];
+    if (!ex) return;
+    const applyToDocBlocks = (blocks) => {
+      blocks.forEach((b) => {
+        if (!b || typeof b !== 'object') return;
+        const pid = b.id;
+        const p = b.props || {};
+        const already = !!p.exampleId;
+        if (skipId && pid === skipId) return;
+        if (onlyUnset && already) return;
+        if (b.type === 'exampleCard') applyExampleData(b, ex);
+        if (b.type === 'citationOrder') applyCitationOrderToBlock(b, ex);
+        if (b.type === 'youTry') applyYouTryToBlock(b, ex);
+      });
+    };
+    (doc.rows || []).forEach(row => {
+      if (!row || !Array.isArray(row.cols)) return;
+      row.cols.forEach(col => applyToDocBlocks(col.blocks || []));
+    });
   };
 
   const defBlock = (type) => {
@@ -764,19 +839,30 @@
     ? `<div style="${style}">${innerHtml}</div>`
     : `<div>${innerHtml}</div>`;
 
-  const hasHtml = (v) => typeof v === 'string' && v.trim() !== '';
+  const hasHtml = (v) => typeof v === 'string' && /<[^>]+>/.test(v);
+  const formatMarked = (str) => {
+    if (!str) return '';
+    const escaped = String(str)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+    const withItalics = escaped.replace(/\*(.+?)\*/g,'<em>$1</em>');
+    return withItalics.replace(/\r?\n/g,'<br>');
+  };
 
   if (blk.type === 'heading') {
     const inner = hasHtml(p.html)
       ? p.html
-      : esc(p.text || 'Heading');
+      : formatMarked(p.text || 'Heading');
     return wrap(`<h2 style="margin:0">${inner}</h2>`);
   }
 
   if (blk.type === 'text') {
     const inner = hasHtml(p.html)
       ? p.html
-      : esc((p.text || '').slice(0, 220));
+      : formatMarked((p.text || '').slice(0, 220));
     return wrap(inner);
   }
 
@@ -784,7 +870,7 @@
     const title = esc(p.title || 'Card title');
     const body = hasHtml(p.html)
       ? p.html
-      : esc((p.body || '').slice(0, 180));
+      : formatMarked((p.body || '').slice(0, 180));
     return wrap(`<div><b>${title}</b><div style="margin-top:6px">${body}</div></div>`);
   }
 
@@ -792,7 +878,7 @@
     const title = esc(p.title || 'You try');
     const body = hasHtml(p.html)
       ? p.html
-      : esc((p.body || '').slice(0, 180));
+      : formatMarked((p.body || '').slice(0, 180));
     return wrap(`<div><b>${title}</b><div style="margin-top:6px">${body}</div></div>`);
   }
 
@@ -807,7 +893,7 @@
     const title = esc(p.title || 'Citation order');
     const body = hasHtml(p.html)
       ? p.html
-      : esc((p.body || '').slice(0, 320)).replace(/\n/g, '<br>');
+      : formatMarked((p.body || '').slice(0, 320));
     return wrap(`
       <div style="border:1px solid rgba(17,24,39,.18);border-radius:14px;padding:14px;background:#f7f7f5">
         <div style="font-weight:900;margin-bottom:8px">${title}</div>
@@ -820,8 +906,10 @@
     const heading = esc(p.heading || 'Example');
     const body = hasHtml(p.bodyHtml)
       ? p.bodyHtml
-      : esc((p.body || '').slice(0, 420)).replace(/\n/g, '<br>');
-    const youTry = esc((p.youTry || 'Your turn…').slice(0, 180));
+      : formatMarked((p.body || '').slice(0, 420));
+    const youTry = hasHtml(p.youTry)
+      ? (p.youTry || '')
+      : formatMarked((p.youTry || 'Your turn…').slice(0, 180));
     const showTry = p.showYouTry !== false;
     const extraClass = showTry ? '' : ' nx-examplecard--single';
     const rightCol = showTry ? `
@@ -830,7 +918,7 @@
             <div style="border:1px solid rgba(17,24,39,.35);border-radius:12px;padding:10px 12px;color:rgba(17,24,39,.82)">${youTry}</div>
           </div>` : '';
     return `
-      <div class="nx-examplecard${extraClass}" style="display:grid;grid-template-columns:${showTry ? '2fr 1fr' : '1fr'};gap:10px;align-items:start;border:1px solid rgba(17,24,39,.18);border-radius:14px;overflow:hidden;background:#f9f9f7">
+      <div class="nx-examplecard${extraClass}" style="display:grid;grid-template-columns:${showTry ? '1fr 1fr' : '1fr'};gap:10px;align-items:start;border:1px solid rgba(17,24,39,.18);border-radius:14px;overflow:hidden;background:#f9f9f7">
         <div style="background:#e2e3e6;padding:12px 14px">
           <div style="font-weight:900;margin-bottom:8px">${heading}</div>
           <div>${body}</div>
@@ -1085,6 +1173,17 @@
   if (blk.type === 'divider') return '<hr style="border:0;border-top:1px solid rgba(17,24,39,.18)">';
   return '';
 }
+
+  // Safe wrapper to avoid render crashes from malformed blocks
+  function blockPreviewSafe(blk) {
+    try {
+      if (!blk || typeof blk !== 'object') return '<div class="nx-muted">Invalid block</div>';
+      return blockPreviewHTML(blk);
+    } catch (err) {
+      console.error('Block preview error', blk, err);
+      return '<div class="nx-muted">Preview unavailable</div>';
+    }
+  }
 
   function initAccordionPreview(el) {
     if (!el || el.dataset.accInit === '1') return;
@@ -1917,7 +2016,7 @@
       const resp = await post(apiPreviewToken, { _csrf: csrf, page_id: pageId, doc });
       const token = resp.token;
       const url = `${previewUrlBase}?preview_token=${encodeURIComponent(token)}`;
-      window.open(url, '_blank');
+      window.location.href = url;
     } catch (err) {
       setSaveState('error', 'Preview failed');
       console.error(err);
@@ -2492,19 +2591,37 @@
       `;
     } else if (blk.type === 'youTry') {
       html += `
-        <label class="nx-muted">Title</label><br>
-        <input id="p_title" value="${esc(p.title || '')}" style="${inputStyle}">
-        <br><br>
-        <label class="nx-muted">Body</label><br>
-        <div id="p_html" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:140px;white-space:pre-wrap"></div>
+        <div class="nx-strong" style="margin-bottom:6px">Select citation example</div>
+        <div id="youTrySelectWrap" class="nx-muted">Loading…</div>
+        <div class="nx-sep"></div>
+        <details class="nx-muted" style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:10px;border:1px solid var(--border);" ${p.body || p.title ? 'open' : ''}>
+          <summary style="cursor:pointer;font-weight:700;color:var(--text)">Custom override</summary>
+          <div style="margin-top:10px">
+            <label class="nx-muted">Title</label><br>
+            <input id="p_title" value="${esc(p.title || '')}" style="${inputStyle}">
+            <br><br>
+            <label class="nx-muted">Body</label><br>
+            <div id="p_html" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:140px;white-space:pre-wrap"></div>
+            <div class="nx-muted" style="margin-top:6px">Edits here save to this page only (not the citation database).</div>
+          </div>
+        </details>
       `;
     } else if (blk.type === 'citationOrder') {
       html += `
-        <label class="nx-muted">Title</label><br>
-        <input id="p_title" value="${esc(p.title || '')}" style="${inputStyle}">
-        <br><br>
-        <label class="nx-muted">Body (use bullets/lines)</label><br>
-        <div id="p_html" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:160px;white-space:pre-wrap"></div>
+        <div class="nx-strong" style="margin-bottom:6px">Select citation example</div>
+        <div id="citationExampleSelect" class="nx-muted">Loading…</div>
+        <div class="nx-sep"></div>
+        <details class="nx-muted" style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:10px;border:1px solid var(--border);" ${p.body || p.title ? 'open' : ''}>
+          <summary style="cursor:pointer;font-weight:700;color:var(--text)">Custom override</summary>
+          <div style="margin-top:10px">
+            <label class="nx-muted">Title</label><br>
+            <input id="p_title" value="${esc(p.title || '')}" style="${inputStyle}">
+            <br><br>
+            <label class="nx-muted">Body (use bullets/lines)</label><br>
+            <div id="p_html" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:160px;white-space:pre-wrap"></div>
+            <div class="nx-muted" style="margin-top:6px">Edits here save to this page only (not the citation database).</div>
+          </div>
+        </details>
       `;
     } else if (blk.type === 'exampleCard') {
       const showToggle = p.showYouTry !== false;
@@ -2738,7 +2855,8 @@
     document.getElementById('blk_shadow_toggle')?.addEventListener('change', (e) => {
       startEditSession();
       const bs = ensureBlockStyle(blk);
-      bs.boxShadow = e.target.checked ? '0 12px 28px rgba(17,24,39,.18)' : '';
+      // Softer, more diffused shadow; no spread to avoid outline effect
+      bs.boxShadow = e.target.checked ? '0 18px 48px rgba(15,23,42,.16), 0 6px 18px rgba(15,23,42,.12)' : '';
       bs.border = e.target.checked ? 'none' : '';
       persistUnsaved();
       render();
@@ -3400,10 +3518,12 @@
         });
       }
 
-      loadHarvardExamples().then((examples) => {
+      loadCitationExamples().then((examples) => {
+        ensureDefaultCitationExample(examples);
         const wrap = document.getElementById('exampleSelectWrap');
         if (!wrap) return;
-        const current = blk.props.exampleId || examples[0]?.id;
+        const current = blk.props.exampleId || getPageCitationExample() || examples[0]?.id;
+        const currentEx = examples.find(x => x.id === current) || examples[0];
 
         wrap.innerHTML = `
           <select id="p_example_select" class="nx-toolsel" style="width:100%">
@@ -3417,21 +3537,72 @@
             startEditSession();
             const selId = e.target.value;
             const ex = examples.find(x => x.id === selId) || examples[0];
-            applyHarvardExample(blk, ex);
+            applyExampleData(blk, ex);
+            propagateCitationExample(selId, examples, { skipId: blk.id, onlyUnset: true });
             persistUnsaved();
             render();
           });
         }
 
         // ensure props populated on first load if missing
-        if (!blk.props.heading || !blk.props.youTry) {
-          const ex = examples.find(x => x.id === current) || examples[0];
-          if (ex) {
-            applyHarvardExample(blk, ex);
-            persistUnsaved();
-            render();
-          }
+        if (currentEx && (!blk.props.exampleId || !blk.props.heading || !blk.props.youTry)) {
+          applyExampleData(blk, currentEx);
+          propagateCitationExample(currentEx.id, examples, { skipId: blk.id, onlyUnset: true });
+          persistUnsaved();
+          render();
         }
+      }).catch(() => {});
+    }
+    if (blk.type === 'citationOrder') {
+      loadCitationExamples().then((examples) => {
+        const wrap = document.getElementById('citationExampleSelect');
+        if (!wrap) return;
+        ensureDefaultCitationExample(examples);
+        const current = blk.props.exampleId || getPageCitationExample() || examples[0]?.id;
+        wrap.innerHTML = `
+          <select id="p_citation_select" class="nx-toolsel" style="width:100%">
+            ${examples.map(ex => `<option value="${esc(ex.id)}" ${ex.id===current ? 'selected' : ''}>${esc(ex.label || ex.heading || ex.id)}</option>`).join('')}
+          </select>
+        `;
+        const select = document.getElementById('p_citation_select');
+        const applySelection = (selId) => {
+          startEditSession();
+          const ex = examples.find(x => x.id === selId) || examples[0];
+          propagateCitationExample(selId, examples, { skipId: blk.id, onlyUnset: true });
+          applyCitationOrderToBlock(blk, ex);
+          persistUnsaved();
+          render();
+        };
+        if (select) {
+          select.addEventListener('change', (e) => applySelection(e.target.value));
+        }
+        if (!blk.props.body && examples.length) applySelection(current);
+      }).catch(() => {});
+    }
+    if (blk.type === 'youTry') {
+      loadCitationExamples().then((examples) => {
+        const wrap = document.getElementById('youTrySelectWrap');
+        if (!wrap) return;
+        ensureDefaultCitationExample(examples);
+        const current = blk.props.exampleId || getPageCitationExample() || examples[0]?.id;
+        wrap.innerHTML = `
+          <select id="p_youtry_select" class="nx-toolsel" style="width:100%">
+            ${examples.map(ex => `<option value="${esc(ex.id)}" ${ex.id===current ? 'selected' : ''}>${esc(ex.label || ex.heading || ex.id)}</option>`).join('')}
+          </select>
+        `;
+        const select = document.getElementById('p_youtry_select');
+        const applySelection = (selId) => {
+          startEditSession();
+          const ex = examples.find(x => x.id === selId) || examples[0];
+          propagateCitationExample(selId, examples, { skipId: blk.id, onlyUnset: true });
+          applyYouTryToBlock(blk, ex);
+          persistUnsaved();
+          render();
+        };
+        if (select) {
+          select.addEventListener('change', (e) => applySelection(e.target.value));
+        }
+        if (!blk.props.body && examples.length) applySelection(current);
       }).catch(() => {});
     }
     if (blk.type === 'heroCard' || blk.type === 'heroPage') {
@@ -3733,11 +3904,16 @@
 
   // --- Render canvas
   function render() {
-    applyPageStyles();
+    try {
+      applyPageStyles();
 
-    canvas.innerHTML = '';
-    doc.rows = doc.rows || [];
-    doc.rows.forEach(ensureRow);
+      if (!doc || !Array.isArray(doc.rows)) {
+        doc = { rows: [{ cols: [{ span: 12, blocks: [] }] }] };
+      }
+
+      canvas.innerHTML = '';
+      doc.rows = doc.rows || [];
+      doc.rows.forEach(ensureRow);
 
     doc.rows.forEach((row, r) => {
       ensureRowMeta(row);
@@ -3929,6 +4105,7 @@
 
         // Blocks
         (col.blocks || []).forEach((blk, b) => {
+          if (!blk || typeof blk !== 'object') { console.warn('Skipping malformed block', blk); return; }
           if (!blk.id) blk.id = uuid();
 
           const el = document.createElement('div');
@@ -3947,7 +4124,7 @@
               <span>${esc(blk.type)}${blk.effect ? ' <span class="nx-star">★</span>' : ''}</span>
               <span>drag</span>
             </div>
-            <div class="nx-block-preview" style="margin-top:6px">${blockPreviewHTML(blk)}</div>
+            <div class="nx-block-preview" style="margin-top:6px">${blockPreviewSafe(blk)}</div>
           `;
 
           // Dragover to allow repositioning OR effect drop
@@ -4044,6 +4221,10 @@
     bindMCQPreviews();
     renderInspector();
     syncToolbarFromSelection();
+    } catch (err) {
+      console.error('Render error', err);
+      canvas.innerHTML = `<div style="padding:20px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);border-radius:12px;color:#ef4444;">Editor render error. Reload the page to continue.</div>`;
+    }
   }
 
   // Palette drag sources

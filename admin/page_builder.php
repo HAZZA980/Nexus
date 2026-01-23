@@ -5,6 +5,7 @@ require_admin();
 use NexusCMS\Models\Page;
 use NexusCMS\Models\Site;
 use NexusCMS\Core\Security;
+use NexusCMS\Core\DB;
 
 $pageId = (int)($_GET['id'] ?? 0);
 $page = Page::find($pageId);
@@ -12,6 +13,19 @@ if (!$page) { http_response_code(404); echo "Page not found"; exit; }
 
 $site = Site::find((int)$page['site_id']);
 if (!$site) { http_response_code(404); echo "Site not found"; exit; }
+
+$pageCollection = null;
+$pageCollectionStyle = '';
+try {
+  if (!empty($page['collection_id'])) {
+    $stmt = DB::pdo()->prepare("SELECT * FROM site_collections WHERE id=? LIMIT 1");
+    $stmt->execute([(int)$page['collection_id']]);
+    $pageCollection = $stmt->fetch();
+    if ($pageCollection) {
+      $pageCollectionStyle = trim((string)($pageCollection['name'] ?? $pageCollection['slug'] ?? ''));
+    }
+  }
+} catch (\Throwable $e) {}
 
 $doc = json_decode($page['builder_json'] ?? '{}', true) ?: ['version'=>1,'rows'=>[]];
 $csrf = Security::csrfToken();
@@ -54,6 +68,7 @@ $base = base_path();
   data-base="<?= Security::e($base) ?>"
   data-site-slug="<?= Security::e($site['slug']) ?>"
   data-page-slug="<?= Security::e($page['slug']) ?>"
+  data-collection-style="<?= Security::e($pageCollectionStyle) ?>"
   data-api-rev-preview-token="<?= $base ?>/api/revisions/preview-token"
 
   data-api-save="<?= $base ?>/api/pages/save"
