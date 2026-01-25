@@ -6,6 +6,7 @@ use NexusCMS\Core\DB;
 use NexusCMS\Core\Security;
 use NexusCMS\Models\Site;
 use NexusCMS\Models\Page;
+use NexusCMS\Models\Analytics;
 
 $base = base_path();
 $activeNav = 'sites';
@@ -87,10 +88,27 @@ function last_updated_meta(array $site): array {
 }
 
 $siteCards = [];
+$stats = [
+  'total' => count($sites),
+  'live' => 0,
+  'draft' => 0,
+  'disabled' => 0,
+  'published_pages' => 0,
+];
 foreach ($sites as $site) {
   $status = normalize_status($site);
   $domain = domain_display($site, $base);
   $lastUpdated = last_updated_meta($site);
+  $published = (int)($site['_published'] ?? 0);
+  $preview = ['views'=>0,'previous'=>0,'delta'=>0,'percent'=>0];
+  try {
+    $preview = Analytics::preview((int)$site['id'], 7);
+  } catch (\Throwable $e) {}
+
+  $stats['published_pages'] += $published;
+  if (isset($stats[$status])) {
+    $stats[$status] += 1;
+  }
 
   $siteCards[] = [
     'id' => (int)$site['id'],
@@ -103,6 +121,7 @@ foreach ($sites as $site) {
     'view_url' => $domain['url'],
     'settings_url' => $base . '/admin/site.php?id=' . (int)$site['id'] . '#settings',
     'last_updated' => $lastUpdated,
+    'analytics_preview' => $preview,
   ];
 }
 
@@ -143,35 +162,32 @@ if ($currentUser && isset($currentUser['role'])) {
   </script>
   <style>
     :root {
-      --bg: #0f172a;
-      --panel: #111827;
-      --card: #111827;
-      --border: #1f2937;
-      --muted: #9ca3af;
-      --text: #e5e7eb;
-      --primary: #5b21b6;
-      --primary-strong: #4c1d95;
+      --bg: #0b1020;
+      --surface: #111827;
+      --panel: #0f172a;
+      --border: #1e293b;
+      --muted: #94a3b8;
+      --text: #e2e8f0;
+      --primary: #7c3aed;
+      --primary-strong: #5b21b6;
       --live: #22c55e;
       --draft: #9ca3af;
       --disabled: #ef4444;
-      --radius: 12px;
-      --shadow: 0 12px 40px rgba(0,0,0,0.25);
-      --focus: 0 0 0 3px rgba(91,33,182,0.35);
+      --radius: 10px;
+      --shadow: none;
+      --focus: 0 0 0 2px rgba(124,58,237,0.35);
     }
     .theme-light {
-      --bg: #f8fafc;
+      --bg: #f5f7fb;
+      --surface: #ffffff;
       --panel: #ffffff;
-      --card: #ffffff;
-      --border: #e2e8f0;
-      --muted: #475569;
+      --border: #d6dee9;
+      --muted: #4b5563;
       --text: #0f172a;
-      --primary: #2563eb;
-      --primary-strong: #1d4ed8;
-      --live: #16a34a;
-      --draft: #9ca3af;
-      --disabled: #ef4444;
-      --shadow: 0 10px 30px rgba(15,23,42,0.08);
-      --focus: 0 0 0 3px rgba(37,99,235,0.28);
+      --primary: #4f46e5;
+      --primary-strong: #3730a3;
+      --shadow: none;
+      --focus: 0 0 0 2px rgba(79,70,229,0.25);
     }
     * { box-sizing: border-box; }
     body {
@@ -180,7 +196,6 @@ if ($currentUser && isset($currentUser['role'])) {
       background: var(--bg);
       color: var(--text);
       line-height: 1.5;
-      transition: background 0.2s ease, color 0.2s ease;
     }
     a { color: inherit; text-decoration: none; }
     a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
@@ -188,154 +203,40 @@ if ($currentUser && isset($currentUser['role'])) {
       box-shadow: var(--focus);
       border-color: var(--primary);
     }
-    main { max-width: 1200px; margin: 0 auto; padding: 20px 20px 48px; }
-    .top-bar {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 14px 18px;
-      background: linear-gradient(90deg, rgba(91,33,182,0.12), rgba(91,33,182,0));
-      border-bottom: 1px solid var(--border);
-      position: sticky;
-      top: 0;
-      backdrop-filter: blur(10px);
-      z-index: 10;
-    }
-    .brand {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 600;
-    }
-    .brand-mark {
-      width: 36px; height: 36px;
-      border-radius: 10px;
-      background: linear-gradient(135deg, var(--primary), #22c55e);
-      display: grid; place-items: center;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      box-shadow: var(--shadow);
-    }
-    .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
-    .brand-text small { color: var(--muted); font-weight: 500; }
-
-    .top-nav{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      margin-left:auto;
-      flex-wrap:wrap;
-    }
-    .top-nav .nav-link{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      padding:10px 12px;
-      border-radius:10px;
-      border:1px solid var(--border);
-      background:rgba(255,255,255,0.05);
-      color:var(--text);
-      font-weight:700;
-      text-decoration:none;
-      min-height:40px;
-    }
+    main { max-width: 1200px; margin: 0 auto; padding: 18px 18px 36px; }
+    .top-bar{display:flex;align-items:center;gap:16px;padding:14px 18px;background:linear-gradient(90deg, rgba(91,33,182,0.12), rgba(91,33,182,0));border-bottom:1px solid var(--border);position:sticky;top:0;backdrop-filter:blur(10px);z-index:10;}
+    .brand{display:inline-flex;align-items:center;gap:10px;font-weight:600;}
+    .brand-mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg, var(--primary), #22c55e);display:grid;place-items:center;font-weight:700;letter-spacing:-0.02em;}
+    .brand-text{display:flex;flex-direction:column;line-height:1.2;}
+    .brand-text small{color:var(--muted);font-weight:500;}
+    .top-nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;}
+    .top-nav .nav-link{display:inline-flex;align-items:center;justify-content:center;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.05);color:var(--text);font-weight:700;min-height:40px;}
     .top-nav .nav-link:hover{background:rgba(255,255,255,0.1);}
-    .top-nav .nav-link.active{
-      background:linear-gradient(135deg, var(--primary), var(--primary-strong));
-      color:#fff;
-      border-color:transparent;
-      box-shadow:var(--shadow);
-    }
-
-    .top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 12px 14px;
-      min-height: 44px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,0.06);
-      color: var(--text);
-      cursor: pointer;
-      font-weight: 600;
-      transition: transform 0.15s ease, background 0.15s ease, border 0.15s ease;
-    }
-    .btn:hover { background: rgba(255,255,255,0.1); transform: translateY(-1px); }
-    .btn.primary {
-      background: linear-gradient(135deg, var(--primary), var(--primary-strong));
-      border-color: rgba(255,255,255,0.08);
-      color: #f8fbff;
-      box-shadow: 0 8px 24px rgba(37,99,235,0.35);
-    }
-    .btn.primary:hover { transform: translateY(-1px); background: linear-gradient(135deg, var(--primary-strong), var(--primary)); }
-
-    .user-menu {
-      position: relative;
-      min-width: 180px;
-    }
-    .user-menu details {
-      position: relative;
-    }
-    .user-menu summary {
-      list-style: none;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-      min-height: 44px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,0.05);
-      font-weight: 600;
-    }
-    .user-menu summary::-webkit-details-marker { display: none; }
-    .user-avatar {
-      width: 34px; height: 34px;
-      border-radius: 10px;
-      background: linear-gradient(135deg, #22c55e, #3b82f6);
-      display: grid; place-items: center;
-      font-weight: 700;
-      color: #0b1224;
-    }
-    .user-menu .menu {
-      position: absolute;
-      right: 0;
-      top: calc(100% + 6px);
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 10px;
-      min-width: 220px;
-      box-shadow: var(--shadow);
-      z-index: 5;
-    }
-    .user-menu .menu button.theme-toggle{
-      width:100%;text-align:left;border:none;background:transparent;
-      padding:10px 12px;border-radius:10px;color:var(--text);cursor:pointer;
-    }
+    .top-nav .nav-link.active{background:linear-gradient(135deg, var(--primary), var(--primary-strong));color:#fff;border-color:transparent;box-shadow:0 10px 30px rgba(0,0,0,0.08);}
+    .top-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--text);cursor:pointer;font-weight:700;min-height:44px;}
+    .btn:hover{background:rgba(255,255,255,0.1);}
+    .btn.primary{background:linear-gradient(135deg, var(--primary), var(--primary-strong));border:none;color:#f8fbff;box-shadow:0 10px 30px rgba(37,99,235,0.35);}
+    .user-menu{position:relative;min-width:180px;}
+    .user-menu summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:10px;padding:10px 12px;min-height:44px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.05);font-weight:600;}
+    .user-menu summary::-webkit-details-marker{display:none;}
+    .user-avatar{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#22c55e,#3b82f6);display:grid;place-items:center;font-weight:700;color:#0b1224;}
+    .user-menu .menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px;min-width:220px;box-shadow:var(--shadow);z-index:5;}
+    .user-menu .menu button.theme-toggle{width:100%;text-align:left;border:none;background:transparent;padding:10px 10px;border-radius:10px;color:var(--text);cursor:pointer;}
     .user-menu .menu button.theme-toggle:hover{background:rgba(255,255,255,0.06);}
-    .user-menu .menu a {
-      display: block;
-      padding: 10px 10px;
-      border-radius: 10px;
-      text-decoration: none;
-    }
-    .user-menu .menu a:hover { background: rgba(255,255,255,0.06); }
-    .user-meta { color: var(--muted); font-size: 14px; padding: 6px 10px 10px; }
+    .user-menu .menu a{display:block;padding:10px 10px;border-radius:10px;text-decoration:none;background:transparent;border:none;color:var(--text);width:100%;text-align:left;cursor:pointer;}
+    .user-menu .menu a:hover{background:rgba(255,255,255,0.06);}
+    .user-meta{color:var(--muted);font-size:14px;padding:6px 10px 10px;}
 
     .page-head {
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 14px;
       align-items: end;
-      margin: 28px 0 12px;
+      margin: 20px 0 10px;
     }
-    .page-head h1 { margin: 0; font-size: 32px; letter-spacing: -0.02em; }
-    .page-head p { margin: 6px 0 0; color: var(--muted); }
+    .page-head h1 { margin: 0; font-size: 24px; letter-spacing: -0.01em; font-weight: 700; }
+    .page-head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
 
     .filters {
       display: flex;
@@ -347,11 +248,11 @@ if ($currentUser && isset($currentUser['role'])) {
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      padding: 12px 12px;
-      border-radius: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
       border: 1px solid var(--border);
-      background: rgba(255,255,255,0.04);
-      min-height: 44px;
+      background: var(--panel);
+      min-height: 38px;
       color: var(--text);
     }
     .input input, .input select {
@@ -360,80 +261,65 @@ if ($currentUser && isset($currentUser['role'])) {
       outline: none;
       color: inherit;
       width: 180px;
-      font-size: 15px;
+      font-size: 14px;
     }
-    .input select { width: auto; min-width: 140px; }
+    .input select { width: auto; min-width: 120px; }
 
-    .cards-grid {
+    .summary {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 14px;
-      margin-top: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin: 14px 0 10px;
     }
-    .site-card {
-      border: 1px solid var(--border);
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-      border-radius: var(--radius);
-      padding: 16px;
-      box-shadow: var(--shadow);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+    .summary-item{
+      border:1px solid var(--border);
+      border-radius:8px;
+      padding:10px 12px;
+      background:var(--panel);
+      display:flex;
+      flex-direction:column;
+      gap:4px;
     }
+    .summary-label{font-size:13px;color:var(--muted);}
+    .summary-value{font-size:18px;font-weight:700;letter-spacing:-0.01em;}
+
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; }
+    th { color: var(--muted); font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
     .status {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-weight: 700;
-      font-size: 13px;
-      letter-spacing: -0.01em;
-      border: 1px solid var(--border);
-      text-transform: capitalize;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 10px;
+      border-radius:999px;
+      font-weight:600;
+      font-size:12px;
+      border:1px solid var(--border);
+      text-transform:capitalize;
     }
-    .status.live { color: #0f5132; background: rgba(34,197,94,0.18); border-color: rgba(34,197,94,0.45); }
-    .status.draft { color: #6b3b05; background: rgba(245,158,11,0.16); border-color: rgba(245,158,11,0.4); }
-    .status.disabled { color: #7f1d1d; background: rgba(239,68,68,0.14); border-color: rgba(239,68,68,0.4); }
-
-    .site-card h2 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
-    .site-card h2 a { text-decoration: none; }
-    .site-card h2 a:hover { color: #cfe3ff; }
-
-    .meta { display: flex; flex-wrap: wrap; gap: 8px 14px; color: var(--muted); font-size: 14px; }
-    .meta strong { color: var(--text); font-weight: 600; }
-
-    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-    .actions .btn {
-      flex: 1 1 100px;
-      justify-content: flex-start;
-      background: rgba(255,255,255,0.06);
+    .status.live { color: #0f5132; background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.3); }
+    .status.draft { color: #92400e; background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.3); }
+    .status.disabled { color: #7f1d1d; background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.3); }
+    .delta-chip{
+      display:inline-flex;align-items:center;gap:6px;
+      padding:4px 8px;border-radius:8px;border:1px solid var(--border);
+      font-weight:700;font-size:12px;
     }
+    .delta-chip.pos{color:#22c55e;border-color:rgba(34,197,94,0.35);}
+    .delta-chip.neg{color:#ef4444;border-color:rgba(239,68,68,0.35);}
 
     .empty {
-      margin: 28px 0;
-      padding: 26px;
+      margin: 18px 0;
+      padding: 18px;
       border: 1px dashed var(--border);
       border-radius: var(--radius);
-      background: rgba(255,255,255,0.03);
+      background: var(--panel);
       text-align: center;
     }
     .empty h3 { margin: 0 0 10px; }
     .empty p { margin: 0 0 14px; color: var(--muted); }
 
-    .table-view { display: none; margin-top: 16px; }
-    table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-    th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); }
-    th { color: var(--muted); font-weight: 600; font-size: 14px; }
-    tr:last-child td { border-bottom: none; }
-    .recent {
-      margin-top: 24px;
-      padding: 16px;
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      background: rgba(59,130,246,0.08);
-    }
-    .recent h3 { margin: 0 0 8px; }
     .sr-only {
       position: absolute;
       width: 1px; height: 1px;
@@ -444,59 +330,16 @@ if ($currentUser && isset($currentUser['role'])) {
     @media (max-width: 720px) {
       .page-head { grid-template-columns: 1fr; }
       .top-bar { flex-direction: column; align-items: flex-start; position: sticky; }
-      .actions .btn { flex: 1 1 100%; }
-      .cards-grid { display: none; }
-      .table-view { display: block; }
     }
   </style>
 </head>
 <body>
-  <header class="top-bar" role="banner">
-    <div class="brand" aria-label="NexusCMS Admin">
-      <div class="brand-mark" aria-hidden="true">N</div>
-      <div class="brand-text">
-        <span>NexusCMS</span>
-        <small>Admin</small>
-      </div>
-    </div>
-    <nav class="top-nav" aria-label="Admin navigation">
-      <a class="nav-link <?= $activeNav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
-      <a class="nav-link <?= $activeNav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
-      <a class="nav-link <?= $activeNav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Images</a>
-    </nav>
-    <div class="top-actions">
-      <a class="btn primary" href="<?= $base ?>/admin/site_new.php">+ Create new website</a>
-      <div class="user-menu">
-        <details>
-          <summary aria-haspopup="menu">
-            <span class="user-avatar" aria-hidden="true">
-              <?php
-                $initial = $currentUser['display_name'] ?? $currentUser['email'] ?? 'U';
-                $initial = strtoupper(mb_substr($initial, 0, 1));
-                echo Security::e($initial);
-              ?>
-            </span>
-            <span>
-              <?= Security::e($currentUser['display_name'] ?? $currentUser['email'] ?? 'User') ?>
-              <?php if (!empty($currentUser['role'])): ?>
-                <small style="display:block;color:var(--muted);font-weight:500;"><?= Security::e(ucfirst((string)$currentUser['role'])) ?></small>
-              <?php endif; ?>
-            </span>
-          </summary>
-          <div class="menu" role="menu">
-            <div class="user-meta">Logged in <?= Security::e($currentUser['email'] ?? 'as admin') ?></div>
-            <button type="button" class="theme-toggle" id="themeToggleBtn" role="menuitem">🌙 Switch to light</button>
-            <a role="menuitem" href="<?= $base ?>/admin/logout.php">Logout</a>
-          </div>
-        </details>
-      </div>
-    </div>
-  </header>
+  <?php include __DIR__ . '/partials/header.php'; ?>
   <main>
     <div class="page-head">
       <div>
         <h1>Websites</h1>
-        <p>Select a website to manage content, settings, and publishing.</p>
+        <p>Administrative overview of all sites and their current state.</p>
       </div>
       <form class="filters" role="search" aria-label="Search websites">
         <label class="sr-only" for="siteSearch">Search websites</label>
@@ -517,6 +360,29 @@ if ($currentUser && isset($currentUser['role'])) {
       </form>
     </div>
 
+    <div class="summary" aria-label="Overview metrics">
+      <div class="summary-item">
+        <div class="summary-label">Total sites</div>
+        <div class="summary-value"><?= (int)$stats['total']; ?></div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Live</div>
+        <div class="summary-value"><?= (int)$stats['live']; ?></div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Draft</div>
+        <div class="summary-value"><?= (int)$stats['draft']; ?></div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Disabled</div>
+        <div class="summary-value"><?= (int)$stats['disabled']; ?></div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Published pages</div>
+        <div class="summary-value"><?= (int)$stats['published_pages']; ?></div>
+      </div>
+    </div>
+
     <?php if (!$siteCards): ?>
       <div class="empty" role="status">
         <h3>You don’t have any websites yet.</h3>
@@ -524,99 +390,48 @@ if ($currentUser && isset($currentUser['role'])) {
         <a class="btn primary" href="<?= $base ?>/admin/site_new.php">Create your first website</a>
       </div>
     <?php else: ?>
-      <section aria-label="Websites" class="cards-view">
-        <div id="cardGrid" class="cards-grid">
+      <table aria-label="Websites">
+        <thead>
+          <tr>
+            <th scope="col">Site</th>
+            <th scope="col">Domain</th>
+            <th scope="col">Status</th>
+            <th scope="col">Published pages</th>
+            <th scope="col">Last 7d views</th>
+            <th scope="col">Updated</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
           <?php foreach ($siteCards as $site): ?>
-            <article class="site-card" data-name="<?= Security::e(strtolower($site['name'])) ?>" data-domain="<?= Security::e(strtolower($site['domain'])) ?>" data-status="<?= Security::e($site['status']) ?>">
-              <div class="meta" aria-label="Site status">
-                <span class="status <?= Security::e($site['status']) ?>"><?= Security::e(ucfirst($site['status'])) ?></span>
-              </div>
-              <h2>
-                <a href="<?= Security::e($site['admin_url']) ?>">
-                  <?= Security::e($site['name']) ?>
-                </a>
-              </h2>
-              <div class="meta">
-                <div>
-                  <strong>Domain: </strong>
-                  <a href="<?= Security::e($site['domain_url']) ?>" target="_blank" rel="noopener"><?= Security::e($site['domain']) ?></a>
-                </div>
-                <div>
-                  <strong>Last updated: </strong>
-                  <span title="<?= Security::e($site['last_updated']['exact']) ?>" aria-label="Last updated <?= Security::e($site['last_updated']['exact']) ?>">
-                    <?= Security::e($site['last_updated']['relative']) ?>
-                  </span>
-                </div>
-              </div>
-              <div class="actions" role="group" aria-label="Quick actions">
-                <a class="btn" href="<?= Security::e($site['view_url']) ?>" target="_blank" rel="noopener" aria-label="View public site <?= Security::e($site['name']) ?>">View site</a>
-                <?php if ($canManageSettings): ?>
-                  <a class="btn" href="<?= Security::e($site['settings_url']) ?>" aria-label="Open settings for <?= Security::e($site['name']) ?>">Settings</a>
-                <?php endif; ?>
-              </div>
-            </article>
-          <?php endforeach; ?>
-        </div>
-        <div id="emptySearch" class="empty" role="status" hidden>
-          <h3>No websites match your search.</h3>
-          <p>Try adjusting your keywords or filters.</p>
-          <button class="btn" type="button" id="resetFilters">Reset filters</button>
-        </div>
-      </section>
-
-      <section class="table-view" aria-label="Websites table view">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Site</th>
-              <th scope="col">Status</th>
-              <th scope="col">Domain</th>
-              <th scope="col">Last updated</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="tableBody">
-            <?php foreach ($siteCards as $site): ?>
-              <tr class="site-row" data-name="<?= Security::e(strtolower($site['name'])) ?>" data-domain="<?= Security::e(strtolower($site['domain'])) ?>" data-status="<?= Security::e($site['status']) ?>">
-                <td>
-                  <a href="<?= Security::e($site['admin_url']) ?>"><?= Security::e($site['name']) ?></a>
-                  <div style="color:var(--muted);font-size:13px;"><?= Security::e($site['slug'] ? '/s/' . $site['slug'] : $site['domain']) ?></div>
-                </td>
-                <td><span class="status <?= Security::e($site['status']) ?>"><?= Security::e(ucfirst($site['status'])) ?></span></td>
-                <td><a href="<?= Security::e($site['domain_url']) ?>" target="_blank" rel="noopener"><?= Security::e($site['domain']) ?></a></td>
-                <td>
-                  <span title="<?= Security::e($site['last_updated']['exact']) ?>" aria-label="Last updated <?= Security::e($site['last_updated']['exact']) ?>">
-                    <?= Security::e($site['last_updated']['relative']) ?>
-                  </span>
-                </td>
-                <td>
-                  <div class="actions">
-                    <a class="btn" href="<?= Security::e($site['admin_url']) ?>">Open</a>
-                    <a class="btn" href="<?= Security::e($site['view_url']) ?>" target="_blank" rel="noopener">View</a>
-                    <?php if ($canManageSettings): ?>
-                      <a class="btn" href="<?= Security::e($site['settings_url']) ?>">Settings</a>
-                    <?php endif; ?>
+            <tr class="site-row" data-name="<?= Security::e(strtolower($site['name'])) ?>" data-domain="<?= Security::e(strtolower($site['domain'])) ?>" data-status="<?= Security::e($site['status']) ?>">
+              <td>
+                <a href="<?= Security::e($site['admin_url']) ?>"><?= Security::e($site['name']) ?></a>
+                <div style="color:var(--muted);font-size:13px;"><?= $site['slug'] ? '/s/' . Security::e($site['slug']) : '—' ?></div>
+              </td>
+              <td><a href="<?= Security::e($site['domain_url']) ?>" target="_blank" rel="noopener"><?= Security::e($site['domain']) ?></a></td>
+              <td><span class="status <?= Security::e($site['status']) ?>"><?= Security::e(ucfirst($site['status'])) ?></span></td>
+              <td><?= (int)$site['_published'] ?></td>
+              <td>
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                  <div style="font-weight:700;"><?= (int)($site['analytics_preview']['views'] ?? 0) ?> views</div>
+                  <?php $delta = (int)($site['analytics_preview']['delta'] ?? 0); $pct = $site['analytics_preview']['percent'] ?? 0; ?>
+                  <div class="delta-chip <?= $delta>=0 ? 'pos' : 'neg' ?>">
+                    <?= $delta>=0 ? '▲' : '▼' ?> <?= abs($pct) ?>%
                   </div>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </section>
-
-      <?php if ($recentActivity): ?>
-        <section class="recent" aria-labelledby="recent-activity">
-          <h3 id="recent-activity">Recent activity</h3>
-          <p>
-            <strong><?= Security::e($recentActivity['name']) ?></strong>
-            was updated
-            <span title="<?= Security::e($recentActivity['last_updated']['exact']) ?>">
-              <?= Security::e($recentActivity['last_updated']['relative']) ?>
-            </span>.
-            <a href="<?= Security::e($recentActivity['admin_url']) ?>">Open admin</a>
-          </p>
-        </section>
-      <?php endif; ?>
+                </div>
+              </td>
+              <td title="<?= Security::e($site['last_updated']['exact']) ?>"><?= Security::e($site['last_updated']['relative']) ?></td>
+              <td>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <a class="btn primary" href="<?= Security::e($site['admin_url']) ?>">Manage</a>
+                  <a class="btn" href="<?= Security::e($site['view_url']) ?>" target="_blank" rel="noopener">Open</a>
+                </div>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
     <?php endif; ?>
   </main>
 
@@ -625,8 +440,6 @@ if ($currentUser && isset($currentUser['role'])) {
       const searchInput = document.getElementById('siteSearch');
       const statusFilter = document.getElementById('statusFilter');
       const rows = Array.from(document.querySelectorAll('.site-row'));
-      const resetBtn = document.getElementById('resetFilters');
-      const emptyTable = document.getElementById('emptyTable');
       const themeBtn = document.getElementById('themeToggleBtn');
 
       function matches(row, query, status) {
@@ -647,16 +460,6 @@ if ($currentUser && isset($currentUser['role'])) {
           row.style.display = ok ? '' : 'none';
           if (ok) visible++;
         });
-        const noResults = visible === 0 && (!!query || !!status);
-        if (resetBtn) resetBtn.style.display = (query || status) ? 'inline-flex' : 'none';
-        if (emptyTable) emptyTable.style.display = noResults ? 'block' : 'none';
-      }
-
-      function resetFilters() {
-        if (searchInput) searchInput.value = '';
-        if (statusFilter) statusFilter.value = '';
-        applyFilters();
-        if (searchInput) searchInput.focus();
       }
 
       function relTime(ts) {
@@ -700,27 +503,8 @@ if ($currentUser && isset($currentUser['role'])) {
         if (stored === 'light') setTheme('light'); else setTheme('dark');
       }
 
-      const closeAllKebabs = () => document.querySelectorAll('.kebab-menu').forEach(m => m.style.display = 'none');
-      document.addEventListener('click', (e) => {
-        const btn = e.target.closest('.kebab-btn');
-        if (btn) {
-          const menu = btn.parentElement.querySelector('.kebab-menu');
-          const expanded = btn.getAttribute('aria-expanded') === 'true';
-          closeAllKebabs();
-          if (!expanded) {
-            menu.style.display = 'block';
-            btn.setAttribute('aria-expanded','true');
-          } else {
-            btn.setAttribute('aria-expanded','false');
-          }
-          return;
-        }
-        if (!e.target.closest('.kebab')) closeAllKebabs();
-      });
-
       if (searchInput) searchInput.addEventListener('input', applyFilters);
       if (statusFilter) statusFilter.addEventListener('change', applyFilters);
-      if (resetBtn) resetBtn.addEventListener('click', resetFilters);
       applyFilters();
     })();
   </script>

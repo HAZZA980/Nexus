@@ -45,7 +45,7 @@
       margin:0 auto;
       padding:18px 20px 0;
       display:grid;
-      grid-template-columns: 240px 1fr 200px; /* keeps nav centered with space for login */
+      grid-template-columns: 240px 1fr 240px; /* keeps nav visually centered like the original */
       align-items:end;
     }
 
@@ -119,57 +119,6 @@
       color:#1a1a1a;
     }
 
-    .login-wrap{display:flex;justify-content:flex-end;align-items:center;padding-bottom:10px;}
-    .login-btn{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding:10px 14px;
-      border-radius:12px;
-      border:1px solid #1f3b87;
-      color:#1f3b87;
-      background:#fff;
-      font-weight:700;
-      text-decoration:none;
-      transition:all .15s ease;
-    }
-    .login-btn:hover{background:#f1f4ff;}
-    .user-dd{position:relative;}
-    .user-dd summary{
-      list-style:none;
-      cursor:pointer;
-      border:1px solid #1f3b87;
-      border-radius:12px;
-      padding:10px 12px;
-      font-weight:700;
-      color:#1f3b87;
-      background:#fff;
-    }
-    .user-dd[open] summary{background:#f1f4ff;}
-    .user-dd-menu{
-      position:absolute;
-      right:0;
-      margin-top:6px;
-      background:#fff;
-      border:1px solid #d1d5db;
-      border-radius:12px;
-      box-shadow:0 8px 24px rgba(0,0,0,0.15);
-      padding:10px;
-      min-width:180px;
-      display:grid;
-      gap:6px;
-      z-index:20;
-    }
-    .user-dd-menu button{
-      width:100%;
-      text-align:left;
-      border:1px solid #e5e7eb;
-      background:#f8fafc;
-      border-radius:10px;
-      padding:8px 10px;
-      cursor:pointer;
-    }
-
     /* SEARCH ROW */
     .header-search{
       background:var(--bar);
@@ -235,16 +184,6 @@
 </head>
 
 <body>
-  <?php
-    $currentUser = null;
-    if (!empty($_SESSION['user_id'])) {
-      try {
-        $currentUser = \NexusCMS\Models\User::findById((int)$_SESSION['user_id']);
-      } catch (\Throwable $e) {
-        $currentUser = null;
-      }
-    }
-  ?>
   <header class="site-header">
     <div class="header-top">
       <div class="header-inner">
@@ -266,25 +205,15 @@
           </ul>
         </nav>
 
-        <div class="login-wrap">
-          <?php if ($currentUser): ?>
-            <details class="user-dd">
-              <summary><?= htmlspecialchars($currentUser['display_name'] ?: $currentUser['email'], ENT_QUOTES, 'UTF-8') ?> ▾</summary>
-              <div class="user-dd-menu">
-                <button type="button" data-action="toggle-dark">Dark mode (soon)</button>
-                <form method="post" action="<?= base_path() ?>/admin/logout.php">
-                  <button type="submit">Log out</button>
-                </form>
-              </div>
-            </details>
-          <?php else: ?>
-            <?php
-              $returnUrl = urlencode($_SERVER['REQUEST_URI'] ?? '/');
-              $loginHref = rtrim(base_path(), '/') . "/site-login.php?site=cite-them-right&return={$returnUrl}";
-            ?>
-            <a class="login-btn" href="<?= htmlspecialchars($loginHref, ENT_QUOTES, 'UTF-8') ?>">Login</a>
-          <?php endif; ?>
-        </div>
+        <!-- spacer column to keep nav centered (intentionally empty) -->
+        <a class="brand" href="#" aria-label="Cite Them Right">
+          <img
+            src="https://res.cloudinary.com/bloomsbury-publishing-public/image/upload/f_auto%2Cq_auto/CTRCOL/citethemrightlogo.png"
+            alt="Bloomsbury Cite Them Right"
+          />
+        </a>
+
+        <div aria-hidden="true"></div>
       </div>
     </div>
 

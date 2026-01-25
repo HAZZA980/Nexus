@@ -42,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <link rel="stylesheet" href="<?= base_path() ?>/public/assets/page_new.css">
 </head>
 <body class="page-new">
+  <?php include __DIR__ . '/partials/header.php'; ?>
   <div class="shell">
     <header class="topbar">
       <div>

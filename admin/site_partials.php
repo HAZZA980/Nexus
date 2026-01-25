@@ -101,19 +101,9 @@ function rel_path(string $rootedPath): string {
   </style>
 </head>
   <body>
-    <header class="top-bar">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">N</div>
-        <div class="brand-text"><span>NexusCMS</span><small>Partials</small></div>
-      </div>
-      <nav class="top-nav" aria-label="Admin navigation">
-        <a class="nav-link <?= $activeNav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
-        <a class="nav-link <?= $activeNav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
-        <a class="nav-link <?= $activeNav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Images</a>
-      </nav>
-      <a class="back-link" href="<?= $base ?>/admin/site.php?id=<?= (int)$site['id'] ?>">← Back to site</a>
-    </header>
+    <?php include __DIR__ . '/partials/header.php'; ?>
   <main>
+    <a class="back-link" href="<?= $base ?>/admin/site.php?id=<?= (int)$site['id'] ?>">← Back to site</a>
     <div class="page-head">
       <h1>Site partials</h1>
       <p>Edit in your IDE. Files below apply site-wide. Slug: <strong><?= Security::e($slug) ?></strong></p>

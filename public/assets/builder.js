@@ -471,14 +471,12 @@
     blk.props = blk.props || {};
     const p = blk.props;
     p.mode = p.mode === 'tabs' ? 'tabs' : 'accordion';
-    p.accStyle = ['standard','grouped'].includes(p.accStyle) ? p.accStyle : 'standard';
     const normalizeItem = (it, i) => {
       const item = it && typeof it === 'object' ? it : {};
       if (!item.id) item.id = uuid();
       if (!item.title) item.title = `Item ${i + 1}`;
       item.body = item.body || '';
       item.bodyHtml = item.bodyHtml || '';
-      item.subItems = Array.isArray(item.subItems) ? item.subItems : [];
       item.openDefault = !!item.openDefault;
       item.headerImg = item.headerImg || '';
       item.headerAlt = item.headerAlt || '';
@@ -1250,8 +1248,6 @@
     const imgPos = acc.headerImgPos || 'left';
     const imgSize = acc.headerImgSize || 'medium';
     const focusIdx = getAccordionFocus(blk.id, renderItems.length);
-    const accStyle = acc.accStyle || 'standard';
-    const isGrouped = accStyle === 'grouped';
 
     const renderHeaderImg = (it) => {
       if (!it.showHeaderImg || !it.headerImg) return '';
@@ -1299,75 +1295,7 @@
       const first = [...openSet][0];
       openSet.clear(); openSet.add(first);
     }
-    const indPos = acc.showIndicator && !isGrouped ? acc.indicatorPosition : (isGrouped ? 'right' : 'none');
-    const indIcon = (isOpen) => isOpen ? '−' : '+';
-
-    if (isGrouped) {
-      const parent = items[0] || { title: 'Group', subItems: [] };
-      const children = items.slice(1);
-      const isOpen = openSet.has(0);
-      const headId = `acc-head-${blk.id}-0`;
-      const panelId = `acc-panel-${blk.id}-0`;
-      const parentSubs = Array.isArray(parent.subItems) ? parent.subItems : [];
-      const parentList = parentSubs.length
-        ? `<ul class="nx-accordion-sublist">${parentSubs.map((s) => {
-            const label = esc(s.label || '');
-            const href = esc(s.url || '');
-            if (!label) return '';
-            return href ? `<li><a href="${href}">${label}</a></li>` : `<li>${label}</li>`;
-          }).join('')}</ul>`
-        : '';
-      const childAccordions = children.map((it, idx) => {
-        const childSubs = Array.isArray(it.subItems) ? it.subItems : [];
-        const list = childSubs.length
-          ? `<ul class="nx-accordion-sublist">${childSubs.map((s) => {
-              const label = esc(s.label || '');
-              const href = esc(s.url || '');
-              if (!label) return '';
-              return href ? `<li><a href="${href}">${label}</a></li>` : `<li>${label}</li>`;
-            }).join('')}</ul>`
-          : '<div class="nx-muted" style="padding:6px 0;">Add sub-items…</div>';
-        return `
-          <div class="nx-accordion-childrow">
-            <button type="button" class="nx-accordion-childhead" data-idx="${idx}">
-              <span class="nx-accordion-title">${esc(it.title || `Item ${idx + 2}`)}</span>
-              <span class="nx-accordion-plus" aria-hidden="true">+</span>
-            </button>
-            <div class="nx-accordion-childpanel" hidden>
-              <div class="nx-accordion-body">${list}</div>
-            </div>
-          </div>
-        `;
-      }).join('');
-      return `
-        <div class="nx-accordion nx-accordion--grouped"
-          data-grouped="1"
-          data-allow="multiple"
-          data-collapse="${acc.allowCollapseAll !== false ? 'allow' : 'force'}"
-          data-indicator="right"
-          data-spacing="compact"
-          data-style="minimal"
-          data-dividers="on"
-          data-border="${acc.showBorder ? 'on' : 'off'}"
-          data-bid="${blk.id}"
-          style="${vars.join(';')}">
-          <div class="nx-accordion-item nx-accordion-parent ${isOpen ? 'is-open' : ''}" data-idx="0">
-            <button type="button" class="nx-accordion-head" id="${headId}" aria-expanded="${isOpen ? 'true' : 'false'}" aria-controls="${panelId}">
-              <span class="nx-accordion-title">${esc(parent.title || 'Group')}</span>
-              <span class="nx-accordion-plus" aria-hidden="true">${indIcon(isOpen)}</span>
-            </button>
-            <div class="nx-accordion-panel" id="${panelId}" role="region" aria-labelledby="${headId}" ${isOpen ? '' : 'hidden'}>
-              <div class="nx-accordion-body">
-                ${parentList}
-                <div class="nx-accordion-childlist">
-                  ${childAccordions}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
+    const indPos = acc.showIndicator ? acc.indicatorPosition : 'none';
 
     return `
       <div class="nx-accordion"
@@ -1438,7 +1366,6 @@
     const btn = item.querySelector('.nx-accordion-head');
     const panel = item.querySelector('.nx-accordion-panel');
     const chevron = btn?.querySelector('.nx-accordion-chevron');
-    const plus = item.querySelector('.nx-accordion-plus');
     if (!btn || !panel) return;
     const applyHeight = () => {
       panel.style.maxHeight = open ? `${panel.scrollHeight}px` : '0px';
@@ -1446,7 +1373,6 @@
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
     panel.setAttribute('aria-hidden', open ? 'false' : 'true');
     if (chevron) chevron.classList.toggle('open', open);
-    if (plus) plus.textContent = open ? '−' : '+';
     if (open) {
       item.classList.add('is-open');
       panel.hidden = false;
@@ -1477,49 +1403,11 @@
     }
   };
 
-  // child rows for grouped variant
-  const childRows = el.dataset.grouped === '1'
-    ? Array.from(el.querySelectorAll('.nx-accordion-childrow'))
-    : [];
-  const closeAllChildren = () => {
-    childRows.forEach((row) => {
-      const p = row.querySelector('.nx-accordion-childpanel');
-      const pl = row.querySelector('.nx-accordion-plus');
-      if (!p) return;
-      p.hidden = true;
-      p.style.maxHeight = '0px';
-      if (pl) pl.textContent = '+';
-    });
-  };
-  const toggleChild = (row) => {
-    const panel = row.querySelector('.nx-accordion-childpanel');
-    const plus = row.querySelector('.nx-accordion-plus');
-    if (!panel) return;
-    const open = panel.hidden !== false;
-    panel.hidden = !open;
-    if (open) {
-      panel.style.maxHeight = panel.scrollHeight + 'px';
-      setTimeout(() => { panel.style.maxHeight = 'none'; }, 180);
-      row.classList.add('is-open');
-    } else {
-      panel.style.maxHeight = panel.scrollHeight + 'px';
-      requestAnimationFrame(() => { panel.style.maxHeight = '0px'; });
-      const onEnd = () => {
-        panel.hidden = true;
-        panel.removeEventListener('transitionend', onEnd);
-      };
-      panel.addEventListener('transitionend', onEnd);
-      setTimeout(onEnd, 240);
-      row.classList.remove('is-open');
-    }
-    if (plus) plus.textContent = open ? '−' : '+';
-  };
-
-  items.forEach((item) => {
-    const btn = item.querySelector('.nx-accordion-head');
-    if (!btn) return;
-    const idx = parseInt(item.dataset.idx || '-1', 10);
-    const toggle = () => {
+    items.forEach((item) => {
+      const btn = item.querySelector('.nx-accordion-head');
+      if (!btn) return;
+      const idx = parseInt(item.dataset.idx || '-1', 10);
+      const toggle = () => {
         const isOpen = item.classList.contains('is-open');
         if (Number.isInteger(idx)) {
           setAccordionFocus(el.dataset.bid, idx);
@@ -1530,15 +1418,12 @@
         if (isOpen && !allowCollapse && !allowMultiple) {
           return;
         }
-      if (!isOpen && !allowMultiple) {
-        items.forEach(it => { if (it !== item) setOpen(it, false); });
-      }
-      if (el.dataset.grouped === '1' && idx === 0 && isOpen === true) {
-        closeAllChildren();
-      }
-      setOpen(item, !isOpen);
-      savePreviewState();
-    };
+        if (!isOpen && !allowMultiple) {
+          items.forEach(it => { if (it !== item) setOpen(it, false); });
+        }
+        setOpen(item, !isOpen);
+        savePreviewState();
+      };
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         toggle();
@@ -1553,18 +1438,6 @@
 
   // Initialize heights
   items.forEach(item => setOpen(item, item.classList.contains('is-open'), true));
-  if (childRows.length) {
-    childRows.forEach((row) => {
-      const head = row.querySelector('.nx-accordion-childhead');
-      if (!head) return;
-      head.addEventListener('click', (e) => {
-        e.preventDefault();
-        toggleChild(row);
-      });
-    });
-    // ensure closed by default
-    closeAllChildren();
-  }
   savePreviewState();
 }
 
@@ -2700,12 +2573,14 @@
         </select>
         <br><br>
         <div id="panel_split_wrap" style="${(p.layout === 'img-left' || p.layout === 'img-right') ? '' : 'opacity:.4;pointer-events:none'}">
-          <label class="nx-muted">Split ratio (Image / Text)</label><br>
-          <input id="p_split_ratio_range" type="range" min="0" max="4" step="1" value="0" style="width:100%">
-          <div id="p_split_ratio_label" class="nx-muted" style="margin-top:6px;font-weight:700;"></div>
-          <div class="nx-muted" style="display:flex;justify-content:space-between;font-size:12px;margin-top:4px;">
-            <span>30/70</span><span>40/60</span><span>50/50</span><span>60/40</span><span>70/30</span>
-          </div>
+          <label class="nx-muted">Split ratio</label><br>
+          <select id="p_split_ratio" style="${inputStyle}">
+            <option value="30-70" ${p.splitRatio === '30-70' ? 'selected' : ''}>30 / 70</option>
+            <option value="40-60" ${p.splitRatio === '40-60' ? 'selected' : ''}>40 / 60</option>
+            <option value="50-50" ${p.splitRatio === '50-50' ? 'selected' : ''}>50 / 50</option>
+            <option value="60-40" ${p.splitRatio === '60-40' ? 'selected' : ''}>60 / 40</option>
+            <option value="70-30" ${p.splitRatio === '70-30' ? 'selected' : ''}>70 / 30</option>
+          </select>
         </div>
       `;
     } else if (blk.type === 'testimonial') {
@@ -3038,8 +2913,6 @@
       const renderLen = acc.mode === 'tabs' ? tabCap : items.length;
       const activeIdx = getAccordionFocus(blk.id, renderLen);
       const activeItem = items[activeIdx] || items[0];
-      const activeSubs = Array.isArray(activeItem?.subItems) ? activeItem.subItems : [];
-      const isGrouped = acc.accStyle === 'grouped';
       const itemOptions = items.map((it,i) => `<option value="${i}" ${acc.defaultIndex===i ? 'selected' : ''}>Item ${i + 1}</option>`).join('');
       const tabOptions = items.slice(0, maxTabs).map((it,i) => `<option value="${i}" ${acc.tabsIndex===i ? 'selected' : ''}>Item ${i + 1}</option>`).join('');
       const titleForBtn = (t, i) => esc(t || `Item ${i + 1}`);
@@ -3079,62 +2952,26 @@
           </button>
         </div>
 
-        <div id="acc_style_mode_wrap" style="${acc.mode === 'accordion' ? '' : 'display:none'};margin-top:10px">
-          <label class="nx-muted">Accordion style</label>
-          <select id="acc_style_mode" class="nx-toolsel" style="width:100%;margin-top:6px">
-            <option value="standard" ${isGrouped ? '' : 'selected'}>Standard</option>
-            <option value="grouped" ${isGrouped ? 'selected' : ''}>Grouped (links list)</option>
-          </select>
-          <div class="nx-muted" style="margin-top:6px">Grouped turns the body into a simple list of sub-items.</div>
-        </div>
-
         <div class="nx-strong" style="margin-bottom:8px">Item content</div>
         <label class="nx-muted">Title</label><br>
         <input id="acc_item_title" value="${esc(activeItem?.title || '')}" style="${inputStyle}">
         <br><br>
-        <div id="acc_item_img_section" style="${isGrouped ? 'display:none' : ''}">
-          <label class="nx-toggle" style="display:inline-flex;align-items:center;gap:8px;margin-bottom:8px">
-            <input id="acc_item_showimg" type="checkbox" ${activeItem?.showHeaderImg ? 'checked' : ''}>
-            <span class="nx-toggle-ui"></span>
-            <span class="nx-toggle-label">Show header image</span>
-          </label>
-          <div id="acc_item_img_wrap" style="${activeItem?.showHeaderImg ? '' : 'display:none'}">
-            <label class="nx-muted">Header image URL</label><br>
-            <input id="acc_item_img" value="${esc(activeItem?.headerImg || '')}" style="${inputStyle}" placeholder="https://...">
-            <br><br>
-            <label class="nx-muted">Alt text</label><br>
-            <input id="acc_item_alt" value="${esc(activeItem?.headerAlt || '')}" style="${inputStyle}">
-          </div>
-          <br>
-        </div>
-
-        <div id="acc_body_wrap" style="${isGrouped ? 'display:none' : ''}">
-          <label class="nx-muted">Body</label><br>
-          <div id="acc_item_body" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:160px;white-space:pre-wrap"></div>
+        <label class="nx-toggle" style="display:inline-flex;align-items:center;gap:8px;margin-bottom:8px">
+          <input id="acc_item_showimg" type="checkbox" ${activeItem?.showHeaderImg ? 'checked' : ''}>
+          <span class="nx-toggle-ui"></span>
+          <span class="nx-toggle-label">Show header image</span>
+        </label>
+        <div id="acc_item_img_wrap" style="${activeItem?.showHeaderImg ? '' : 'display:none'}">
+          <label class="nx-muted">Header image URL</label><br>
+          <input id="acc_item_img" value="${esc(activeItem?.headerImg || '')}" style="${inputStyle}" placeholder="https://...">
           <br><br>
+          <label class="nx-muted">Alt text</label><br>
+          <input id="acc_item_alt" value="${esc(activeItem?.headerAlt || '')}" style="${inputStyle}">
         </div>
-
-        <div id="acc_subitems_wrap" style="${isGrouped ? '' : 'display:none'}">
-          <label class="nx-muted">Sub-items</label>
-          <div id="acc_subitems_list" class="nx-muted" style="margin-top:8px;display:grid;gap:8px">
-            ${activeSubs.length ? activeSubs.map((s, idx) => `
-              <div class="nx-subitem-row" data-idx="${idx}" style="display:grid;gap:6px;grid-template-columns:1fr 1fr auto;align-items:center">
-                <input class="nx-sub-label nx-toolsel" data-idx="${idx}" placeholder="Label" value="${esc(s.label || '')}" style="width:100%">
-                <input class="nx-sub-url nx-toolsel" data-idx="${idx}" placeholder="Link (optional)" value="${esc(s.url || '')}" style="width:100%">
-                <div style="display:flex;gap:6px;justify-content:flex-end">
-                  <button class="smallbtn" data-act="sub-up" data-idx="${idx}" title="Move up">↑</button>
-                  <button class="smallbtn" data-act="sub-down" data-idx="${idx}" title="Move down">↓</button>
-                  <button class="smallbtn" data-act="sub-del" data-idx="${idx}" title="Remove" style="border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.12)">✕</button>
-                </div>
-              </div>
-            `).join('') : '<div class="nx-muted">No sub-items yet.</div>'}
-          </div>
-          <div style="margin-top:10px">
-            <button class="smallbtn" id="acc_add_subitem" type="button">Add sub-item</button>
-          </div>
-          <br>
-        </div>
-
+        <br>
+        <label class="nx-muted">Body</label><br>
+        <div id="acc_item_body" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:160px;white-space:pre-wrap"></div>
+        <br><br>
         <label class="nx-toggle" style="display:inline-flex;align-items:center;gap:8px">
           <input id="acc_item_open" type="checkbox" ${activeItem?.openDefault ? 'checked' : ''}>
           <span class="nx-toggle-ui"></span>
@@ -3206,30 +3043,26 @@
           <span class="nx-toggle-ui"></span>
           <span class="nx-toggle-label">Show dividers</span>
         </label>
-        <div id="acc_indicator_wrap" style="${isGrouped ? 'display:none' : ''}">
-          <label class="nx-muted">Chevron / indicator (accordion)</label>
-          <select id="acc_indicator" class="nx-toolsel" style="width:100%;margin-top:6px">
-            <option value="right" ${acc.showIndicator && acc.indicatorPosition === 'right' ? 'selected' : ''}>Show (right)</option>
-            <option value="left" ${acc.showIndicator && acc.indicatorPosition === 'left' ? 'selected' : ''}>Show (left)</option>
-            <option value="none" ${!acc.showIndicator ? 'selected' : ''}>Hide</option>
-          </select>
-          <br><br>
-        </div>
-        <div id="acc_imgpos_wrap" style="${isGrouped ? 'display:none' : ''}">
-          <label class="nx-muted">Header image position</label>
-          <select id="acc_img_pos" class="nx-toolsel" style="width:100%;margin-top:6px">
-            <option value="left" ${acc.headerImgPos==='left'?'selected':''}>Left</option>
-            <option value="right" ${acc.headerImgPos==='right'?'selected':''}>Right</option>
-          </select>
-          <br><br>
-          <label class="nx-muted">Header image size</label>
-          <select id="acc_img_size" class="nx-toolsel" style="width:100%;margin-top:6px">
-            <option value="small" ${acc.headerImgSize==='small'?'selected':''}>Small</option>
-            <option value="medium" ${acc.headerImgSize==='medium'?'selected':''}>Medium</option>
-            <option value="large" ${acc.headerImgSize==='large'?'selected':''}>Large</option>
-          </select>
-          <br><br>
-        </div>
+        <label class="nx-muted">Chevron / indicator (accordion)</label>
+        <select id="acc_indicator" class="nx-toolsel" style="width:100%;margin-top:6px">
+          <option value="right" ${acc.showIndicator && acc.indicatorPosition === 'right' ? 'selected' : ''}>Show (right)</option>
+          <option value="left" ${acc.showIndicator && acc.indicatorPosition === 'left' ? 'selected' : ''}>Show (left)</option>
+          <option value="none" ${!acc.showIndicator ? 'selected' : ''}>Hide</option>
+        </select>
+        <br><br>
+        <label class="nx-muted">Header image position</label>
+        <select id="acc_img_pos" class="nx-toolsel" style="width:100%;margin-top:6px">
+          <option value="left" ${acc.headerImgPos==='left'?'selected':''}>Left</option>
+          <option value="right" ${acc.headerImgPos==='right'?'selected':''}>Right</option>
+        </select>
+        <br><br>
+        <label class="nx-muted">Header image size</label>
+        <select id="acc_img_size" class="nx-toolsel" style="width:100%;margin-top:6px">
+          <option value="small" ${acc.headerImgSize==='small'?'selected':''}>Small</option>
+          <option value="medium" ${acc.headerImgSize==='medium'?'selected':''}>Medium</option>
+          <option value="large" ${acc.headerImgSize==='large'?'selected':''}>Large</option>
+        </select>
+        <br><br>
         <label class="nx-muted">Spacing</label>
         <select id="acc_spacing" class="nx-toolsel" style="width:100%;margin-top:6px">
           <option value="compact" ${acc.spacing === 'compact' ? 'selected' : ''}>Compact</option>
@@ -3593,32 +3426,22 @@
     if (blk.type === 'heading') bind('p_level', 'level', (v) => parseInt(v || '2', 10));
     if (blk.type === 'image')  { bind('p_src', 'src'); bind('p_alt', 'alt'); }
     if (blk.type === 'panel')  {
-      const ratioOptions = ['30-70','40-60','50-50','60-40','70-30'];
       bind('p_image', 'image');
       bind('p_alt', 'alt');
       bind('p_layout', 'layout');
       const splitWrap = document.getElementById('panel_split_wrap');
-      const splitRange = document.getElementById('p_split_ratio_range');
-      const splitLabel = document.getElementById('p_split_ratio_label');
-      if (splitRange) {
-        const idx = Math.max(0, ratioOptions.indexOf(p.splitRatio || '50-50'));
-        splitRange.value = String(idx);
-        if (splitLabel) splitLabel.textContent = ratioOptions[idx].replace('-', ' / ');
-      }
+      const splitSelect = document.getElementById('p_split_ratio');
       const toggleSplit = () => {
         if (!splitWrap) return;
         const isSide = (blk.props.layout === 'img-left' || blk.props.layout === 'img-right');
         splitWrap.style.opacity = isSide ? '' : '.4';
         splitWrap.style.pointerEvents = isSide ? '' : 'none';
       };
-      if (splitRange) {
-        splitRange.addEventListener('input', (e) => {
-          const idx = Math.max(0, Math.min(ratioOptions.length - 1, parseInt(e.target.value || '0', 10) || 0));
-          const val = ratioOptions[idx];
-          if (splitLabel) splitLabel.textContent = val.replace('-', ' / ');
+      if (splitSelect) {
+        splitSelect.addEventListener('change', (e) => {
           startEditSession();
           blk.props = blk.props || {};
-          blk.props.splitRatio = val;
+          blk.props.splitRatio = e.target.value;
           persistUnsaved();
           render();
         });
@@ -4055,7 +3878,6 @@
       const renderLen = acc.mode === 'tabs' ? tabCap : items.length;
       const activeIdx = getAccordionFocus(blk.id, renderLen);
       const activeItem = items[activeIdx] || items[0];
-      const isGrouped = acc.accStyle === 'grouped';
 
       const refreshAll = () => {
         persistUnsaved();
@@ -4148,20 +3970,12 @@
         });
       });
 
-      if (!isGrouped) {
-        initRichField('acc_item_body', (activeItem?.bodyHtml ?? activeItem?.body ?? ''), (htmlVal, textVal) => {
-          startEditSession();
-          activeItem.bodyHtml = htmlVal;
-          activeItem.body = textVal;
-          refreshPreview();
-        });
-      } else {
-        const bodyEl = document.getElementById('acc_item_body');
-        if (bodyEl) {
-          bodyEl.textContent = '';
-          bodyEl.setAttribute('contenteditable', 'false');
-        }
-      }
+      initRichField('acc_item_body', (activeItem?.bodyHtml ?? activeItem?.body ?? ''), (htmlVal, textVal) => {
+        startEditSession();
+        activeItem.bodyHtml = htmlVal;
+        activeItem.body = textVal;
+        refreshPreview();
+      });
 
       const titleInput = document.getElementById('acc_item_title');
       if (titleInput) {
@@ -4213,85 +4027,6 @@
           refreshPreview();
         });
         altInput.addEventListener('blur', endEditSession);
-      }
-
-      const styleModeSel = document.getElementById('acc_style_mode');
-      if (styleModeSel) {
-        styleModeSel.addEventListener('change', (e) => {
-          startEditSession();
-          const val = e.target.value === 'grouped' ? 'grouped' : 'standard';
-          acc.accStyle = val;
-          if (val === 'grouped') {
-            acc.allowMultiple = true;
-            acc.allowCollapseAll = true;
-            acc.showIndicator = true;
-            acc.indicatorPosition = 'right';
-            acc.spacing = 'compact';
-            acc.styleVariant = 'minimal';
-          }
-          persistUnsaved();
-          renderInspector();
-          updateBlockCard(blk);
-          bindAccordionPreviews();
-          endEditSession();
-        });
-      }
-
-      const addSubBtn = document.getElementById('acc_add_subitem');
-      const subList = document.getElementById('acc_subitems_list');
-      const bindSubInputs = () => {
-        if (!subList) return;
-        activeItem.subItems = Array.isArray(activeItem.subItems) ? activeItem.subItems : [];
-        subList.querySelectorAll('.nx-sub-label').forEach(inp => {
-          inp.addEventListener('input', (e) => {
-            const idx = parseInt(e.target.dataset.idx || '-1', 10);
-            if (!Number.isInteger(idx) || !activeItem.subItems[idx]) return;
-            startEditSession();
-            activeItem.subItems[idx].label = e.target.value;
-            refreshPreview();
-          });
-        });
-        subList.querySelectorAll('.nx-sub-url').forEach(inp => {
-          inp.addEventListener('input', (e) => {
-            const idx = parseInt(e.target.dataset.idx || '-1', 10);
-            if (!Number.isInteger(idx) || !activeItem.subItems[idx]) return;
-            startEditSession();
-            activeItem.subItems[idx].url = e.target.value;
-            refreshPreview();
-          });
-        });
-        subList.querySelectorAll('button[data-act^=\"sub-\"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const idx = parseInt(btn.dataset.idx || '-1', 10);
-            if (!Number.isInteger(idx) || !activeItem.subItems[idx]) return;
-            startEditSession();
-            const act = btn.dataset.act;
-            if (act === 'sub-del') {
-              activeItem.subItems.splice(idx, 1);
-            } else if (act === 'sub-up' && idx > 0) {
-              const moved = activeItem.subItems.splice(idx, 1)[0];
-              activeItem.subItems.splice(idx - 1, 0, moved);
-            } else if (act === 'sub-down' && idx < activeItem.subItems.length - 1) {
-              const moved = activeItem.subItems.splice(idx, 1)[0];
-              activeItem.subItems.splice(idx + 1, 0, moved);
-            }
-            persistUnsaved();
-            renderInspector();
-            updateBlockCard(blk);
-          });
-        });
-      };
-      bindSubInputs();
-      if (addSubBtn) {
-        addSubBtn.addEventListener('click', () => {
-          startEditSession();
-          activeItem.subItems = Array.isArray(activeItem.subItems) ? activeItem.subItems : [];
-          activeItem.subItems.push({ label: '', url: '' });
-          persistUnsaved();
-          renderInspector();
-          updateBlockCard(blk);
-          endEditSession();
-        });
       }
 
       const allowMulti = document.getElementById('acc_allow_multi');

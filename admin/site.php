@@ -681,6 +681,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
   }
 
+  // Analytics settings
+  if (isset($_POST['save_analytics_settings'])) {
+    if (!Security::checkCsrf($_POST['_csrf'] ?? null)) {
+      $notice = 'CSRF failed.';
+    } else {
+      $enabled = !empty($_POST['analytics_enabled']) ? 1 : 0;
+      $privacy = !empty($_POST['analytics_privacy_mode']) ? 1 : 0;
+      $retention = (int)($_POST['analytics_retention_days'] ?? 180);
+      if ($retention < 30) $retention = 30;
+      if ($retention > 720) $retention = 720;
+      try {
+        $stmt = nx_db()->prepare("UPDATE sites SET analytics_enabled=?, analytics_privacy_mode=?, analytics_retention_days=? WHERE id=? LIMIT 1");
+        $stmt->execute([$enabled, $privacy, $retention, $siteId]);
+        $site['analytics_enabled'] = $enabled;
+        $site['analytics_privacy_mode'] = $privacy;
+        $site['analytics_retention_days'] = $retention;
+        $notice = 'Analytics settings saved.';
+      } catch (\Throwable $e) {
+        $notice = 'Could not save analytics settings.';
+      }
+    }
+  }
+
   // Collections add
   if (isset($_POST['add_collection'])) {
     $name = trim((string)($_POST['collection_name'] ?? ''));
@@ -1324,6 +1347,20 @@ if (isset($_SESSION['user_id'])) {
   .citation-style-pill{border-radius:999px;padding:6px 10px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;}
   .badge-chip{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--border);}
   .badge-chip.staged{background:rgba(37,99,235,0.12);color:#bfdbfe;border-color:rgba(59,130,246,0.4);}
+  .analytics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px;}
+  .analytic-card{border:1px solid var(--border);border-radius:14px;padding:12px;background:rgba(255,255,255,0.03);display:flex;flex-direction:column;gap:6px;}
+  .analytic-card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.4px;}
+  .analytic-card .value{font-size:22px;font-weight:800;letter-spacing:-0.02em;}
+  .analytic-card .delta{font-size:12px;color:var(--muted);}
+  .analytics-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:12px 0;}
+  .analytics-breakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:10px;}
+  .list-table{width:100%;border-collapse:collapse;}
+  .list-table th,.list-table td{padding:8px 6px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;}
+  .list-table th{color:var(--muted);font-size:12px;letter-spacing:0.4px;text-transform:uppercase;}
+  .chart-line{display:flex;gap:4px;align-items:flex-end;height:52px;}
+  .chart-line span{flex:1;border-radius:6px;background:linear-gradient(180deg, rgba(37,99,235,.65), rgba(37,99,235,.28));min-height:2px;}
+  .trend-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.03);font-weight:700;font-size:12px;}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;}
   .cite-viewer{position:fixed;top:0;right:0;width:520px;max-width:90vw;height:100vh;background:var(--panel);border-left:1px solid var(--border);box-shadow:-12px 0 24px rgba(0,0,0,0.25);transition:transform 0.25s ease;z-index:1500;display:flex;flex-direction:column;transform:translateX(100%);}
   .cite-viewer.active{transform:translateX(0);}
   .cite-viewer header{padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;}
@@ -1380,47 +1417,7 @@ if (isset($_SESSION['user_id'])) {
   </style>
 </head>
   <body>
-    <header class="top-bar" role="banner">
-      <a class="brand" aria-label="NexusCMS Admin" href="<?= $base ?>/admin/">
-        <div class="brand-mark" aria-hidden="true">N</div>
-        <div class="brand-text">
-          <span>NexusCMS</span>
-          <small>Admin</small>
-        </div>
-      </a>
-      <nav class="top-nav" aria-label="Admin navigation">
-        <a class="nav-link <?= $activeNav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
-        <a class="nav-link <?= $activeNav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
-        <a class="nav-link <?= $activeNav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Images</a>
-      </nav>
-      <div class="top-actions">
-        <a class="btn primary" href="<?= $base ?>/admin/site_new.php">+ Create new website</a>
-        <div class="user-menu">
-          <details>
-            <summary aria-haspopup="menu">
-            <span class="user-avatar" aria-hidden="true">
-              <?php
-                $initial = $currentUser['display_name'] ?? $currentUser['email'] ?? 'U';
-                $initial = strtoupper(mb_substr($initial, 0, 1));
-                echo Security::e($initial);
-              ?>
-            </span>
-            <span>
-              <?= Security::e($currentUser['display_name'] ?? $currentUser['email'] ?? 'User') ?>
-              <?php if (!empty($currentUser['role'])): ?>
-                <small style="display:block;color:var(--muted);font-weight:500;"><?= Security::e(ucfirst((string)$currentUser['role'])) ?></small>
-              <?php endif; ?>
-            </span>
-          </summary>
-          <div class="menu" role="menu">
-            <div class="user-meta">Logged in <?= Security::e($currentUser['email'] ?? 'as admin') ?></div>
-            <button type="button" id="themeToggleBtn" role="menuitem">🌙 Switch to light</button>
-            <a role="menuitem" href="<?= $base ?>/admin/logout.php">Logout</a>
-          </div>
-        </details>
-      </div>
-    </div>
-  </header>
+    <?php include __DIR__ . '/partials/header.php'; ?>
   <main>
     <div class="wrap">
       <div class="top">
@@ -1444,6 +1441,7 @@ if (isset($_SESSION['user_id'])) {
           <button class="tab" data-tab="header-footer" type="button">Header & Footer</button>
           <button class="tab" data-tab="collections" type="button">Collections</button>
           <button class="tab" data-tab="appearance" type="button">Appearance</button>
+          <button class="tab" data-tab="analytics" type="button">Analytics</button>
           <button class="tab" data-tab="settings" type="button">Settings</button>
           <?php if ($siteSlug === 'cite-them-right'): ?>
             <button class="tab" data-tab="citations" type="button">Citation DB</button>
@@ -2080,6 +2078,191 @@ if (isset($_SESSION['user_id'])) {
               <button type="button" disabled style="opacity:0.7;">Auto-saves on change</button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <!-- ANALYTICS -->
+      <div class="panel" id="panel-analytics">
+        <div class="card" style="margin-top:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div>
+              <h2 style="margin:0">Analytics</h2>
+              <div class="muted">Per-site traffic, visitors, sessions, and content health.</div>
+            </div>
+            <div class="trend-badge" id="analyticsTrendBadge" aria-live="polite">Loading…</div>
+          </div>
+
+          <form method="post" style="margin-top:12px;border:1px solid var(--border);padding:12px;border-radius:12px;display:grid;gap:10px;">
+            <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+            <input type="hidden" name="save_analytics_settings" value="1">
+            <div class="row">
+              <label style="display:flex;align-items:center;gap:8px;font-weight:700;">
+                <input type="checkbox" name="analytics_enabled" value="1" <?= !empty($site['analytics_enabled']) ? 'checked' : '' ?>>
+                Enable analytics for this site
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;font-weight:700;">
+                <input type="checkbox" name="analytics_privacy_mode" value="1" <?= !empty($site['analytics_privacy_mode']) ? 'checked' : '' ?>>
+                Privacy mode (referrer domain only, coarse UA)
+              </label>
+            </div>
+            <div class="row">
+              <div>
+                <label>Retention (days)</label>
+                <input type="number" min="30" max="720" name="analytics_retention_days" value="<?= (int)($site['analytics_retention_days'] ?? 180) ?>">
+                <div class="muted">Raw events pruned after this window; rollups kept longer.</div>
+              </div>
+              <div>
+                <label class="muted">Respect for DNT</label>
+                <div class="pill">Tracking skips browsers with Do Not Track enabled.</div>
+              </div>
+              <div style="display:flex;align-items:flex-end;gap:10px;">
+                <button class="btn primary" type="submit">Save settings</button>
+              </div>
+            </div>
+          </form>
+
+          <div class="analytics-controls">
+            <div>
+              <label class="muted">Quick range</label>
+              <div class="actions" style="margin-top:6px">
+                <button class="btn small" type="button" data-analytics-range="7d">7 days</button>
+                <button class="btn small" type="button" data-analytics-range="30d">30 days</button>
+                <button class="btn small" type="button" data-analytics-range="90d">90 days</button>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+              <div>
+                <label>Start</label>
+                <input type="date" id="analyticsStart">
+              </div>
+              <div>
+                <label>End</label>
+                <input type="date" id="analyticsEnd">
+              </div>
+              <button class="btn" type="button" id="applyAnalyticsRange">Apply</button>
+              <button class="btn" type="button" id="exportAnalyticsCsv">Export CSV</button>
+            </div>
+          </div>
+
+          <div id="analyticsStatus" class="muted" style="margin-top:6px;">Loading…</div>
+          <div class="analytics-grid" id="analyticsSummaryGrid" aria-live="polite">
+            <div class="analytic-card">
+              <div class="label">Page views</div>
+              <div class="value" id="metricViews">—</div>
+              <div class="delta" id="metricViewsDelta"></div>
+            </div>
+            <div class="analytic-card">
+              <div class="label">Unique visitors</div>
+              <div class="value" id="metricUnique">—</div>
+              <div class="delta" id="metricUniqueDelta"></div>
+            </div>
+            <div class="analytic-card">
+              <div class="label">Sessions</div>
+              <div class="value" id="metricSessions">—</div>
+              <div class="delta" id="metricSessionsDelta"></div>
+            </div>
+            <div class="analytic-card">
+              <div class="label">Bounce rate</div>
+              <div class="value" id="metricBounce">—</div>
+              <div class="delta" id="metricBounceDelta"></div>
+            </div>
+            <div class="analytic-card">
+              <div class="label">Pages / session</div>
+              <div class="value" id="metricPagesPerSession">—</div>
+              <div class="delta">Engagement</div>
+            </div>
+            <div class="analytic-card">
+              <div class="label">Avg session duration</div>
+              <div class="value" id="metricAvgDuration">—</div>
+              <div class="delta">Time on site</div>
+            </div>
+          </div>
+
+          <div class="section" style="margin-top:12px;">
+            <h3>Trends</h3>
+            <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+              <div>
+                <div class="muted">Page views</div>
+                <div class="chart-line" id="chartViews"></div>
+              </div>
+              <div>
+                <div class="muted">Unique visitors</div>
+                <div class="chart-line" id="chartUniques"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section" style="margin-top:12px;">
+            <h3>Breakdowns</h3>
+            <div class="analytics-breakdown">
+              <div>
+                <h4 style="margin:0 0 6px 0">Top pages</h4>
+                <table class="list-table" id="topPagesTable">
+                  <thead><tr><th>Path</th><th>Views</th><th>Uniques</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div>
+                <h4 style="margin:0 0 6px 0">Top referrers</h4>
+                <table class="list-table" id="topReferrersTable">
+                  <thead><tr><th>Domain</th><th>Views</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div>
+                <h4 style="margin:0 0 6px 0">UTM campaigns</h4>
+                <table class="list-table" id="topCampaignsTable">
+                  <thead><tr><th>Source / Medium / Campaign</th><th>Views</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div>
+                <h4 style="margin:0 0 6px 0">Device split</h4>
+                <table class="list-table" id="deviceSplitTable">
+                  <thead><tr><th>Device</th><th>Views</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div>
+                <h4 style="margin:0 0 6px 0">Browser</h4>
+                <table class="list-table" id="browserSplitTable">
+                  <thead><tr><th>Browser</th><th>Views</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div>
+                <h4 style="margin:0 0 6px 0">OS</h4>
+                <table class="list-table" id="osSplitTable">
+                  <thead><tr><th>OS</th><th>Views</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div>
+                <h4 style="margin:0 0 6px 0">New vs returning</h4>
+                <div id="newReturning" class="pill">Loading…</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section" style="margin-top:12px;">
+            <h3>Content health</h3>
+            <div class="analytics-breakdown">
+              <div>
+                <h4 style="margin:0 0 6px 0">404 / missing pages</h4>
+                <table class="list-table" id="fourOhFourTable">
+                  <thead><tr><th>Path</th><th>Hits</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div>
+                <h4 style="margin:0 0 6px 0">Slow pages (client load)</h4>
+                <table class="list-table" id="slowPagesTable">
+                  <thead><tr><th>Path</th><th>Avg ms</th><th>Samples</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2741,6 +2924,7 @@ if (isset($_SESSION['user_id'])) {
         });
       }
     })();
+    const basePath = <?= json_encode($base) ?>;
     
     // tabs with hash support
     const tabs = Array.from(document.querySelectorAll('.tab'));
@@ -2791,6 +2975,165 @@ if (isset($_SESSION['user_id'])) {
       collectionFilter = '';
       applyPageFilters();
     });
+    applyPageFilters();
+
+    // Analytics dashboard
+    const analyticsSiteId = <?= (int)$site['id'] ?>;
+    const analyticsStatus = document.getElementById('analyticsStatus');
+    const analyticsBadge = document.getElementById('analyticsTrendBadge');
+    const analyticsStart = document.getElementById('analyticsStart');
+    const analyticsEnd = document.getElementById('analyticsEnd');
+    const analyticsRangeBtns = Array.from(document.querySelectorAll('[data-analytics-range]'));
+    const applyAnalyticsBtn = document.getElementById('applyAnalyticsRange');
+    const exportAnalyticsBtn = document.getElementById('exportAnalyticsCsv');
+    let analyticsRange = '7d';
+
+    const fmtNumber = (n) => new Intl.NumberFormat('en-US').format(n || 0);
+    const fmtDuration = (seconds) => {
+      const s = Math.max(0, parseInt(seconds || 0, 10));
+      const m = Math.floor(s / 60);
+      const rem = s % 60;
+      return (m ? m + 'm ' : '') + rem + 's';
+    };
+    const setStatus = (msg) => { if (analyticsStatus) analyticsStatus.textContent = msg; };
+
+    const fillTable = (tableId, rows, cols) => {
+      const table = document.getElementById(tableId);
+      if (!table) return;
+      const body = table.querySelector('tbody');
+      if (!body) return;
+      body.innerHTML = '';
+      if (!rows || !rows.length) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = cols.length;
+        td.className = 'muted';
+        td.textContent = 'No data for this range.';
+        tr.appendChild(td);
+        body.appendChild(tr);
+        return;
+      }
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+        cols.forEach(c => {
+          const td = document.createElement('td');
+          td.textContent = r[c] !== undefined ? r[c] : '—';
+          tr.appendChild(td);
+        });
+        body.appendChild(tr);
+      });
+    };
+
+    const renderChart = (elId, points) => {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      el.innerHTML = '';
+      if (!points || !points.length) {
+        el.innerHTML = '<div class="muted">No data</div>';
+        return;
+      }
+      const max = Math.max(...points.map(p => p.value || 0)) || 1;
+      points.forEach(p => {
+        const bar = document.createElement('span');
+        bar.style.height = Math.max(2, Math.round((p.value / max) * 52)) + 'px';
+        bar.title = `${p.day}: ${p.value}`;
+        el.appendChild(bar);
+      });
+    };
+
+    const renderAnalytics = (data) => {
+      if (!data) return;
+      const summary = data.summary || {};
+      const comparison = (data.period && data.period.comparison) ? data.period.comparison : {views:0,sessions:0};
+      const viewsDelta = summary.views - (comparison.views || 0);
+      const sessionsDelta = summary.sessions - (comparison.sessions || 0);
+      const bounceRate = summary.sessions ? Math.round((summary.bounces / summary.sessions) * 10000) / 100 : 0;
+
+      const setVal = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+      setVal('metricViews', fmtNumber(summary.views));
+      setVal('metricViewsDelta', (viewsDelta >= 0 ? '▲ ' : '▼ ') + fmtNumber(Math.abs(viewsDelta)) + ' vs prior');
+      setVal('metricUnique', fmtNumber(summary.unique));
+      setVal('metricSessions', fmtNumber(summary.sessions));
+      setVal('metricSessionsDelta', (sessionsDelta >= 0 ? '▲ ' : '▼ ') + fmtNumber(Math.abs(sessionsDelta)) + ' vs prior');
+      setVal('metricBounce', summary.sessions ? bounceRate.toFixed(1) + '%' : '—');
+      setVal('metricBounceDelta', summary.sessions ? (summary.bounces || 0) + ' bounces' : '');
+      setVal('metricPagesPerSession', summary.pages_per_session ? summary.pages_per_session.toFixed(2) : '0.00');
+      setVal('metricAvgDuration', fmtDuration(summary.avg_session_seconds));
+
+      if (analyticsBadge) {
+        const pct = comparison.views > 0 ? Math.round((viewsDelta / comparison.views) * 1000) / 10 : (summary.views > 0 ? 100 : 0);
+        analyticsBadge.textContent = `${fmtNumber(summary.views)} views • ${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct)}% vs prior`;
+      }
+
+      renderChart('chartViews', data.trend?.views || []);
+      renderChart('chartUniques', data.trend?.unique || []);
+
+      fillTable('topPagesTable', (data.breakdowns?.pages || []).map(r => ({path:r.path || '/', views: r.views ?? 0, uniq: r.uniq ?? r.unique ?? 0})), ['path','views','uniq']);
+      fillTable('topReferrersTable', (data.breakdowns?.referrers || []).map(r => ({domain: r.referrer || r.referrer_domain || '(direct)', views: r.views ?? 0})), ['domain','views']);
+      fillTable('topCampaignsTable', (data.breakdowns?.campaigns || []).map(r => ({campaign: r.campaign || '(unspecified)', views: r.views ?? 0})), ['campaign','views']);
+      fillTable('deviceSplitTable', (data.breakdowns?.devices || []).map(r => ({device: r.label || r.device || 'Unknown', views: r.views ?? 0})), ['device','views']);
+      fillTable('browserSplitTable', (data.breakdowns?.browsers || []).map(r => ({browser: r.label || r.browser || 'Unknown', views: r.views ?? 0})), ['browser','views']);
+      fillTable('osSplitTable', (data.breakdowns?.oses || []).map(r => ({os: r.label || r.os || 'Unknown', views: r.views ?? 0})), ['os','views']);
+      fillTable('fourOhFourTable', (data.breakdowns?.four_oh_four || []).map(r => ({path: r.path || '', hits: r.hits ?? 0})), ['path','hits']);
+      fillTable('slowPagesTable', (data.breakdowns?.slow_pages || []).map(r => ({path: r.path || '', load_ms: r.load_ms ?? 0, samples: r.samples ?? 0})), ['path','load_ms','samples']);
+
+      const nr = data.breakdowns?.new_vs_returning || {};
+      const nrEl = document.getElementById('newReturning');
+      if (nrEl) nrEl.textContent = `New ${fmtNumber(nr.new || 0)} / Returning ${fmtNumber(nr.returning || 0)}`;
+    };
+
+    const loadAnalytics = async () => {
+      if (!analyticsStatus) return;
+      setStatus('Loading…');
+      try {
+        const url = new URL((basePath || '') + '/api/analytics/dashboard', window.location.origin);
+        url.searchParams.set('site_id', analyticsSiteId);
+        if (analyticsRange !== 'custom') url.searchParams.set('range', analyticsRange);
+        if (analyticsStart?.value) url.searchParams.set('start', analyticsStart.value);
+        if (analyticsEnd?.value) url.searchParams.set('end', analyticsEnd.value);
+        const res = await fetch(url.toString(), {credentials:'same-origin'});
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.error || 'Unable to load analytics');
+        renderAnalytics(json.data);
+        setStatus('Updated ' + new Date().toLocaleTimeString());
+      } catch (err) {
+        setStatus(err.message || 'Unable to load analytics');
+      }
+    };
+
+    const todayIso = new Date().toISOString().slice(0,10);
+    const weekAgoIso = new Date(Date.now() - 6*864e5).toISOString().slice(0,10);
+    if (analyticsStart && !analyticsStart.value) analyticsStart.value = weekAgoIso;
+    if (analyticsEnd && !analyticsEnd.value) analyticsEnd.value = todayIso;
+    if (analyticsRangeBtns[0]) analyticsRangeBtns[0].classList.add('primary');
+
+    analyticsRangeBtns.forEach(btn => btn.addEventListener('click', () => {
+      analyticsRangeBtns.forEach(b => b.classList.remove('primary'));
+      btn.classList.add('primary');
+      analyticsRange = btn.dataset.analyticsRange || '7d';
+      loadAnalytics();
+    }));
+
+    applyAnalyticsBtn?.addEventListener('click', () => {
+      analyticsRange = 'custom';
+      analyticsRangeBtns.forEach(b => b.classList.remove('primary'));
+      loadAnalytics();
+    });
+
+    exportAnalyticsBtn?.addEventListener('click', () => {
+      const start = analyticsStart?.value || '';
+      const end = analyticsEnd?.value || '';
+      const url = new URL((basePath || '') + '/api/analytics/export', window.location.origin);
+      url.searchParams.set('site_id', analyticsSiteId);
+      if (start) url.searchParams.set('start', start);
+      if (end) url.searchParams.set('end', end);
+      url.searchParams.set('report', 'pages');
+      window.location = url.toString();
+    });
+
+    if (document.getElementById('panel-analytics')) {
+      loadAnalytics();
+    }
 
     // Citation subtabs
     const subtabButtons = Array.from(document.querySelectorAll('.citation-subtab'));

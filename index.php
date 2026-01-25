@@ -10,6 +10,7 @@ use NexusCMS\Models\Page;
 use NexusCMS\Models\CitationExample;
 use NexusCMS\Services\Renderer;
 use NexusCMS\Core\Security;
+use NexusCMS\Models\Analytics;
 
 /**
  * Helpers
@@ -43,6 +44,38 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 /**
  * Routes
  */
+
+// Public analytics collection endpoint
+if ($method === 'POST' && $uri === '/api/analytics/collect') {
+  $data = json_decode(file_get_contents('php://input'), true);
+  if (!is_array($data)) json_response(['ok' => false, 'error' => 'Invalid JSON'], 400);
+
+  $siteId = (int)($data['site_id'] ?? 0);
+  if ($siteId <= 0) json_response(['ok' => false, 'error' => 'Missing site'], 400);
+
+  $result = Analytics::record($data);
+  $status = ($result['error'] ?? '') === 'rate_limited' ? 429 : 200;
+  if (!empty($result['ok']) && !empty($result['visitor_key'])) {
+    $baseCookiePath = rtrim($base, '/') . '/';
+    $longTtl = time() + (86400 * 365 * 2);
+    $sessionTtl = time() + 86400; // keep short; server enforces timeout
+    setcookie('nx_vid_' . $siteId, $result['visitor_key'], [
+      'expires' => $longTtl,
+      'path' => $baseCookiePath ?: '/',
+      'httponly' => false,
+      'samesite' => 'Lax',
+    ]);
+    if (!empty($result['session_key'])) {
+      setcookie('nx_sid_' . $siteId, $result['session_key'], [
+        'expires' => $sessionTtl,
+        'path' => $baseCookiePath ?: '/',
+        'httponly' => false,
+        'samesite' => 'Lax',
+      ]);
+    }
+  }
+  json_response($result, $status);
+}
 
 // Landing: list sites
 if ($method === 'GET' && $uri === '/') {
@@ -122,7 +155,12 @@ if ($method === 'GET' && preg_match('#^/s/([^/]+)/([^/]+)$#', $uri, $m)) {
   if (!$page) {
     $page = Page::findBySlugAnyStatus((int)$site['id'], $pageSlug);
   }
-  if (!$page) { http_response_code(404); echo "Page not found"; exit; }
+  if (!$page) {
+    Analytics::record404((int)$site['id'], $uri, ['referrer' => $_SERVER['HTTP_REFERER'] ?? '']);
+    http_response_code(404);
+    echo "Page not found";
+    exit;
+  }
 
   $doc = json_decode($page['builder_json'] ?? '{}', true) ?: ['version'=>1,'rows'=>[]];
   $content = Renderer::render($doc);
@@ -379,6 +417,48 @@ if ($method === 'POST' && $uri === '/api/revisions/milestone') {
 
   \NexusCMS\Models\Revision::setMilestone($id, $flag);
   json_response(['ok'=>true]);
+}
+
+// API: Analytics dashboard (admin)
+if ($method === 'GET' && $uri === '/api/analytics/dashboard') {
+  require_admin();
+  $siteId = (int)($_GET['site_id'] ?? 0);
+  if ($siteId <= 0) json_response(['ok'=>false,'error'=>'Missing site_id'], 400);
+
+  $range = strtolower((string)($_GET['range'] ?? '7d'));
+  $endStr = $_GET['end'] ?? 'today';
+  $startStr = $_GET['start'] ?? '';
+  $end = new DateTimeImmutable($endStr ?: 'today');
+  if (in_array($range, ['7','7d','week'], true)) {
+    $start = $end->sub(new DateInterval('P6D'));
+  } elseif (in_array($range, ['30','30d','month'], true)) {
+    $start = $end->sub(new DateInterval('P29D'));
+  } elseif (in_array($range, ['90','90d','quarter'], true)) {
+    $start = $end->sub(new DateInterval('P89D'));
+  } elseif ($startStr) {
+    $start = new DateTimeImmutable($startStr);
+  } else {
+    $start = $end->sub(new DateInterval('P6D'));
+  }
+
+  $data = Analytics::dashboard($siteId, $start, $end);
+  json_response(['ok' => true, 'data' => $data]);
+}
+
+// API: Analytics CSV export (admin)
+if ($method === 'GET' && $uri === '/api/analytics/export') {
+  require_admin();
+  $siteId = (int)($_GET['site_id'] ?? 0);
+  if ($siteId <= 0) json_response(['ok'=>false,'error'=>'Missing site_id'], 400);
+  $report = (string)($_GET['report'] ?? 'events');
+  $end = new DateTimeImmutable($_GET['end'] ?? 'today');
+  $start = $_GET['start'] ? new DateTimeImmutable((string)$_GET['start']) : $end->sub(new DateInterval('P6D'));
+
+  $csv = Analytics::exportCsv($siteId, $start, $end, $report);
+  header('Content-Type: text/csv; charset=utf-8');
+  header('Content-Disposition: attachment; filename="analytics-' . $siteId . '-' . date('Ymd') . '.csv"');
+  echo $csv;
+  exit;
 }
 
 // Fallback

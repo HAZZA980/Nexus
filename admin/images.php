@@ -3,46 +3,9 @@ require __DIR__ . '/../app/bootstrap.php';
 require_admin();
 
 use NexusCMS\Core\Security;
-use NexusCMS\Models\User;
 
 $base = base_path();
 $activeNav = 'images';
-$me = null;
-if (isset($_SESSION['user_id'])) {
-  $me = User::findById((int)$_SESSION['user_id']) ?: null;
-}
-$uploadNotice = null;
-$uploadError = null;
-
-// Handle upload
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'upload') {
-  if (!Security::checkCsrf($_POST['_csrf'] ?? null)) {
-    $uploadError = 'Security check failed.';
-  } elseif (!isset($_FILES['image']) || ($_FILES['image']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-    $uploadError = 'Please choose an image to upload.';
-  } else {
-    $file = $_FILES['image'];
-    $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/svg+xml' => 'svg'];
-    $mime = mime_content_type($file['tmp_name']);
-    if (!isset($allowed[$mime])) {
-      $uploadError = 'Unsupported format. Upload jpg, png, webp, or svg.';
-    } else {
-      $ext = $allowed[$mime];
-      $dir = __DIR__ . '/../public/uploads';
-      if (!is_dir($dir)) @mkdir($dir, 0775, true);
-      $name = pathinfo($file['name'], PATHINFO_FILENAME);
-      $safe = preg_replace('/[^a-zA-Z0-9-_]+/', '-', strtolower($name));
-      $safe = trim($safe, '-');
-      if ($safe === '') $safe = 'image';
-      $dest = $dir . '/' . $safe . '-' . uniqid() . '.' . $ext;
-      if (move_uploaded_file($file['tmp_name'], $dest)) {
-        $uploadNotice = 'Image uploaded successfully.';
-      } else {
-        $uploadError = 'Upload failed. Try again.';
-      }
-    }
-  }
-}
 
 // Mock image data until backed by real storage
 $images = [
@@ -209,65 +172,14 @@ sort($sites);
   </style>
 </head>
 <body>
-  <header class="top-bar" role="banner">
-    <div class="brand" aria-label="NexusCMS Admin">
-      <div class="brand-mark" aria-hidden="true">N</div>
-      <div class="brand-text">
-        <span>NexusCMS</span>
-        <small>Admin</small>
-      </div>
-    </div>
-    <nav class="top-nav" aria-label="Admin navigation">
-      <a class="nav-link <?= $activeNav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
-      <a class="nav-link <?= $activeNav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
-      <a class="nav-link <?= $activeNav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Images</a>
-    </nav>
-    <div class="top-actions">
-      <a class="btn primary" href="<?= $base ?>/admin/site_new.php">+ Create new website</a>
-      <div class="user-menu">
-        <details>
-          <summary aria-haspopup="menu">
-            <span class="user-avatar" aria-hidden="true">
-              <?php
-                $initial = 'U';
-                if ($me) {
-                  $initial = strtoupper(mb_substr($me['display_name'] ?? $me['email'] ?? 'U', 0, 1));
-                }
-                echo Security::e($initial);
-              ?>
-            </span>
-            <span>
-              <?= Security::e($me['display_name'] ?? $me['email'] ?? 'User') ?>
-              <?php if (!empty($me['role'])): ?>
-                <small style="display:block;color:var(--muted);font-weight:500;"><?= Security::e(ucfirst((string)$me['role'])) ?></small>
-              <?php endif; ?>
-            </span>
-          </summary>
-          <div class="menu" role="menu">
-            <div class="user-meta">Logged in <?= Security::e($me['email'] ?? '') ?></div>
-            <a role="menuitem" href="<?= $base ?>/admin/logout.php">Logout</a>
-          </div>
-        </details>
-      </div>
-    </div>
-  </header>
+  <?php include __DIR__ . '/partials/header.php'; ?>
   <main>
-    <?php if ($notice): ?><div class="notice"><?= Security::e($notice) ?></div><?php endif; ?>
-    <?php if ($error): ?><div class="error-banner"><?= Security::e($error) ?></div><?php endif; ?>
-    <?php if ($uploadNotice): ?><div class="notice"><?= Security::e($uploadNotice) ?></div><?php endif; ?>
-    <?php if ($uploadError): ?><div class="error-banner"><?= Security::e($uploadError) ?></div><?php endif; ?>
-
     <div class="page-head">
       <div>
         <h1>Images</h1>
         <p>Manage images used across your sites.</p>
       </div>
-      <form method="post" enctype="multipart/form-data" style="display:inline-flex;gap:8px;align-items:center;">
-        <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
-        <input type="hidden" name="mode" value="upload">
-        <input id="fileInput" name="image" type="file" accept="image/*" style="display:none;">
-        <button class="btn primary" type="button" onclick="document.getElementById('fileInput').click();">Upload image</button>
-      </form>
+      <button class="btn primary" type="button">Upload image</button>
     </div>
 
     <form class="filters" method="get">

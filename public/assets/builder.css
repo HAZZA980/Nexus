@@ -890,142 +890,90 @@ html[data-theme="light"] .nx-mode-toggle .mode-current{
   white-space:pre-wrap;
   max-width:100%;
 }
-.nx-accordion-body ul,
-.nx-accordion-body ol{
-  list-style:none;
-  padding:0;
-  margin:0;
-}
-.nx-accordion-body li{margin:0 0 6px;}
-.nx-accordion--grouped{
-  border:1px solid #d7deeb;
-  border-radius:14px;
-  background:#f6f8fb;
-}
+.nx-accordion--grouped{border:1px solid #cbd5e1;background:#f4f5f7;}
 .nx-accordion--grouped .nx-accordion-head{
   justify-content:space-between;
-  font-weight:700;
-  background:#e8eeff;
-  color:#0f172a;
-  border-bottom:1px solid #d7deeb;
-  padding:12px 16px;
+  font-weight:800;
 }
 .nx-accordion--grouped .nx-accordion-plus{
-  font-weight:800;
+  font-weight:900;
   font-size:18px;
-  width:auto;
-  height:auto;
-  border:0;
-  border-radius:0;
-  color:#0f172a;
-}
-.nx-accordion--grouped .nx-accordion-panel{
-  padding:0;
-  background:#fff;
 }
 .nx-accordion--grouped .nx-accordion-body{
-  padding:0;
-  background:#fff;
-  line-height:1.45;
-  width:100%;
+  padding:10px 14px;
 }
-.nx-accordion--grouped .nx-accordion-body ul{
-  list-style:none;
-  margin:0;
-  padding:0;
-}
-.nx-accordion--grouped .nx-accordion-body li{margin:0;}
 .nx-accordion-sublist{
   list-style:none;
   padding:0;
   margin:0;
-  display:block;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:4px 18px;
 }
 .nx-accordion-sublist li{
   padding:4px 0;
-  color:#111827;
 }
 .nx-accordion-sublist a{
-  color:#0f172a;
+  color:#2563eb;
   text-decoration:none;
-  font-weight:600;
 }
 .nx-accordion-sublist a:hover{text-decoration:underline;}
 .nx-accordion--grouped .nx-accordion-head .nx-accordion-chevron{display:none;}
 .nx-accordion--grouped .nx-accordion-parent .nx-accordion-head{
-  background:#e8eeff;
-  color:#0f172a;
-  border-bottom:1px solid #d7deeb;
+  background:#f2f3f6;
+  color:#0b275f;
+  border-bottom:1px solid #cbd5e1;
   font-weight:700;
+  padding:12px 14px;
 }
 .nx-accordion--grouped .nx-accordion-child .nx-accordion-head{
   background:transparent;
-  color:#0f172a;
+  color:#0b275f;
   font-weight:700;
-  padding:0;
 }
 .nx-accordion--grouped .nx-accordion-child .nx-accordion-head:hover{
-  background:transparent;
+  background:#eef2fa;
 }
 .nx-accordion--grouped .nx-accordion-child .nx-accordion-panel{
   background:#fff;
 }
 .nx-accordion-childlist{
-  margin-top:0;
-  padding-top:0;
-  border-top:0;
-  display:flex;
-  flex-direction:column;
-  gap:0;
-  width:100%;
+  margin-top:0px;
+  border-top:1px solid #cbd5e1;
 }
 .nx-accordion-childrow{
-  border:0;
-  background:transparent;
-  margin:0;
-  padding:0;
-  width:100%;
+  border-bottom:1px solid #cbd5e1;
+  background:#f9fafb;
+  margin:3px 0;
 }
 .nx-accordion-childhead{
   width:100%;
-  padding:10px 12px;
+  padding:10px 10px;
   display:flex;
   justify-content:space-between;
   align-items:center;
-  gap:10px;
-  background:#f3f4f6;
-  border:1px solid #d1d9e6;
+  background:transparent;
+  border:none;
   cursor:pointer;
   font-weight:700;
-  color:#0f172a;
-  text-align:left;
-  font-size:14px;
-  line-height:1.35;
-  border-radius:12px;
-  margin:0;
-  appearance:none;
-  box-shadow:0 1px 0 rgba(15,23,42,.05);
+  color:#0b275f;
 }
 .nx-accordion-childhead .nx-accordion-plus,
 .nx-accordion--grouped .nx-accordion-head .nx-accordion-plus{
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  width:auto;
-  height:auto;
-  border:0;
-  border-radius:0;
+  width:24px;
+  height:24px;
+  border:1px solid #0b275f;
+  border-radius:50%;
   font-weight:800;
-  font-size:18px;
-  color:#0f172a;
 }
+.nx-accordion-childhead .nx-accordion-plus{font-size:16px;}
 .nx-accordion-childpanel{
-  padding:10px 12px;
+  padding:10px 14px 12px;
   background:#fff;
-  border:1px solid #e5e7eb;
-  border-radius:12px;
-  margin-top:0;
-  width:100%;
+  border-top:1px solid #e2e8f0;
 }
 .nx-accordion[data-spacing="compact"] .nx-accordion-head,
 .nx-accordion[data-spacing="compact"] .nx-accordion-body{padding:10px 12px;}

@@ -18,6 +18,9 @@ final class Site {
       if (!isset($have['homepage_page_id'])) $alter[] = "ADD COLUMN homepage_page_id INT NULL";
       if (!isset($have['header_default_key'])) $alter[] = "ADD COLUMN header_default_key VARCHAR(100) DEFAULT 'nav-left'";
       if (!isset($have['footer_default_key'])) $alter[] = "ADD COLUMN footer_default_key VARCHAR(100) DEFAULT 'footer-minimal'";
+      if (!isset($have['analytics_enabled'])) $alter[] = "ADD COLUMN analytics_enabled TINYINT(1) NOT NULL DEFAULT 1";
+      if (!isset($have['analytics_privacy_mode'])) $alter[] = "ADD COLUMN analytics_privacy_mode TINYINT(1) NOT NULL DEFAULT 0";
+      if (!isset($have['analytics_retention_days'])) $alter[] = "ADD COLUMN analytics_retention_days INT NOT NULL DEFAULT 180";
       if ($alter) $pdo->exec("ALTER TABLE sites " . implode(',', $alter));
     } catch (\Throwable $e) {
       // best effort

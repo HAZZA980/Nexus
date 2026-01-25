@@ -26,7 +26,48 @@ a{color:inherit}
 .nx-card{border:1px solid var(--border);border-radius:18px;padding:14px;background:rgba(0,0,0,.2)}
 .nx-card-title{font-weight:900;margin-bottom:6px}
 .nx-card-body{color:var(--muted);line-height:1.5}
-.nx-img{max-width:100%;border-radius:16px;border:1px solid var(--border)}
+.nx-img{
+  display:block;
+  width:100%;
+  max-width:100%;
+  aspect-ratio:4/3;
+  object-fit:cover;
+  border-radius:16px;
+  border:1px solid var(--border);
+}
+.nexus-page .nx-card img,
+.nexus-page .nx-panel img,
+.nexus-page .nx-examplecard img,
+.nexus-page .nx-gallery img{
+  width:100%;
+  display:block;
+  aspect-ratio:4/3;
+  object-fit:cover;
+  border-radius:16px;
+  border:1px solid var(--border);
+}
+.nexus-page .nx-panel{
+  display:grid;
+  gap:12px;
+  align-items:center;
+}
+.nexus-page .nx-panel--img-left,
+.nexus-page .nx-panel--img-right{
+  grid-template-columns:auto 1fr !important;
+}
+.nexus-page .nx-panel-media{
+  width:clamp(96px, 32vw, 180px);
+}
+.nexus-page .nx-panel--stacked .nx-panel-media{
+  width:100%;
+}
+.nexus-page .nx-panel-media img{
+  width:100%;
+  height:100%;
+  aspect-ratio:1/1;
+  object-fit:cover;
+  border-radius:12px;
+}
 .nx-video iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:16px;border:1px solid var(--border)}
 .nx-nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .nx-navlink{color:var(--muted);text-decoration:none;padding:8px 10px;border-radius:12px}

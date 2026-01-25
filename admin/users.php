@@ -223,49 +223,7 @@ function relative_time(?string $ts): string {
   </style>
 </head>
 <body>
-  <header class="top-bar" role="banner">
-    <div class="brand" aria-label="NexusCMS Admin">
-      <div class="brand-mark" aria-hidden="true">N</div>
-      <div class="brand-text">
-        <span>NexusCMS</span>
-        <small>Admin</small>
-      </div>
-    </div>
-    <nav class="top-nav" aria-label="Admin navigation">
-      <a class="nav-link <?= $activeNav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
-      <a class="nav-link <?= $activeNav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
-      <a class="nav-link <?= $activeNav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Images</a>
-    </nav>
-    <div class="top-actions">
-      <a class="btn primary" href="<?= $base ?>/admin/site_new.php">+ Create new website</a>
-      <div class="user-menu">
-        <details>
-          <summary aria-haspopup="menu">
-            <span class="user-avatar" aria-hidden="true">
-              <?php
-                $initial = $_SESSION['user_id'] ?? 'U';
-                if (isset($_SESSION['user_id'])) {
-                  $u = User::findById((int)$_SESSION['user_id']);
-                  $initial = strtoupper(mb_substr($u['display_name'] ?? $u['email'] ?? 'U', 0, 1));
-                }
-                echo Security::e($initial);
-              ?>
-            </span>
-            <span>
-              <?= Security::e($u['display_name'] ?? $u['email'] ?? 'User') ?>
-              <?php if (!empty($u['role'])): ?>
-                <small style="display:block;color:var(--muted);font-weight:500;"><?= Security::e(ucfirst((string)$u['role'])) ?></small>
-              <?php endif; ?>
-            </span>
-          </summary>
-          <div class="menu" role="menu">
-            <div class="user-meta">Logged in <?= Security::e($u['email'] ?? '') ?></div>
-            <a role="menuitem" href="<?= $base ?>/admin/logout.php">Logout</a>
-          </div>
-        </details>
-      </div>
-    </div>
-  </header>
+  <?php include __DIR__ . '/partials/header.php'; ?>
   <main>
     <div class="page-head">
       <div>

@@ -369,5 +369,101 @@ if (!$usedPartialFooter) {
   <script src="<?= Security::e($siteJsUrl) ?>" defer></script>
 <?php endif; ?>
 
+<?php if (!empty($site['analytics_enabled']) && !$isPreview): ?>
+<script>
+(function(){
+  // Skip analytics for admins to avoid contaminating data
+  const isAdmin = <?= $isAdmin ? 'true' : 'false' ?>;
+  if (isAdmin) return;
+
+  if (navigator.doNotTrack === '1' || window.doNotTrack === '1') return;
+  const siteId = <?= (int)$site['id'] ?>;
+  const privacy = <?= !empty($site['analytics_privacy_mode']) ? 'true' : 'false' ?>;
+  const basePath = <?= json_encode(rtrim($base, '/')) ?>;
+  const endpoint = (basePath || '') + '/api/analytics/collect';
+  const vidKey = 'nx_vid_' + siteId;
+  const sidKey = 'nx_sid_' + siteId;
+  const now = Date.now();
+
+  const randHex = (len=32) => {
+    const arr = new Uint8Array(len/2);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, b => ('0'+b.toString(16)).slice(-2)).join('');
+  };
+  const getCookie = (name) => {
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([$?*|{}\(\)\[\]\\\/\+^])/g,'\\$1') + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : '';
+  };
+  const setCookie = (name, value, days) => {
+    const expires = new Date(Date.now() + days*864e5).toUTCString();
+    const path = basePath || '/';
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=${path}; SameSite=Lax`;
+  };
+
+  let visitor = getCookie(vidKey);
+  if (!visitor) {
+    visitor = randHex(32);
+    setCookie(vidKey, visitor, 730);
+  }
+
+  let sessionKey = '';
+  let sessionStarted = 0;
+  const rawSession = getCookie(sidKey);
+  if (rawSession) {
+    const parts = rawSession.split('.');
+    sessionKey = parts[0] || '';
+    sessionStarted = parseInt(parts[1] || '0', 10);
+  }
+  const sessionAge = now - (sessionStarted || 0);
+  if (!sessionKey || !sessionStarted || sessionAge > 30*60*1000) {
+    sessionKey = randHex(24);
+    sessionStarted = now;
+    setCookie(sidKey, `${sessionKey}.${sessionStarted}`, 1);
+  } else {
+    // Refresh expiry
+    setCookie(sidKey, `${sessionKey}.${sessionStarted}`, 1);
+  }
+
+  const url = new URL(window.location.href);
+  const params = url.searchParams;
+  const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+  const payload = {
+    site_id: siteId,
+    visitor_key: visitor,
+    session_key: sessionKey,
+    path: url.pathname + url.search,
+    title: document.title || '',
+    referrer: document.referrer || '',
+    utm_source: params.get('utm_source') || '',
+    utm_medium: params.get('utm_medium') || '',
+    utm_campaign: params.get('utm_campaign') || '',
+    load_ms: nav ? Math.round(nav.loadEventEnd || 0) : null,
+    ttfb_ms: nav ? Math.round(nav.responseStart || 0) : null,
+    dnt: false,
+  };
+
+  if (privacy) payload.privacy = true;
+
+  const send = () => {
+    const body = JSON.stringify(payload);
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], {type:'application/json'});
+      navigator.sendBeacon(endpoint, blob);
+    } else {
+      fetch(endpoint, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body,
+        keepalive:true
+      }).catch(()=>{});
+    }
+  };
+
+  if (document.readyState === 'complete') send();
+  else window.addEventListener('load', () => send(), {once:true});
+})();
+</script>
+<?php endif; ?>
+
 </body>
 </html>
