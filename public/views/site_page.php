@@ -58,11 +58,21 @@ $breakpoint = (int)($layout['breakpoint'] ?? 1200);
 
 $buttonStyle = $shape['buttonStyle'] ?? 'pill';
 $inputStyle = $shape['inputStyle'] ?? 'rounded';
-$buttonRadius = $buttonStyle === 'square' ? 8 : ($buttonStyle === 'rounded' ? max(10, $radius) : 9999);
-$inputRadius = $inputStyle === 'square' ? 8 : max(10, $radius);
+
+// Respect global radius; only keep pill rounding when explicitly chosen
+if ($buttonStyle === 'pill') {
+  $buttonRadius = $radius === 0 ? 0 : 9999;
+} elseif ($buttonStyle === 'rounded') {
+  $buttonRadius = $radius === 0 ? 0 : max(10, $radius);
+} else { // square or fallback
+  $buttonRadius = $radius;
+}
+
+$inputRadius = $inputStyle === 'square' ? $radius : ($radius === 0 ? 0 : max(10, $radius));
 
 $imageRatio = $media['imageRatio'] ?? '16:9';
 $imageRadius = (int)($media['imageRadius'] ?? 12);
+if ($radius === 0) $imageRadius = 0;
 $videoStyle = $media['videoStyle'] ?? 'shadow';
 $mediaMaxWidth = $media['mediaMaxWidth'] ?? '1200px';
 
@@ -219,8 +229,12 @@ function safe_include(string $path, string $root): bool {
       font-weight:calc(var(--nexus-font-weight,600));
       line-height:calc(var(--nexus-line-height,1.55) * 0.9);
     }
-    h1{font-size:calc(var(--nexus-font-size,16px) * var(--nexus-heading-scale,1.35));}
-    h2{font-size:calc(var(--nexus-font-size,16px) * (var(--nexus-heading-scale,1.35) - 0.1));}
+    h1{font-size:28px;}
+    h2{font-size:24px;}
+    h3{font-size:20px;}
+    h4{font-size:18px;}
+    h5{font-size:16px;}
+    h6{font-size:14px;}
 
     /* Preview admin bar only */
     .nx-adminbar{
@@ -319,7 +333,7 @@ if (!$usedPartialHeader) {
           <a href="<?= Security::e($item['href'] ?? '#') ?>" style="text-decoration:none;color:#111827"><?= Security::e($item['label'] ?? '') ?></a>
         <?php endforeach; ?>
         <?php if (!empty($headerCta['label'])): ?>
-          <a href="<?= Security::e($headerCta['href'] ?? '#') ?>" style="padding:10px 12px;border-radius:8px;background:#2563eb;color:#fff;text-decoration:none;"><?= Security::e($headerCta['label']) ?></a>
+          <a href="<?= Security::e($headerCta['href'] ?? '#') ?>" style="padding:10px 12px;border-radius:var(--nexus-radius, 0px);background:#2563eb;color:#fff;text-decoration:none;"><?= Security::e($headerCta['label']) ?></a>
         <?php endif; ?>
       </nav>
     </header>

@@ -160,7 +160,7 @@ a{color:inherit}
   color:rgba(230,234,242,.9);
 }
 .nx-examplecard-heading{font-weight:900;margin-bottom:10px;font-size:17px;}
-.nx-examplecard-body{line-height:1.6;}
+.nx-examplecard-body{line-height:1.6;white-space:pre-line;}
 .nx-examplecard-try-title{font-weight:900;margin-bottom:10px;}
 .nx-examplecard-trybox{
   border:1px solid rgba(255,255,255,.28);

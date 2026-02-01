@@ -235,6 +235,7 @@ $colorOpts = [
 
 $typoOpts = [
   'fontFamily' => [
+    '"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial' => 'Nunito',
     'system-ui,-apple-system,Segoe UI,Roboto,Arial' => 'System sans',
     '"Inter",system-ui,-apple-system,Segoe UI,Roboto,Arial' => 'Inter',
     '"Helvetica Neue",Helvetica,Arial,sans-serif' => 'Helvetica',
@@ -282,7 +283,11 @@ $layoutOpts = [
 ];
 
 $shapeOpts = [
-  'radius' => [10 => 'Subtle', 14 => 'Rounded', 16 => 'Soft', 22 => 'Pillowy'],
+  // Controls default corner rounding across the site
+  'radius' => [
+    16 => 'Curved',
+    0  => 'Square',
+  ],
   'shadow' => [
     'none' => 'Flat',
     '0 8px 22px rgba(0,0,0,.18)' => 'Soft lift',
@@ -370,16 +375,89 @@ $partialStatus = [
 ];
 $citationStyles = [
   'Harvard',
-  'APA',
-  'MLA',
-  'Chicago Author-Date',
-  'Chicago Notes & Bibliography',
-  'Vancouver',
+  'APA 7th',
+  'Chicago 18th',
+  'Chicago 17th',
   'IEEE',
+  'MHRA 4th',
+  'MHRA 3rd',
+  'MLA 9th',
   'OSCOLA',
-  'AMA',
-  'Bluebook'
+  'Vancouver'
 ];
+$citationCategories = [
+  'Books',
+  'Journals',
+  'Digital & Internet',
+  'Media & Art',
+  'Research',
+  'Legal',
+  'Governmental',
+  'Communications',
+];
+
+// Utility: truncate long strings for display
+function nx_truncate(string $str, int $limit = 30): string {
+  return (strlen($str) > $limit) ? substr($str, 0, $limit) . '…' : $str;
+}
+
+// Citation key helpers
+function nx_citation_style_code(string $style): string {
+  $norm = strtolower(trim($style));
+  $map = [
+    'harvard' => 'Harv',
+    'apa' => 'APA7',
+    'apa 7' => 'APA7',
+    'apa 7th' => 'APA7',
+    'apa7th' => 'APA7',
+    'chicago 18' => 'Ch18',
+    'chicago 18th' => 'Ch18',
+    'chicago 17' => 'Ch17',
+    'chicago 17th' => 'Ch17',
+    'ieee' => 'IEEE',
+    'mhra' => 'MHRA4',
+    'mhra3' => 'MHRA3',
+    'mhra 3' => 'MHRA3',
+    'mhra4' => 'MHRA4',
+    'mhra 4' => 'MHRA4',
+    'mhra 3rd' => 'MHRA3',
+    'mhra 4th' => 'MHRA4',
+    'mla' => 'MLA9',
+    'mla 9th' => 'MLA9',
+    'mla9' => 'MLA9',
+    'oscola' => 'OSCO',
+    'osco' => 'OSCO',
+    'vancouver' => 'Vanc'
+  ];
+  if (isset($map[$norm])) return $map[$norm];
+  foreach ($map as $needle => $code) {
+    if (strpos($norm, $needle) !== false) return $code;
+  }
+  $fallback = strtoupper(substr(preg_replace('/[^a-z0-9]/i', '', $style), 0, 4));
+  return $fallback !== '' ? $fallback : 'CITE';
+}
+
+function nx_citation_label_slug(string $label): string {
+  $clean = preg_replace('/[^a-z0-9]+/i', ' ', $label);
+  $clean = trim($clean);
+  if ($clean === '') return 'Entry';
+  $parts = preg_split('/\s+/', $clean) ?: [];
+  $parts = array_map(function($w){ return ucfirst(strtolower($w)); }, $parts);
+  return implode('_', $parts);
+}
+
+function nx_generate_citation_key(string $siteSlug, string $style, string $label): string {
+  $prefix = nx_citation_style_code($style);
+  $baseLabel = nx_citation_label_slug($label);
+  $base = $prefix . ':' . $baseLabel;
+  $key = $base;
+  $suffix = 2;
+  while (CitationExample::find($siteSlug, $key)) {
+    $key = $base . '_' . $suffix;
+    $suffix++;
+  }
+  return $key;
+}
 
 // Citation release context (needed before POST handlers)
 $citationReleases = [];
@@ -827,7 +905,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $currentUserEmail = $currentUser['email'] ?? null;
 
     $diffFn = function(array $before, array $after): array {
-      $fields = ['example_key','label','referencing_style','citation_order','example_heading','example_body','you_try','notes'];
+      $fields = ['example_key','label','referencing_style','category','citation_order','example_heading','example_body','you_try','notes'];
       $diff = [];
       foreach ($fields as $f) {
         $b = $before[$f] ?? null;
@@ -883,24 +961,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       return $snapshot;
     };
 
-    if (isset($_POST['add_citation'])) {
+    if (($_POST['add_citation'] ?? '') === '1') {
       try {
         $pdo = nx_db();
         $pdo->beginTransaction();
         $style = trim((string)($_POST['citation_style'] ?? ''));
         if (!in_array($style, $citationStyles, true)) $style = $citationStyles[0];
+        $category = trim((string)($_POST['citation_category'] ?? ''));
+        if (!in_array($category, $citationCategories, true)) $category = $citationCategories[0];
+        $label = trim((string)($_POST['citation_label'] ?? ''));
+        if ($label === '') throw new Exception('Label is required');
         $data = [
           'site_slug' => $siteSlug,
           'referencing_style' => $style,
-          'example_key' => trim((string)($_POST['citation_key'] ?? '')),
-          'label' => trim((string)($_POST['citation_label'] ?? '')),
+          'category' => $category,
+          'example_key' => '',
+          'label' => $label,
           'citation_order' => trim((string)($_POST['citation_order'] ?? '')),
           'example_heading' => trim((string)($_POST['citation_heading'] ?? '')),
           'example_body' => trim((string)($_POST['citation_body'] ?? '')),
           'you_try' => trim((string)($_POST['citation_youtry'] ?? '')),
           'notes' => trim((string)($_POST['citation_notes'] ?? ''))
         ];
-        if ($data['example_key'] === '' || $data['label'] === '') throw new Exception('Key and label are required');
+        $data['example_key'] = nx_generate_citation_key($siteSlug, $style, $label);
         $newId = CitationExample::create($data);
         $after = array_merge($data, ['id'=>$newId]);
         $recordRevision('create', null, $after, $currentReleaseTag);
@@ -911,7 +994,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $notice = 'Error saving citation: ' . $e->getMessage();
       }
     }
-    if (isset($_POST['update_citation'])) {
+    if (($_POST['update_citation'] ?? '') === '1') {
       try {
         $pdo = nx_db();
         $pdo->beginTransaction();
@@ -919,10 +1002,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($id <= 0) throw new Exception('Invalid citation ID');
         $style = trim((string)($_POST['citation_style'] ?? ''));
         if (!in_array($style, $citationStyles, true)) $style = $citationStyles[0];
+        $category = trim((string)($_POST['citation_category'] ?? ''));
+        if (!in_array($category, $citationCategories, true)) $category = $citationCategories[0];
         $before = CitationExample::findById($id);
+        $existingKey = $before['example_key'] ?? '';
         $data = [
           'referencing_style' => $style,
-          'example_key' => trim((string)($_POST['citation_key'] ?? '')),
+          'category' => $category,
+          'example_key' => $existingKey !== '' ? $existingKey : nx_generate_citation_key($siteSlug, $style, (string)($_POST['citation_label'] ?? '')),
           'label' => trim((string)($_POST['citation_label'] ?? '')),
           'citation_order' => trim((string)($_POST['citation_order'] ?? '')),
           'example_heading' => trim((string)($_POST['citation_heading'] ?? '')),
@@ -1291,15 +1378,73 @@ if (isset($_SESSION['user_id'])) {
       border:1px solid var(--border);
       border-radius:18px;
       box-shadow:var(--shadow);
-      max-width:760px;
+      max-width:1020px;
       width:100%;
-      overflow:auto;
+      height:85vh;
+      display:flex;
+      flex-direction:column;
       padding:18px;
     }
     .modal header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
     .modal h3{margin:0;font-size:20px;}
     .modal .close-btn{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:18px;}
     .modal .layout-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));}
+    /* Ensure citation form fields have clear contrast */
+    #citationModalBackdrop input,
+    #citationModalBackdrop textarea,
+    #citationModalBackdrop select{
+      background:#fff;
+      color:var(--text);
+<<<<<<< ours
+=======
+      border:1px solid rgba(255,255,255,0.18);
+    }
+    #citationYouTryField,
+    #citationOrderField,
+    #citationBodyField,
+    #editYouTryField,
+    #editOrderField,
+    #editBodyField{
+      background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.18);
+    }
+    #citationModalBackdrop input::placeholder,
+    #citationModalBackdrop textarea::placeholder{
+      color:rgba(255,255,255,0.6);
+    }
+    #citationModalBackdrop .example-panel{
+      background:rgba(255,255,255,0.02);
+      border:1px solid rgba(255,255,255,0.12);
+>>>>>>> theirs
+    }
+    .modal-body{flex:1;overflow:auto;padding-right:4px;}
+    .modal-footer{position:sticky;bottom:0;background:var(--card);padding-top:12px;margin-top:12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
+    .modal-sections{display:grid;gap:24px;}
+    .modal-section{padding:0;}
+    .section-head{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
+    .section-title{font-size:14px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;}
+    .section-sub{color:var(--muted);font-size:13px;}
+    .two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
+    .section-surface{background:rgba(17,24,39,0.04);border:1px solid var(--border);border-radius:12px;padding:12px;}
+    .example-panel{background:rgba(17,24,39,0.03);border:1px solid rgba(17,24,39,0.08);border-radius:14px;padding:14px;}
+    .example-panel input{background:transparent;}
+    .example-panel .rich-editor{background:transparent;border-color:rgba(17,24,39,0.12);}
+    .helper{color:var(--muted);font-size:12px;margin-top:6px;}
+    .mini-toolbar{display:flex;gap:6px;margin:6px 0;}
+    .mini-toolbar button{border:1px solid var(--border);background:rgba(255,255,255,0.9);color:var(--text);padding:5px 10px;border-radius:8px;cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:4px;}
+    .mini-toolbar button:hover{background:rgba(37,99,235,0.08);}
+    .mini-toolbar .toolbar-label{font-weight:600;}
+    .rich-editor{
+      min-height:120px;
+      padding:10px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:#fff;
+      color:var(--text);
+      outline:none;
+      white-space:pre-wrap;
+    }
+    .rich-editor:focus{box-shadow:0 0 0 2px rgba(37,99,235,0.25);border-color:rgba(37,99,235,0.45);}
     .layout-card.active{outline:2px solid var(--primary); box-shadow:0 0 0 3px rgba(59,130,246,0.35);}
     .layout-card .checkmark{display:none; position:absolute; top:8px; right:8px; background:var(--primary); color:#fff; border-radius:999px; width:22px; height:22px; font-size:14px; align-items:center; justify-content:center;}
     .layout-card.active .checkmark{display:flex;}
@@ -2471,6 +2616,7 @@ if (isset($_SESSION['user_id'])) {
                   <tr>
                     <th>Reference type</th>
                     <th>Style</th>
+                    <th>Category</th>
                     <th>Key</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -2479,6 +2625,7 @@ if (isset($_SESSION['user_id'])) {
                 <tbody>
                   <?php foreach ($citationExamples as $ex): 
                     $key = $ex['example_key'] ?? '';
+                    $keyDisplay = nx_truncate($key, 30);
                     $staged = isset($stagedKeys[$key]);
                     $hasRevision = isset($latestByKey[$key]);
                     $statusLabel = 'Clean';
@@ -2487,12 +2634,13 @@ if (isset($_SESSION['user_id'])) {
                     elseif ($hasRevision) { $statusLabel = 'Edited (other release)'; $statusTone = 'badge-chip'; }
                     $statusValue = $staged ? 'staged' : ($hasRevision ? 'edited' : 'clean');
                   ?>
-                    <tr class="citation-row" data-style="<?= Security::e($ex['referencing_style'] ?? '') ?>" data-status="<?= Security::e($statusValue) ?>">
+                    <tr class="citation-row" data-style="<?= Security::e($ex['referencing_style'] ?? '') ?>" data-status="<?= Security::e($statusValue) ?>" data-category="<?= Security::e($ex['category'] ?? '') ?>">
                       <td>
                         <div class="citation-label"><?= Security::e($ex['label'] ?? '') ?></div>
                       </td>
                       <td><span class="citation-style-pill"><?= Security::e($ex['referencing_style'] ?? '') ?></span></td>
-                      <td class="muted collection-slug"><?= Security::e($key) ?></td>
+                      <td class="muted"><?= Security::e($ex['category'] ?? '') ?></td>
+                      <td class="muted collection-slug" title="<?= Security::e($key) ?>"><?= Security::e($keyDisplay) ?></td>
                       <td>
                         <span class="<?= $statusTone ?>"><?= Security::e($statusLabel) ?></span>
                       </td>
@@ -2502,6 +2650,7 @@ if (isset($_SESSION['user_id'])) {
                           type="button"
                           data-view-citation
                           data-style="<?= Security::e($ex['referencing_style'] ?? '') ?>"
+                          data-category="<?= Security::e($ex['category'] ?? '') ?>"
                           data-key="<?= Security::e($ex['example_key'] ?? '') ?>"
                           data-label="<?= Security::e($ex['label'] ?? '') ?>"
                           data-order="<?= Security::e($ex['citation_order'] ?? '') ?>"
@@ -2569,6 +2718,7 @@ if (isset($_SESSION['user_id'])) {
                         $label = $after['label'] ?? $before['label'] ?? $rev['citation_key'];
                         $style = $after['referencing_style'] ?? $before['referencing_style'] ?? '';
                         $key = $rev['citation_key'] ?? '';
+                        $keyDisplay = nx_truncate($key, 30);
                         $releaseTag = $rev['release_tag'] ?? '';
                         $userEmail = $rev['user_email'] ?? '—';
                         $created = $rev['created_at'] ?? '';
@@ -2699,59 +2849,85 @@ if (isset($_SESSION['user_id'])) {
         </div>
         <button type="button" class="close-btn" id="closeCitationModal" aria-label="Close">×</button>
       </header>
-      <form method="post" id="citationModalForm" style="display:grid;gap:12px">
+      <form method="post" id="citationModalForm" style="display:flex;flex-direction:column;gap:0;flex:1;min-height:0;">
         <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
         <input type="hidden" name="add_citation" id="citationActionAdd" value="1">
-        <input type="hidden" name="update_citation" id="citationActionUpdate" value="">
+        <input type="hidden" name="update_citation" id="citationActionUpdate" value="0">
         <input type="hidden" name="citation_id" id="citationIdField" value="">
+        <input type="hidden" name="citation_key" id="citationKeyField" value="">
 
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
-          <label class="citation-field" style="display:block">
-            <strong>Referencing style</strong>
-            <select name="citation_style" id="citationStyleField" style="margin-top:6px;width:100%">
-              <?php foreach ($citationStyles as $style): ?>
-                <option value="<?= Security::e($style) ?>"><?= Security::e($style) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <label class="citation-field" style="display:block">
-            <strong>Key (unique)</strong>
-            <input name="citation_key" id="citationKeyField" placeholder="book_one_author" required style="margin-top:6px;width:100%">
-            <div class="muted" style="font-size:12px;margin-top:4px">Stable identifier used in templates.</div>
-          </label>
-          <label class="citation-field" style="display:block">
-            <strong>Label</strong>
-            <input name="citation_label" id="citationLabelField" placeholder="Book with one author" required style="margin-top:6px;width:100%">
-          </label>
+        <div class="modal-body">
+          <div class="modal-sections">
+            <section class="modal-section">
+              <div class="section-head">
+                <div class="section-title">Metadata</div>
+                <div class="section-sub">Reference identity (always visible)</div>
+              </div>
+              <div class="two-col">
+                <label class="citation-field" style="display:block">
+                  <strong>Referencing style</strong>
+                  <select name="citation_style" id="citationStyleField" style="margin-top:6px;width:100%">
+                    <?php foreach ($citationStyles as $style): ?>
+                      <option value="<?= Security::e($style) ?>"><?= Security::e($style) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </label>
+                <label class="citation-field" style="display:block">
+                  <strong>Category</strong>
+                  <select name="citation_category" id="citationCategoryField" style="margin-top:6px;width:100%">
+                    <?php foreach ($citationCategories as $cat): ?>
+                      <option value="<?= Security::e($cat) ?>"><?= Security::e($cat) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </label>
+                <label class="citation-field" style="display:block">
+                  <strong>Label</strong>
+                  <input name="citation_label" id="citationLabelField" placeholder="Book with one author" required style="margin-top:6px;width:100%">
+                </label>
+              </div>
+            </section>
+
+            <section class="modal-section">
+              <div class="section-head">
+                <div class="section-title">Citation order</div>
+                <div class="section-sub">Define the canonical sequence (one item per line)</div>
+              </div>
+              <div id="citationToolbarAnchor"></div>
+              <textarea name="citation_order" id="citationOrderField" rows="5" placeholder="1. Author / editor&#10;2. Year of publication (round brackets)&#10;3. Title of work (italics)&#10;4. Publisher&#10;5. DOI or URL (Accessed: date)" style="width:100%;max-height:160px"></textarea>
+              <div class="helper">Tip: use bullets to list steps; drag handles may come later.</div>
+            </section>
+
+            <section class="modal-section example-panel">
+              <div class="section-head">
+                <div class="section-title">Example</div>
+                <div class="section-sub">Documentation-style preview (reader-friendly)</div>
+              </div>
+              <label class="citation-field" style="display:block">
+                <strong>Example heading</strong>
+                <input name="citation_heading" id="citationHeadingField" placeholder="Example: book with one author" required style="margin-top:6px;width:100%">
+              </label>
+              <textarea name="citation_body" id="citationBodyField" rows="4" placeholder="In-text citations&#10;Reference list..." required style="margin-top:6px;width:100%;max-height:160px"></textarea>
+            </section>
+
+            <section class="modal-section">
+              <div class="section-head">
+                <div class="section-title">You try</div>
+                <div class="section-sub">Template shown to users</div>
+              </div>
+              <textarea name="citation_youtry" id="citationYouTryField" rows="4" placeholder="Surname, Initial. (Year) *Title of book.* Publisher. Available at: DOI or URL (Accessed: date)." style="width:100%;max-height:160px"></textarea>
+            </section>
+
+            <section class="modal-section">
+              <details>
+                <summary class="section-title" style="cursor:pointer;">Editorial notes (internal)</summary>
+                <div class="section-sub" style="margin-top:6px;">Optional. Not shown to end users.</div>
+                <textarea name="citation_notes" id="citationNotesField" rows="3" placeholder="House style notes, reminders…" style="margin-top:10px;width:100%;max-height:140px"></textarea>
+              </details>
+            </section>
+          </div>
         </div>
 
-        <div class="citation-field" style="display:grid;gap:8px">
-          <strong>Citation order</strong>
-          <textarea name="citation_order" id="citationOrderField" rows="3" placeholder="• Author/editor&#10;• Year..." required style="width:100%"></textarea>
-        </div>
-
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
-          <label class="citation-field" style="display:block">
-            <strong>Example heading</strong>
-            <input name="citation_heading" id="citationHeadingField" placeholder="Example: book with one author" required style="margin-top:6px;width:100%">
-            <div class="muted" style="font-size:12px;margin-top:4px">Short descriptor shown above the example.</div>
-          </label>
-          <label class="citation-field" style="display:block">
-            <strong>Example body</strong>
-            <textarea name="citation_body" id="citationBodyField" rows="4" placeholder="In-text citations&#10;... Reference list" required style="margin-top:6px;width:100%"></textarea>
-          </label>
-          <label class="citation-field" style="display:block">
-            <strong>You try</strong>
-            <textarea name="citation_youtry" id="citationYouTryField" rows="4" placeholder="Surname, Initial. (Year)..." required style="margin-top:6px;width:100%"></textarea>
-          </label>
-        </div>
-
-        <div class="citation-field" style="display:block">
-          <strong>Editorial notes (optional)</strong>
-          <textarea name="citation_notes" id="citationNotesField" rows="3" placeholder="House style notes, reminders…" style="margin-top:6px;width:100%"></textarea>
-        </div>
-
-        <div class="actions" style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+        <div class="modal-footer">
           <button class="btn" type="button" id="cancelCitationModal">Cancel</button>
           <button class="btn primary" type="submit" id="citationSubmitBtn">Add citation</button>
         </div>
@@ -2780,6 +2956,10 @@ if (isset($_SESSION['user_id'])) {
         <div id="viewStyle" class="muted">—</div>
       </div>
       <div class="citation-field">
+        <strong>Category</strong>
+        <div id="viewCategory" class="muted">—</div>
+      </div>
+      <div class="citation-field">
         <strong>ID</strong>
         <div id="viewId" class="muted">—</div>
       </div>
@@ -2792,7 +2972,6 @@ if (isset($_SESSION['user_id'])) {
         <div id="viewOrder" class="muted" style="white-space:pre-line">—</div>
       </div>
       <div class="citation-field">
-        <strong>Example</strong>
         <div id="viewExampleHeading" class="collection-name">—</div>
         <div id="viewExampleBody" class="muted" style="white-space:pre-line">—</div>
       </div>
@@ -2813,12 +2992,20 @@ if (isset($_SESSION['user_id'])) {
       <input type="hidden" name="citation_style" id="editStyleField">
       <input type="hidden" name="citation_key" id="editKeyField">
       <div class="citation-field citation-edit-field">
+        <strong>Category</strong>
+        <select name="citation_category" id="editCategoryField">
+          <?php foreach ($citationCategories as $cat): ?>
+            <option value="<?= Security::e($cat) ?>"><?= Security::e($cat) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="citation-field citation-edit-field">
         <strong>Label</strong>
         <input name="citation_label" id="editLabelField" required>
       </div>
       <div class="citation-field citation-edit-field">
         <strong>Citation order</strong>
-        <textarea name="citation_order" id="editOrderField" rows="4" required></textarea>
+        <textarea name="citation_order" id="editOrderField" rows="4"></textarea>
       </div>
       <div class="citation-field citation-edit-field">
         <strong>Example heading</strong>
@@ -2828,7 +3015,7 @@ if (isset($_SESSION['user_id'])) {
       </div>
       <div class="citation-field citation-edit-field">
         <strong>You try</strong>
-        <textarea name="citation_youtry" id="editYouTryField" rows="4" required></textarea>
+        <textarea name="citation_youtry" id="editYouTryField" rows="4"></textarea>
       </div>
       <div class="citation-field citation-edit-field">
         <strong>Editorial notes</strong>
@@ -3173,27 +3360,219 @@ if (isset($_SESSION['user_id'])) {
     const citationSubmitBtn = document.getElementById('citationSubmitBtn');
     const citationIdField = document.getElementById('citationIdField');
     const citationStyleField = document.getElementById('citationStyleField');
-    const citationKeyField = document.getElementById('citationKeyField');
+    const citationCategoryField = document.getElementById('citationCategoryField');
     const citationLabelField = document.getElementById('citationLabelField');
     const citationOrderField = document.getElementById('citationOrderField');
     const citationHeadingField = document.getElementById('citationHeadingField');
     const citationBodyField = document.getElementById('citationBodyField');
     const citationYouTryField = document.getElementById('citationYouTryField');
     const citationNotesField = document.getElementById('citationNotesField');
+    const citationKeyField = document.getElementById('citationKeyField');
+    const citationModalForm = document.getElementById('citationModalForm');
+    const viewStyle = document.getElementById('viewStyle');
+    const viewCategory = document.getElementById('viewCategory');
+    const viewId = document.getElementById('viewId');
+    const viewKey = document.getElementById('viewKey');
+    const viewOrder = document.getElementById('viewOrder');
+    const viewExampleHeading = document.getElementById('viewExampleHeading');
+    const viewExampleBody = document.getElementById('viewExampleBody');
+    const viewYouTry = document.getElementById('viewYouTry');
+    const viewNotes = document.getElementById('viewNotes');
+    const editOrderField = document.getElementById('editOrderField');
+    const editBodyField = document.getElementById('editBodyField');
+    const editYouTryField = document.getElementById('editYouTryField');
+    const editNotesField = document.getElementById('editNotesField');
+    const editCategoryField = document.getElementById('editCategoryField');
+
+    const mdToHtml = (str) => {
+      if (!str) return '';
+      const withBold = str.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+      // Italics: single asterisks that are not part of bold markers
+      const withItalics = withBold.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g,'<em>$1</em>');
+      const lines = withItalics.split(/\r?\n/);
+      let html = '';
+      let inList = false;
+      lines.forEach((line, idx) => {
+        const m = line.match(/^\s*[\\-\\*•]\s+(.+)/);
+        if (m) {
+          if (!inList) { html += '<ul>'; inList = true; }
+          html += '<li>' + m[1] + '</li>';
+        } else {
+          if (inList) { html += '</ul>'; inList = false; }
+          html += line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          if (idx !== lines.length -1) html += '<br>';
+        }
+      });
+      if (inList) html += '</ul>';
+      return html;
+    };
+
+    const htmlToMd = (html) => {
+      const walk = (node) => {
+        if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+        if (node.nodeType !== Node.ELEMENT_NODE) return '';
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'br') return '\n';
+        if (tag === 'strong' || tag === 'b') return '**' + Array.from(node.childNodes).map(walk).join('') + '**';
+        if (tag === 'em' || tag === 'i') return '*' + Array.from(node.childNodes).map(walk).join('') + '*';
+      if (tag === 'ul' || tag === 'ol') {
+          // Preserve visual bullets in saved text (use • instead of dash).
+          return Array.from(node.children).map(li => '• ' + walk(li)).join('\n');
+        }
+      if (tag === 'li') return Array.from(node.childNodes).map(walk).join('');
+      if (tag === 'p' || tag === 'div' || tag === 'section' || tag === 'article') {
+        const inner = Array.from(node.childNodes).map(walk).join('');
+        return inner + '\n';
+      }
+        return Array.from(node.childNodes).map(walk).join('');
+      };
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      // Preserve user-entered structure: keep original newlines and spacing.
+      return walk(container);
+    };
+
+    const richTargets = [
+      citationOrderField,
+      citationBodyField,
+      citationYouTryField,
+      citationNotesField,
+      editOrderField,
+      editBodyField,
+      editYouTryField,
+      editNotesField
+    ].filter(Boolean);
+
+    let activeEditor = null;
+
+    const createToolbar = (editor) => {
+      const bar = document.createElement('div');
+      bar.className = 'mini-toolbar';
+      const mkBtn = (label, title, action) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.title = title;
+        b.addEventListener('click', (e) => {
+          e.preventDefault();
+          activeEditor = editor;
+          editor.focus();
+          document.execCommand(action);
+        });
+        return b;
+      };
+      bar.appendChild(mkBtn('B', 'Bold', 'bold'));
+      bar.appendChild(mkBtn('I', 'Italics', 'italic'));
+      const bullets = mkBtn('•', 'Bullets', 'insertUnorderedList');
+      bullets.innerHTML = '<span aria-hidden="true">•</span><span class="toolbar-label">Bullets</span>';
+      bar.appendChild(bullets);
+      return bar;
+    };
+
+    const createEditor = (textarea, withToolbar=false) => {
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'flex';
+      wrapper.style.flexDirection = 'column';
+      wrapper.style.gap = '4px';
+
+      const editor = document.createElement('div');
+      editor.className = 'rich-editor';
+      editor.contentEditable = 'true';
+      editor.dataset.bind = textarea.id;
+      editor.innerHTML = mdToHtml(textarea.value);
+      textarea.style.display = 'none';
+      textarea.insertAdjacentElement('afterend', wrapper);
+      wrapper.appendChild(editor);
+      if (withToolbar) wrapper.insertBefore(createToolbar(editor), editor);
+
+      const syncToTextarea = () => { textarea.value = htmlToMd(editor.innerHTML); };
+      editor.addEventListener('input', syncToTextarea);
+      editor.addEventListener('focus', () => { activeEditor = editor; });
+      editor.addEventListener('blur', syncToTextarea);
+      return editor;
+    };
+
+    const editors = [];
+    richTargets.forEach((ta) => {
+      const withToolbar =
+        ta === citationOrderField ||
+        ta === citationBodyField ||
+        ta === citationYouTryField ||
+        ta === editOrderField ||
+        ta === editBodyField ||
+        ta === editYouTryField;
+      editors.push(createEditor(ta, withToolbar));
+    });
+
+    const syncAllEditors = () => editors.forEach(ed => {
+      const taId = ed.dataset.bind;
+      const ta = document.getElementById(taId);
+      if (!ta) return;
+      ta.value = htmlToMd(ed.innerHTML);
+    });
+
+    citationModalForm?.addEventListener('submit', () => {
+      syncAllEditors();
+      if (citationActionAdd?.value === '1' && citationKeyField) {
+        const generated = buildCitationKey();
+        citationKeyField.value = generated;
+      }
+    });
+    const editForm = document.getElementById('editBody');
+    editForm?.addEventListener('submit', () => syncAllEditors());
+
+    const styleCodeMap = {
+      harvard: 'Harv',
+      apa: 'APA7',
+      'apa 7': 'APA7',
+      'apa 7th': 'APA7',
+      'chicago author-date': 'Ch17',
+      'chicago notes & bibliography': 'Ch17',
+      'chicago notes and bibliography': 'Ch17',
+      'chicago 17': 'Ch17',
+      'chicago 18': 'Ch18',
+      ieee: 'IEEE',
+      mhra: 'MHRA4',
+      mhra3: 'MHRA3',
+      'mhra 3': 'MHRA3',
+      mhra4: 'MHRA4',
+      'mhra 4': 'MHRA4',
+      mla: 'MLA9',
+      mla9: 'MLA9',
+      oscola: 'OSCO',
+      osco: 'OSCO',
+      vancouver: 'Vanc'
+    };
+    const buildCitationKey = () => {
+      const style = (citationStyleField?.value || '').trim();
+      const label = (citationLabelField?.value || '').trim();
+      if (!style || !label) return '';
+      const normStyle = style.toLowerCase();
+      let prefix = styleCodeMap[normStyle];
+      if (!prefix) {
+        prefix = Object.keys(styleCodeMap).find(k => normStyle.includes(k));
+        prefix = prefix ? styleCodeMap[prefix] : (style.replace(/[^a-z0-9]/gi,'').toUpperCase().slice(0,4) || 'CITE');
+      }
+      const cleaned = label.replace(/[^a-z0-9]+/gi, ' ').trim();
+      const words = cleaned ? cleaned.split(/\s+/) : ['Entry'];
+      const slug = words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('_');
+      return `${prefix}:${slug}`;
+    };
     const resetCitationForm = () => {
       if (citationTitle) citationTitle.textContent = 'Add citation';
       if (citationActionAdd) citationActionAdd.value = '1';
-      if (citationActionUpdate) citationActionUpdate.value = '';
+      if (citationActionUpdate) citationActionUpdate.value = '0';
       if (citationSubmitBtn) citationSubmitBtn.textContent = 'Add citation';
       if (citationIdField) citationIdField.value = '';
       if (citationStyleField) citationStyleField.value = citationStyleField.options?.[0]?.value || '';
-      if (citationKeyField) citationKeyField.value = '';
+      if (citationCategoryField) citationCategoryField.value = citationCategoryField.options?.[0]?.value || '';
       if (citationLabelField) citationLabelField.value = '';
       if (citationOrderField) citationOrderField.value = '';
       if (citationHeadingField) citationHeadingField.value = '';
       if (citationBodyField) citationBodyField.value = '';
       if (citationYouTryField) citationYouTryField.value = '';
       if (citationNotesField) citationNotesField.value = '';
+      if (citationKeyField) citationKeyField.value = '';
     };
     const showCitationModal = () => { if (citationBackdrop) citationBackdrop.style.display = 'flex'; };
     const hideCitationModal = () => { if (citationBackdrop) citationBackdrop.style.display = 'none'; };
@@ -3201,16 +3580,18 @@ if (isset($_SESSION['user_id'])) {
     closeCitationModal?.addEventListener('click', hideCitationModal);
     cancelCitationModal?.addEventListener('click', hideCitationModal);
     citationBackdrop?.addEventListener('click', (e) => { if (e.target === citationBackdrop) hideCitationModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCitationModal(); });
     document.querySelectorAll('[data-edit-citation]').forEach(btn => {
       btn.addEventListener('click', () => {
         resetCitationForm();
         if (citationTitle) citationTitle.textContent = 'Edit citation';
-        if (citationActionAdd) citationActionAdd.value = '';
+        if (citationActionAdd) citationActionAdd.value = '0';
         if (citationActionUpdate) citationActionUpdate.value = '1';
         if (citationSubmitBtn) citationSubmitBtn.textContent = 'Save changes';
         const get = (attr) => btn.getAttribute(attr) || '';
         if (citationIdField) citationIdField.value = get('data-id');
         if (citationStyleField) citationStyleField.value = get('data-style');
+        if (citationCategoryField) citationCategoryField.value = get('data-category') || (citationCategoryField.options?.[0]?.value || '');
         if (citationKeyField) citationKeyField.value = get('data-key');
         if (citationLabelField) citationLabelField.value = get('data-label');
         if (citationOrderField) citationOrderField.value = get('data-order');
@@ -3220,6 +3601,13 @@ if (isset($_SESSION['user_id'])) {
         if (citationNotesField) citationNotesField.value = get('data-notes');
         showCitationModal();
       });
+    });
+
+    citationModalForm?.addEventListener('submit', () => {
+      if (citationActionAdd?.value === '1' && citationKeyField) {
+        const generated = buildCitationKey();
+        citationKeyField.value = generated;
+      }
     });
 
     // Citation view/edit drawer
@@ -3255,6 +3643,7 @@ if (isset($_SESSION['user_id'])) {
       let viewerMode = 'view';
       let viewerEditId = null;
       let editDirty = false;
+      let currentCitation = null;
       const setMode = (mode) => {
         viewerMode = mode;
         viewer.classList.toggle('edit-mode', mode === 'edit');
@@ -3272,22 +3661,59 @@ if (isset($_SESSION['user_id'])) {
         }
       };
 
+      const applyEditFields = (data) => {
+        if (!data) return;
+        if (editIdField) editIdField.value = data.id || '';
+        if (editStyleField) editStyleField.value = data.style || '';
+        if (editCategoryField) editCategoryField.value = data.category || (citationCategoryField?.options?.[0]?.value ?? '');
+        const keyInputEdit = document.getElementById('editKeyField');
+        const keyVal = data.key || '';
+        if (keyInputEdit) keyInputEdit.value = keyVal;
+        if (editLabelField) { editLabelField.value = data.label || ''; editLabelField.dataset.autogrow = '1'; }
+        if (editOrderField) { editOrderField.value = data.order || ''; }
+        if (editHeadingField) { editHeadingField.value = data.heading || ''; editHeadingField.dataset.autogrow = '1'; }
+        if (editBodyField) { editBodyField.value = data.body || ''; }
+        if (editYouTryField) { editYouTryField.value = data.youtry || ''; }
+        if (editNotesField) { editNotesField.value = data.notes || ''; }
+      };
+
       const setView = (data) => {
+        currentCitation = data;
         const formatMarked = (str) => {
           if (!str) return '—';
           const escaped = String(str)
             .replace(/&/g,'&amp;')
-            .replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;')
-            .replace(/"/g,'&quot;')
-            .replace(/'/g,'&#39;');
-          const withItalics = escaped.replace(/\*(.+?)\*/g,'<em>$1</em>');
-          return withItalics.replace(/\r?\n/g,'<br>');
-        };
+          .replace(/</g,'&lt;')
+          .replace(/>/g,'&gt;')
+          .replace(/"/g,'&quot;')
+          .replace(/'/g,'&#39;');
+        const withBold = escaped.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+        const withItalics = withBold.replace(/\*(.+?)\*/g,'<em>$1</em>');
+        const lines = withItalics.split(/\r?\n/);
+        let html = '';
+        let inList = false;
+        lines.forEach((line, idx) => {
+          const m = line.match(/^\s*[-*•]\s+(.+)/);
+          if (m) {
+            if (!inList) { html += '<ul>'; inList = true; }
+            html += '<li>' + m[1] + '</li>';
+          } else {
+            if (inList) { html += '</ul>'; inList = false; }
+            html += line;
+            if (idx !== lines.length -1) html += '<br>';
+          }
+        });
+        if (inList) html += '</ul>';
+        return html;
+      };
         const fill = (id, val) => {
           const el = document.getElementById(id);
           if (!el) return;
           el.textContent = val || '—';
+        };
+        const truncate = (str, limit=30) => {
+          if (!str) return '—';
+          return str.length > limit ? str.slice(0, limit) + '…' : str;
         };
         const fillHtml = (id, val) => {
           const el = document.getElementById(id);
@@ -3298,27 +3724,19 @@ if (isset($_SESSION['user_id'])) {
         fillHtml('viewLabel', title);
         fill('viewSubtitle', 'Read-only view');
         fill('viewStyle', data.style);
+        fill('viewCategory', data.category);
         fill('viewId', data.id ? `#${data.id}` : '—');
-        fill('viewKey', data.key);
+        fill('viewKey', truncate(data.key));
         fillHtml('viewOrder', data.order);
         fillHtml('viewExampleHeading', data.heading);
         fillHtml('viewExampleBody', data.body);
         fillHtml('viewYouTry', data.youtry);
         fillHtml('viewNotes', data.notes);
         viewerEditId = data.id || null;
-        if (editIdField) editIdField.value = data.id || '';
-        if (editStyleField) editStyleField.value = data.style || '';
         const keyVal = data.key || '';
         const keyInputModal = document.getElementById('citationKeyField');
-        const keyInputEdit = document.getElementById('editKeyField');
-        if (keyInputEdit) keyInputEdit.value = keyVal;
         if (keyInputModal && !keyInputModal.value) keyInputModal.value = keyVal;
-        if (editLabelField) { editLabelField.value = data.label || ''; editLabelField.dataset.autogrow = '1'; }
-        if (editOrderField) { editOrderField.value = data.order || ''; }
-        if (editHeadingField) { editHeadingField.value = data.heading || ''; editHeadingField.dataset.autogrow = '1'; }
-        if (editBodyField) { editBodyField.value = data.body || ''; }
-        if (editYouTryField) { editYouTryField.value = data.youtry || ''; }
-        if (editNotesField) { editNotesField.value = data.notes || ''; }
+        applyEditFields(data);
         setMode('view');
         viewer.classList.add('active');
       };
@@ -3330,6 +3748,7 @@ if (isset($_SESSION['user_id'])) {
             id: btn.getAttribute('data-id'),
             label: get('data-label'),
             style: get('data-style'),
+            category: get('data-category'),
             key: get('data-key'),
             order: get('data-order'),
             heading: get('data-heading'),
@@ -3358,6 +3777,7 @@ if (isset($_SESSION['user_id'])) {
 
       viewerEdit?.addEventListener('click', () => {
         if (!viewerEditId) return;
+        applyEditFields(currentCitation);
         setMode('edit');
         editDirty = false;
       });
@@ -3521,6 +3941,10 @@ if (isset($_SESSION['user_id'])) {
         const el = document.getElementById(id);
         if (el) el.textContent = val || fallback;
       };
+      const truncateKey = (str) => {
+        if (!str) return '—';
+        return str.length > 30 ? str.slice(0,30) + '…' : str;
+      };
       const formatMarked = (str, fallback='—') => {
         if (!str) return fallback;
         const escaped = String(str)
@@ -3529,8 +3953,24 @@ if (isset($_SESSION['user_id'])) {
           .replace(/>/g,'&gt;')
           .replace(/"/g,'&quot;')
           .replace(/'/g,'&#39;');
-        const withItalics = escaped.replace(/\*(.+?)\*/g,'<em>$1</em>');
-        return withItalics.replace(/\r?\n/g,'<br>');
+        const withBold = escaped.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+        const withItalics = withBold.replace(/\*(.+?)\*/g,'<em>$1</em>');
+        const lines = withItalics.split(/\r?\n/);
+        let html = '';
+        let inList = false;
+        lines.forEach((line, idx) => {
+          const m = line.match(/^\s*[-*•]\s+(.+)/);
+          if (m) {
+            if (!inList) { html += '<ul>'; inList = true; }
+            html += '<li>' + m[1] + '</li>';
+          } else {
+            if (inList) { html += '</ul>'; inList = false; }
+            html += line;
+            if (idx !== lines.length -1) html += '<br>';
+          }
+        });
+        if (inList) html += '</ul>';
+        return html;
       };
       const fillHtml = (id, val, fallback='—') => {
         const el = document.getElementById(id);
@@ -3556,7 +3996,7 @@ if (isset($_SESSION['user_id'])) {
         const preferred = after ?? before ?? {};
         fillText('revViewLabel', preferred.label || 'Revision #' + id);
         fillText('revCitationLabel', preferred.label || '—');
-        fillText('revCitationKey', row.dataset.key || '—');
+        fillText('revCitationKey', truncateKey(row.dataset.key || '—'));
         fillText('revCitationStyle', (preferred.referencing_style || row.dataset.style || '—'));
         fillText('revViewSubtitle', (row.dataset.action || '').toUpperCase() + ' • #' + id);
         fillText('revMetaUser', 'User: ' + (row.dataset.user || '—'));

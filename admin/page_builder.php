@@ -14,15 +14,60 @@ if (!$page) { http_response_code(404); echo "Page not found"; exit; }
 $site = Site::find((int)$page['site_id']);
 if (!$site) { http_response_code(404); echo "Site not found"; exit; }
 
+$theme = json_decode($site['theme_json'] ?? '', true) ?: [];
+$shape = is_array($theme['shape'] ?? null) ? $theme['shape'] : [];
+$themeRadius = (int)($shape['radius'] ?? ($theme['radius'] ?? 16));
+
 $pageCollection = null;
 $pageCollectionStyle = '';
+// Normalize a collection label to a referencing style string used by citations
+$normalizeStyle = function(string $val): string {
+  $clean = trim($val);
+  if ($clean === '') return '';
+  // strip common suffixes
+  $clean = preg_replace('/\b(page|pages|collection|collections)\b/i', '', $clean);
+  $clean = preg_replace('/[-_]+/', ' ', $clean);
+  $clean = preg_replace('/\s+/', ' ', $clean);
+  $clean = trim($clean);
+  $map = [
+    'apa7' => 'APA 7th',
+    'apa 7' => 'APA 7th',
+    'apa 7th' => 'APA 7th',
+    'apa7th' => 'APA 7th',
+    'harvard' => 'Harvard',
+    'vancouver' => 'Vancouver',
+    'ieee' => 'IEEE',
+    'oscola' => 'OSCOLA',
+    'bluebook' => 'Bluebook',
+    'ama' => 'AMA',
+    'mla9' => 'MLA 9th',
+    'mla 9' => 'MLA 9th',
+    'mla' => 'MLA 9th',
+    'chicago 18' => 'Chicago 18th',
+    'chicago 18th' => 'Chicago 18th',
+    'chicago 17' => 'Chicago 17th',
+    'chicago 17th' => 'Chicago 17th',
+    'mhra 3' => 'MHRA 3rd',
+    'mhra 3rd' => 'MHRA 3rd',
+    'mhra3' => 'MHRA 3rd',
+    'mhra 4' => 'MHRA 4th',
+    'mhra 4th' => 'MHRA 4th',
+    'mhra4' => 'MHRA 4th'
+  ];
+  $key = strtolower($clean);
+  if (isset($map[$key])) return $map[$key];
+  return $clean;
+};
 try {
   if (!empty($page['collection_id'])) {
     $stmt = DB::pdo()->prepare("SELECT * FROM site_collections WHERE id=? LIMIT 1");
     $stmt->execute([(int)$page['collection_id']]);
     $pageCollection = $stmt->fetch();
     if ($pageCollection) {
-      $pageCollectionStyle = trim((string)($pageCollection['name'] ?? $pageCollection['slug'] ?? ''));
+      $pageCollectionStyle = $normalizeStyle((string)($pageCollection['name'] ?? ''));
+      if ($pageCollectionStyle === '') {
+        $pageCollectionStyle = $normalizeStyle((string)($pageCollection['slug'] ?? ''));
+      }
     }
   }
 } catch (\Throwable $e) {}
@@ -52,6 +97,8 @@ $base = base_path();
     :root{
       --bg:#0f172a;--panel:#111827;--card:#111827;--border:#1f2937;--muted:#9ca3af;--text:#e5e7eb;
       --primary:#5b21b6;--primary-strong:#4c1d95;--focus:0 0 0 3px rgba(91,33,182,.35);
+      --nexus-radius: <?= (int)$themeRadius ?>px;
+      --r: var(--nexus-radius, 0px);
     }
     body{background:var(--bg);color:var(--text);transition:background .2s ease,color .2s ease;}
   </style>

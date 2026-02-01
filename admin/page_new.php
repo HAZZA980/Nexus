@@ -79,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'about-profile' => ['name'=>'About / Profile','desc'=>'Profile hero with body text and key facts.'],
             'home' => ['name'=>'Simple Home','desc'=>'Heading and two-column content starter.'],
             'article' => ['name'=>'Article','desc'=>'Article body with related sidebar.'],
+            'source-type' => ['name'=>'Source Type','desc'=>'Heading, intro text, citation order, and example block.'],
           ];
         ?>
         <?php foreach ($layoutMeta as $id => $meta): ?>

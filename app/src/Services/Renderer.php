@@ -247,8 +247,28 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
   {
     if ($text === '') return '';
     $escaped = Security::e($text);
-    $withItalics = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $escaped);
+    // Bold first, then italics (single asterisks not part of bold)
+    $withBold = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $escaped);
+    $withItalics = preg_replace('/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/', '<em>$1</em>', $withBold);
     return nl2br($withItalics);
+  }
+
+  /**
+   * Normalize bullet-style text: remove duplicated markers and apply a single bullet symbol.
+   */
+  private static function normalizeBulletText(string $text): string
+  {
+    if ($text === '') return '';
+    $lines = preg_split('/\r?\n/', $text);
+    $normalized = array_map(function ($line) {
+      $trim = trim($line);
+      if ($trim === '') return '';
+      // Strip leading markers twice to cover already-bulleted input.
+      $trim = preg_replace('/^[•\-\*]\s*/', '', $trim);
+      $trim = preg_replace('/^[•\-\*]\s*/', '', $trim);
+      return '• ' . $trim;
+    }, $lines);
+    return implode("\n", array_filter($normalized, fn($l) => $l !== ''));
   }
 
   private static function hasHtml(string $str): bool
@@ -394,7 +414,9 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         if ($bodyRaw !== '') {
           $body = self::hasHtml($bodyRaw) ? self::safeInlineHtml($bodyRaw) : self::formatMarkedText($bodyRaw);
         } else {
-          $body = self::formatMarkedText((string)($p['body'] ?? ''));
+          $plain = (string)($p['body'] ?? '');
+          $normalized = self::normalizeBulletText($plain);
+          $body = self::formatMarkedText($normalized);
         }
 
         $html = "<div class=\"nx-citation\">"
@@ -430,7 +452,6 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
           $uid = uniqid('yt_', false);
           $expected = (string)($p['youTry'] ?? '');
           $expectedHtml = self::hasHtml($expected) ? self::safeInlineHtml($expected) : self::formatMarkedText($expected);
-          $expectedPlain = self::normalizeCitation($expected);
 
           $html .= "<div class=\"nx-examplecard-right\">"
             . "<div class=\"nx-examplecard-try-title\">You try</div>"
@@ -443,7 +464,6 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
             . "</div>"
             . "</div>"
             . "<script>(function(){"
-              . "const expected=" . self::jsonInline($expectedPlain) . ";"
               . "const expectedRaw=" . self::jsonInline($expected) . ";"
               . "const input=document.getElementById('{$uid}_input');"
               . "const status=document.getElementById('{$uid}_status');"
@@ -453,7 +473,34 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
                   . "const raw=str||'';"
                   . "if(hasHtml(raw)) return raw;"
                   . "const escaped=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');"
-                  . "return escaped.replace(/\\*(.+?)\\*/g,'<em>$1</em>').replace(/\\n/g,'<br>');"
+                  . "const bolded=escaped.replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>');"
+                  . "const italics=bolded.replace(/(?<!\\*)\\*(?!\\*)(.+?)(?<!\\*)\\*(?!\\*)/g,'<em>$1</em>');"
+                  . "return italics.replace(/\\n/g,'<br>');"
+              . "};"
+              . "const stripMarkup=(tpl)=>{"
+                  . "return (tpl||'')"
+                    . ".replace(/<[^>]+>/g,' ')"
+                    . ".replace(/\\*\\*?/g,'')"
+                    . ".replace(/\\s+/g,' ')"
+                    . ".trim();"
+              . "};"
+              . "const buildPattern=(tpl)=>{"
+                  . "const plain=stripMarkup(tpl);"
+                  . "const esc=p=>p.replace(/[-/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&');"
+                  . "const tokens=[];"
+                  . "let buf='';"
+                  . "for(const ch of plain){"
+                    . "if(/[,.;:()\\[\\]]/.test(ch)){"
+                      . "if(buf) { tokens.push({t:'w',v:buf}); buf=''; }"
+                      . "tokens.push({t:'p',v:ch});"
+                    . "} else { buf+=ch; }"
+                  . "}"
+                  . "if(buf) tokens.push({t:'w',v:buf});"
+                  . "const parts=tokens.map(tok=>{"
+                    . "if(tok.t==='p') return '\\\\s*'+esc(tok.v)+'\\\\s*';"
+                    . "return '\\\\s*[^,.;:()\\[\\]]+';"  /* allow any non-punctuation run */ 
+                  . "});"
+                  . "return new RegExp('^'+parts.join('')+'\\\\s*$', 'i');"
               . "};"
               . "if(input){"
                   . "input.innerHTML = renderMarked(expectedRaw);"
@@ -466,12 +513,12 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
                       . "if(txt.includes('*')) input.innerHTML=renderMarked(txt);"
                   . "});"
               . "}"
+              . "const pattern=buildPattern(expectedRaw || '');"
               . "if(btn&&input&&status){"
                 . "btn.addEventListener('click',()=>{"
-                  . "const norm=(s)=>s.toLowerCase().replace(/<[^>]+>/g,'').replace(/\\s+/g,' ').trim();"
-                  . "const val=norm(input.innerText||input.textContent||'');"
-                  . "const ok=val===expected.toLowerCase();"
-                  . "status.textContent=ok?'Correct format!':'Not quite, try again.';"
+                  . "const val=(input.innerText||input.textContent||'').trim();"
+                  . "const ok=pattern.test(val);"
+                  . "status.textContent=ok?'Correct format!':'Not quite, check punctuation and order.';"
                   . "status.classList.remove('ok','no');"
                   . "status.classList.add(ok?'ok':'no');"
                   . "input.classList.remove('ok','no');"

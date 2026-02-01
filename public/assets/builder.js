@@ -250,7 +250,11 @@
     return s.slice(0, n) + '…';
   };
   const formatCitationOrder = (val) => {
-    return (val || '').split('\n').map(line => line.trim()).filter(Boolean).map(l => l.startsWith('•') ? l : `• ${l}`).join('\n');
+    return (val || '')
+      .split('\n')
+      .map(line => line.replace(/\s+$/, '')) // keep leading markers, trim right
+      .filter(line => line.trim() !== '')
+      .join('\n');
   };
   const setPageCitationExample = (id) => {
     doc.page = doc.page || {};
@@ -875,7 +879,10 @@
       .replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;')
       .replace(/'/g,'&#39;');
-    const withItalics = escaped.replace(/\*(.+?)\*/g,'<em>$1</em>');
+    // Apply bold first so double-asterisk sequences are not captured by the italic rule
+    const withBold = escaped.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    // Italics: single asterisks not part of a double-asterisk pair
+    const withItalics = withBold.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g,'<em>$1</em>');
     return withItalics.replace(/\r?\n/g,'<br>');
   };
 
@@ -883,7 +890,8 @@
     const inner = hasHtml(p.html)
       ? p.html
       : formatMarked(p.text || 'Heading');
-    return wrap(`<h2 style="margin:0">${inner}</h2>`);
+    const level = Math.min(6, Math.max(1, parseInt(p.level || 2, 10)));
+    return wrap(`<h${level} style="margin:0">${inner}</h${level}>`);
   }
 
   if (blk.type === 'text') {
@@ -972,9 +980,10 @@
 
   if (blk.type === 'citationOrder') {
     const title = esc(p.title || 'Citation order');
+    const normalized = formatCitationOrder(p.body || '');
     const body = hasHtml(p.html)
       ? p.html
-      : formatMarked((p.body || '').slice(0, 320));
+      : formatMarked(normalized.slice(0, 320));
     return wrap(`
       <div style="border:1px solid rgba(17,24,39,.18);border-radius:14px;padding:14px;background:#f7f7f5">
         <div style="font-weight:900;margin-bottom:8px">${title}</div>
@@ -1002,7 +1011,7 @@
       <div class="nx-examplecard${extraClass}" style="display:grid;grid-template-columns:${showTry ? '1fr 1fr' : '1fr'};gap:10px;align-items:start;border:1px solid rgba(17,24,39,.18);border-radius:14px;overflow:hidden;background:#f9f9f7">
         <div style="background:#e2e3e6;padding:12px 14px">
           <div style="font-weight:900;margin-bottom:8px">${heading}</div>
-          <div>${body}</div>
+          <div style="white-space:pre-line">${body}</div>
         </div>
         ${rightCol}
       </div>

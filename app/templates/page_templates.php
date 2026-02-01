@@ -112,4 +112,26 @@ return [
       ]],
     ],
   ],
+  'source-type' => [
+    'version' => 1,
+    'rows' => [
+      ['cols'=>[
+        ['span'=>12,'blocks'=>[
+          ['type'=>'heading','props'=>['level'=>1,'text'=>'Source type']],
+          ['type'=>'text','props'=>['text'=>"Use this page to document a specific source type.\nAdd guidance and examples below."]],
+          ['type'=>'citationOrder','props'=>[
+            'title'=>'Citation order',
+            'body'=>"1. Author / editor\n2. Year (round brackets)\n3. Title (italics)\n4. Publisher\n5. DOI or URL (Accessed: date)"
+          ]],
+          ['type'=>'exampleCard','props'=>[
+            'exampleId'=>'book_one_author',
+            'heading'=>'Example: book with one author',
+            'body'=>"In-text citations\n\n(Author, Year, p. 00)\n\nReference list\nAuthor, A. (Year) *Title of work.* Publisher.",
+            'youTry'=>'Surname, Initial. (Year) *Title.* Publisher.',
+            'showYouTry'=>true
+          ]],
+        ]]
+      ]],
+    ],
+  ],
 ];

@@ -100,7 +100,7 @@ function snippet(string $text, string $q): string {
     }
     body{margin:0;background:var(--nexus-page-bg);color:var(--nexus-text);font-family:var(--nexus-font);font-size:var(--nexus-font-size);}
     .wrap{max-width:1100px;margin:0 auto;padding:22px;}
-    .result{padding:14px;border:1px solid var(--nexus-border);border-radius:12px;background:var(--nexus-surface);box-shadow:0 10px 26px rgba(0,0,0,.08);}
+    .result{padding:14px;border:1px solid var(--nexus-border);border-radius:var(--nexus-radius);background:var(--nexus-surface);box-shadow:0 10px 26px rgba(0,0,0,.08);}
     .result-title{font-size:18px;font-weight:700;margin:0;}
     .result-url{color:var(--primary);font-size:14px;}
     .result-snippet{color:var(--muted);font-size:14px;}
@@ -124,8 +124,8 @@ if (!$usedPartialHeader) {
   <h1>Search results</h1>
   <form action="<?= $base ?>/s/<?= Security::e($safeSlug) ?>/search" method="get" role="search" style="margin:10px 0 20px">
     <label class="sr-only" for="q">Search</label>
-    <input id="q" name="q" value="<?= Security::e($query) ?>" style="padding:10px 12px;border-radius:10px;border:1px solid var(--nexus-border);min-width:240px">
-    <button type="submit" style="padding:10px 12px;border-radius:10px;border:1px solid var(--nexus-border);background:var(--primary);color:#fff;">Search</button>
+    <input id="q" name="q" value="<?= Security::e($query) ?>" style="padding:10px 12px;border-radius:var(--nexus-radius);border:1px solid var(--nexus-border);min-width:240px">
+    <button type="submit" style="padding:10px 12px;border-radius:var(--nexus-radius);border:1px solid var(--nexus-border);background:var(--primary);color:#fff;">Search</button>
   </form>
   <?php if ($query === ''): ?>
     <p>Enter a search term to find pages.</p>
