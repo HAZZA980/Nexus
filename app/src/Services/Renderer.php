@@ -457,75 +457,9 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
             . "<div class=\"nx-examplecard-try-title\">You try</div>"
             . "<div class=\"nx-trybox\">"
               . "<div id=\"{$uid}_input\" class=\"nx-try-input\" aria-label=\"Enter your citation\" contenteditable=\"true\">{$expectedHtml}</div>"
-              . "<div class=\"nx-try-actions\">"
-                . "<button type=\"button\" class=\"nx-try-check\" data-target=\"{$uid}\">Check</button>"
-                . "<span class=\"nx-try-status\" id=\"{$uid}_status\" aria-live=\"polite\"></span>"
             . "</div>"
             . "</div>"
-            . "</div>"
-            . "<script>(function(){"
-              . "const expectedRaw=" . self::jsonInline($expected) . ";"
-              . "const input=document.getElementById('{$uid}_input');"
-              . "const status=document.getElementById('{$uid}_status');"
-              . "const btn=document.querySelector('[data-target=\"{$uid}\"]');"
-              . "const hasHtml=(str)=>/<[^>]+>/.test(str||'');"
-              . "const renderMarked=(str)=>{"
-                  . "const raw=str||'';"
-                  . "if(hasHtml(raw)) return raw;"
-                  . "const escaped=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');"
-                  . "const bolded=escaped.replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>');"
-                  . "const italics=bolded.replace(/(?<!\\*)\\*(?!\\*)(.+?)(?<!\\*)\\*(?!\\*)/g,'<em>$1</em>');"
-                  . "return italics.replace(/\\n/g,'<br>');"
-              . "};"
-              . "const stripMarkup=(tpl)=>{"
-                  . "return (tpl||'')"
-                    . ".replace(/<[^>]+>/g,' ')"
-                    . ".replace(/\\*\\*?/g,'')"
-                    . ".replace(/\\s+/g,' ')"
-                    . ".trim();"
-              . "};"
-              . "const buildPattern=(tpl)=>{"
-                  . "const plain=stripMarkup(tpl);"
-                  . "const esc=p=>p.replace(/[-/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&');"
-                  . "const tokens=[];"
-                  . "let buf='';"
-                  . "for(const ch of plain){"
-                    . "if(/[,.;:()\\[\\]]/.test(ch)){"
-                      . "if(buf) { tokens.push({t:'w',v:buf}); buf=''; }"
-                      . "tokens.push({t:'p',v:ch});"
-                    . "} else { buf+=ch; }"
-                  . "}"
-                  . "if(buf) tokens.push({t:'w',v:buf});"
-                  . "const parts=tokens.map(tok=>{"
-                    . "if(tok.t==='p') return '\\\\s*'+esc(tok.v)+'\\\\s*';"
-                    . "return '\\\\s*[^,.;:()\\[\\]]+';"  /* allow any non-punctuation run */ 
-                  . "});"
-                  . "return new RegExp('^'+parts.join('')+'\\\\s*$', 'i');"
-              . "};"
-              . "if(input){"
-                  . "input.innerHTML = renderMarked(expectedRaw);"
-                  . "input.addEventListener('input',()=>{"
-                      . "const txt=input.innerText||input.textContent||'';"
-                      . "if(txt.includes('*')) input.innerHTML=renderMarked(txt);"
-                  . "});"
-                  . "input.addEventListener('blur',()=>{"
-                      . "const txt=input.innerText||input.textContent||'';"
-                      . "if(txt.includes('*')) input.innerHTML=renderMarked(txt);"
-                  . "});"
-              . "}"
-              . "const pattern=buildPattern(expectedRaw || '');"
-              . "if(btn&&input&&status){"
-                . "btn.addEventListener('click',()=>{"
-                  . "const val=(input.innerText||input.textContent||'').trim();"
-                  . "const ok=pattern.test(val);"
-                  . "status.textContent=ok?'Correct format!':'Not quite, check punctuation and order.';"
-                  . "status.classList.remove('ok','no');"
-                  . "status.classList.add(ok?'ok':'no');"
-                  . "input.classList.remove('ok','no');"
-                  . "input.classList.add(ok?'ok':'no');"
-                . "});"
-              . "}"
-            . "})();</script>";
+            . "</div>";
         }
 
         $html .= "</div>";
@@ -654,8 +588,17 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
         $alt = Security::e((string)($p['alt'] ?? ''));
         $srcEsc = Security::e($src);
+        $ratioRaw = strtolower(trim((string)($p['imageRatio'] ?? '16-9')));
+        $ratioMap = [
+          '16-9' => '16 / 9',
+          '4-3' => '4 / 3',
+          '3-2' => '3 / 2',
+          '1-1' => '1 / 1',
+          '9-16' => '9 / 16',
+        ];
+        $ratioCss = $ratioMap[$ratioRaw] ?? '16 / 9';
 
-        $img = "<img class=\"nx-img\" src=\"{$srcEsc}\" alt=\"{$alt}\">";
+        $img = "<img class=\"nx-img\" src=\"{$srcEsc}\" alt=\"{$alt}\" style=\"aspect-ratio:{$ratioCss};width:100%;height:auto;object-fit:cover;object-position:center;\">";
         return self::wrapWithStyles($img, $blk, false);
       }
 

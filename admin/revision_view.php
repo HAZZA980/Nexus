@@ -21,6 +21,8 @@ $doc = json_decode($rev['doc_json'] ?? '{}', true) ?: ['version'=>1,'rows'=>[]];
 $content = Renderer::render($doc);
 
 $base = base_path();
+$themeIsLight = ui_theme_is_light();
+$activeNav = 'sites';
 $label = $rev['name'] ?: "Revision #{$rev['id']}";
 $note = $rev['note'] ?? '';
 $ts = $rev['created_at'] ?? '';
@@ -32,19 +34,44 @@ $author = $rev['created_by_user_id'] ?? null;
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Revision <?= Security::e($label) ?></title>
+  <script>
+    (function() {
+      document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
+    })();
+  </script>
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css">
   <link rel="stylesheet" href="<?= $base ?>/public/assets/site.css">
   <style>
-    body{background:#0b1224;color:#e6eaf2;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0;padding:0;}
+    :root {
+      --bg: #0b1224;
+      --panel: #0f172a;
+      --border: rgba(255,255,255,.12);
+      --muted: #cbd5e1;
+      --text: #e6eaf2;
+      --primary: #5b21b6;
+      --primary-strong: #4c1d95;
+    }
+    .theme-light {
+      --bg: #f8fafc;
+      --panel: #ffffff;
+      --border: #e2e8f0;
+      --muted: #475569;
+      --text: #0f172a;
+      --primary: #2563eb;
+      --primary-strong: #1d4ed8;
+    }
+    body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0;padding:0;}
     .wrap{max-width:1100px;margin:0 auto;padding:16px;}
-    .rev-head{border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:14px;background:rgba(255,255,255,.04);margin-bottom:14px;}
-    .rev-meta{display:flex;gap:12px;flex-wrap:wrap;color:#cbd5e1;}
-    .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:#e6eaf2;text-decoration:none;}
-    .btn:hover{background:rgba(255,255,255,.12);}
+    .rev-head{border:1px solid var(--border);border-radius:14px;padding:14px;background:rgba(255,255,255,.04);margin-bottom:14px;}
+    .rev-meta{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);}
+    .rev-head .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,.08);color:var(--text);text-decoration:none;}
+    .rev-head .btn:hover{background:rgba(255,255,255,.12);}
     .actions{display:flex;gap:10px;margin:12px 0;}
-    .note{margin-top:8px;border:1px dashed rgba(255,255,255,.18);border-radius:12px;padding:10px;color:#cbd5e1;background:rgba(255,255,255,.02);}
+    .note{margin-top:8px;border:1px dashed var(--border);border-radius:12px;padding:10px;color:var(--muted);background:rgba(255,255,255,.02);}
   </style>
 </head>
 <body>
+  <?php include __DIR__ . '/partials/header.php'; ?>
   <div class="wrap">
     <div class="rev-head">
       <div style="font-weight:900;font-size:20px;"><?= Security::e($label) ?></div>

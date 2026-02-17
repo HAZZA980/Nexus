@@ -161,25 +161,6 @@ $footerDefaults = [
 ];
 $footer = array_replace_recursive($footerDefaults, $footer);
 
-// Collections schema helper
-function nx_collections_ensure(): void {
-  try {
-    $db = nx_db();
-    $db->exec("CREATE TABLE IF NOT EXISTS site_collections (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      site_id INT NOT NULL,
-      name VARCHAR(255) NOT NULL,
-      slug VARCHAR(255) NOT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_site_slug (site_id, slug),
-      INDEX idx_site (site_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-  } catch (\Throwable $e) {
-    // ignore; fallback handled elsewhere
-  }
-}
-nx_collections_ensure();
-
 $colorOpts = [
   'pageBg' => [
     '#f7f7f3' => 'Warm light',
@@ -616,7 +597,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $doc,
           $page['template_key'] ?? 'landing',
           $page['shell_override_json'] ? json_decode($page['shell_override_json'], true) : null,
-          $page['collection_id'] ?? null
+          null
         );
         header('Location: site.php?id=' . $siteId . '&saved=page');
         exit;
@@ -633,7 +614,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = trim((string)($_POST['modal_title'] ?? ''));
     $slug  = trim((string)($_POST['modal_slug'] ?? ''));
     $layout = trim((string)($_POST['modal_layout'] ?? 'blank'));
-    $collectionId = (int)($_POST['modal_collection'] ?? 0);
     $normalizedSlug = strtolower(preg_replace('/[^a-z0-9-]+/', '-', $slug));
     $normalizedSlug = trim(preg_replace('/-+/', '-', $normalizedSlug), '-');
 
@@ -647,7 +627,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       if ($layout !== 'blank' && isset($templates[$layout])) {
         $doc = $templates[$layout];
       }
-      $pageId = Page::create($siteId, $title, $normalizedSlug, $doc, $layout ?: 'blank', null, $collectionId ?: null);
+      $pageId = Page::create($siteId, $title, $normalizedSlug, $doc, $layout ?: 'blank', null, null);
       $redirectBase = rtrim(base_path(), '/');
       if ($redirectBase === '') {
         $scriptDir = dirname($_SERVER['SCRIPT_NAME'] ?? '') ?: '';
@@ -782,39 +762,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   }
 
-  // Collections add
-  if (isset($_POST['add_collection'])) {
-    $name = trim((string)($_POST['collection_name'] ?? ''));
-    $slug = strtolower(preg_replace('/[^a-z0-9-]+/', '-', trim((string)($_POST['collection_slug'] ?? $name))));
-    $slug = trim(preg_replace('/-+/', '-', $slug), '-');
-    if ($name === '' || $slug === '') {
-      $notice = 'Collection name and slug are required.';
-    } else {
-      try {
-        $db = nx_db();
-        $stmt = $db->prepare("INSERT INTO site_collections (site_id,name,slug,created_at) VALUES (?,?,?,NOW())");
-        $stmt->execute([$siteId, $name, $slug]);
-        header('Location: site.php?id=' . $siteId . '&saved=collection');
-        exit;
-      } catch (\Throwable $e) {
-        $notice = 'Could not add collection (maybe slug already exists).';
-      }
-    }
-  }
-
-  // Collections delete
-  if (isset($_POST['delete_collection'])) {
-    $cid = (int)($_POST['collection_id'] ?? 0);
-    try {
-      $db = nx_db();
-      $db->prepare("DELETE FROM site_collections WHERE id=? AND site_id=? LIMIT 1")->execute([$cid, $siteId]);
-      header('Location: site.php?id=' . $siteId . '&saved=collection');
-      exit;
-    } catch (\Throwable $e) {
-      $notice = 'Delete failed. Please try again.';
-    }
-  }
-
   // Header save
   if (isset($_POST['save_header'])) {
     $items = [];
@@ -883,21 +830,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
   }
 
-  // Change page collection (from kebab menu)
-  if (isset($_POST['change_collection'])) {
-    try {
-      $pageId = (int)($_POST['page_id'] ?? 0);
-      $collectionId = (int)($_POST['collection_id'] ?? 0);
-      $cid = $collectionId > 0 ? $collectionId : null;
-      $stmt = nx_db()->prepare("UPDATE pages SET collection_id = :cid WHERE id = :pid AND site_id = :sid LIMIT 1");
-      $stmt->execute([':cid' => $cid, ':pid' => $pageId, ':sid' => $siteId]);
-      $notice = 'Collection updated.';
-      $pages = Page::listBySite($siteId); // refresh
-    } catch (\Throwable $e) {
-      $notice = 'Error updating collection: ' . $e->getMessage();
-    }
-  }
-
   // Citation database CRUD + revisions (Cite Them Right only)
   if ($siteSlug === 'cite-them-right') {
     $currentReleaseTag = $_SESSION['citation_release_tag_'.$siteSlug] ?? $currentReleaseTag;
@@ -905,7 +837,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $currentUserEmail = $currentUser['email'] ?? null;
 
     $diffFn = function(array $before, array $after): array {
-      $fields = ['example_key','label','referencing_style','category','citation_order','example_heading','example_body','you_try','notes'];
+      $fields = ['example_key','label','referencing_style','category','sub_category','citation_order','example_heading','example_body','you_try','notes'];
       $diff = [];
       foreach ($fields as $f) {
         $b = $before[$f] ?? null;
@@ -935,6 +867,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       if ($row) {
         CitationExample::update((int)$row['id'], [
           'referencing_style' => $snapshot['referencing_style'],
+          'category' => $snapshot['category'] ?? 'Books',
+          'sub_category' => $snapshot['sub_category'] ?? null,
           'example_key' => $snapshot['example_key'],
           'label' => $snapshot['label'],
           'citation_order' => $snapshot['citation_order'],
@@ -948,6 +882,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newId = CitationExample::create([
           'site_slug' => $siteSlug,
           'referencing_style' => $snapshot['referencing_style'],
+          'category' => $snapshot['category'] ?? 'Books',
+          'sub_category' => $snapshot['sub_category'] ?? null,
           'example_key' => $snapshot['example_key'],
           'label' => $snapshot['label'],
           'citation_order' => $snapshot['citation_order'],
@@ -969,12 +905,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($style, $citationStyles, true)) $style = $citationStyles[0];
         $category = trim((string)($_POST['citation_category'] ?? ''));
         if (!in_array($category, $citationCategories, true)) $category = $citationCategories[0];
+        $subCategory = trim((string)($_POST['citation_sub_category'] ?? ''));
+        if ($subCategory === '') $subCategory = null;
         $label = trim((string)($_POST['citation_label'] ?? ''));
         if ($label === '') throw new Exception('Label is required');
         $data = [
           'site_slug' => $siteSlug,
           'referencing_style' => $style,
           'category' => $category,
+          'sub_category' => $subCategory,
           'example_key' => '',
           'label' => $label,
           'citation_order' => trim((string)($_POST['citation_order'] ?? '')),
@@ -1004,11 +943,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($style, $citationStyles, true)) $style = $citationStyles[0];
         $category = trim((string)($_POST['citation_category'] ?? ''));
         if (!in_array($category, $citationCategories, true)) $category = $citationCategories[0];
+        $subCategory = trim((string)($_POST['citation_sub_category'] ?? ''));
+        if ($subCategory === '') $subCategory = null;
         $before = CitationExample::findById($id);
         $existingKey = $before['example_key'] ?? '';
         $data = [
           'referencing_style' => $style,
           'category' => $category,
+          'sub_category' => $subCategory,
           'example_key' => $existingKey !== '' ? $existingKey : nx_generate_citation_key($siteSlug, $style, (string)($_POST['citation_label'] ?? '')),
           'label' => trim((string)($_POST['citation_label'] ?? '')),
           'citation_order' => trim((string)($_POST['citation_order'] ?? '')),
@@ -1137,23 +1079,6 @@ if (!$homeExisting) {
   $pages = Page::listBySite($siteId); // refresh
 }
 
-$collections = [];
-try {
-  $stmt = nx_db()->prepare("SELECT * FROM site_collections WHERE site_id=? ORDER BY created_at DESC");
-  $stmt->execute([$siteId]);
-  $collections = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-  $usageStmt = nx_db()->prepare("SELECT collection_id, COUNT(*) as cnt FROM pages WHERE site_id=? GROUP BY collection_id");
-  $usageStmt->execute([$siteId]);
-  $usageRows = $usageStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-  $collectionUsage = [];
-  foreach ($usageRows as $ur) {
-    $collectionUsage[(int)$ur['collection_id']] = (int)$ur['cnt'];
-  }
-} catch (\Throwable $e) {
-  $collections = [];
-  $collectionUsage = [];
-}
-
 $citationExamples = [];
 if ($siteSlug === 'cite-them-right') {
   try {
@@ -1203,7 +1128,9 @@ if ($siteSlug === 'cite-them-right') {
 }
 
 $base = base_path();
+$themeIsLight = ui_theme_is_light();
 $activeNav = 'sites';
+$citationsOnly = (($siteSlug ?? '') === 'cite-them-right') && (($_GET['view'] ?? '') === 'citations');
 
 // Fetch current user for header menu
 $currentUser = null;
@@ -1225,12 +1152,7 @@ if (isset($_SESSION['user_id'])) {
   <title>Site — <?= Security::e($site['name']) ?></title>
   <script>
     (function() {
-      try {
-        const stored = localStorage.getItem('nexusTheme');
-        const theme = stored === 'light' ? 'light' : 'dark';
-        localStorage.setItem('nexusTheme', theme);
-        document.documentElement.classList.toggle('theme-light', theme === 'light');
-      } catch(e) {}
+      document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
   </script>
   <style>
@@ -1274,55 +1196,6 @@ if (isset($_SESSION['user_id'])) {
     }
     a{color:inherit;text-decoration:none}
     a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline:none; box-shadow:var(--focus); border-color:var(--primary); }
-    .top-bar {
-      display:flex; align-items:center; gap:16px;
-      padding:14px 18px;
-      background: linear-gradient(90deg, rgba(91,33,182,0.12), rgba(91,33,182,0));
-      border-bottom:1px solid var(--border);
-      position:sticky; top:0; backdrop-filter:blur(10px); z-index:10;
-    }
-    .brand { display:inline-flex; align-items:center; gap:10px; font-weight:600; }
-    .brand-mark {
-      width:36px; height:36px;
-      border-radius:10px;
-      background:linear-gradient(135deg, var(--primary), #22c55e);
-      display:grid; place-items:center;
-      font-weight:700; letter-spacing:-0.02em;
-      box-shadow:var(--shadow);
-    }
-    .brand-text { display:flex; flex-direction:column; line-height:1.2; }
-    .brand-text small { color:var(--muted); font-weight:500; }
-    .top-nav{
-      display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;
-    }
-    .top-nav .nav-link{
-      display:inline-flex;align-items:center;justify-content:center;
-      padding:10px 12px;border-radius:10px;border:1px solid var(--border);
-      background:rgba(255,255,255,0.05);color:var(--text);font-weight:700;text-decoration:none;min-height:40px;
-    }
-    .top-nav .nav-link:hover{background:rgba(255,255,255,0.1);}
-    .top-nav .nav-link.active{
-      background:linear-gradient(135deg, var(--primary), var(--primary-strong));
-      color:#fff;border-color:transparent;box-shadow:var(--shadow);
-    }
-    .top-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--border);
-      background:rgba(255,255,255,.06);text-decoration:none;font-weight:700;cursor:pointer;min-height:44px}
-    .btn:hover{background:rgba(255,255,255,.10);transform:translateY(-1px);}
-    .btn.primary {
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
-      border: none;
-      color: #f8fbff;
-      box-shadow: 0 10px 30px rgba(37,99,235,0.35);
-    }
-    .user-menu { position:relative; min-width:180px; }
-    .user-menu summary { list-style:none; cursor:pointer; display:inline-flex; align-items:center; gap:10px; padding:10px 12px; min-height:44px; border-radius:12px; border:1px solid var(--border); background:rgba(255,255,255,0.05); font-weight:600; }
-    .user-menu summary::-webkit-details-marker { display:none; }
-    .user-avatar { width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#22c55e,#3b82f6);display:grid;place-items:center;font-weight:700;color:#0b1224; }
-    .user-menu .menu { position:absolute; right:0; top:calc(100% + 6px); background:var(--card); border:1px solid var(--border); border-radius:14px; padding:10px; min-width:220px; box-shadow:var(--shadow); z-index:5; }
-    .user-menu .menu a, .user-menu .menu button { display:block; padding:10px 10px; border-radius:10px; text-decoration:none; background:transparent; border:none; color:var(--text); width:100%; text-align:left; cursor:pointer; }
-    .user-menu .menu a:hover, .user-menu .menu button:hover { background:rgba(255,255,255,0.06); }
-    .user-meta { color:var(--muted); font-size:14px; padding:6px 10px 10px; }
     main { max-width:1200px; margin:0 auto; padding:24px 20px 48px; }
     .wrap{max-width:1100px;margin:0 auto;padding:0}
     .top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px}
@@ -1393,11 +1266,9 @@ if (isset($_SESSION['user_id'])) {
     #citationModalBackdrop input,
     #citationModalBackdrop textarea,
     #citationModalBackdrop select{
-      background:#fff;
+      background:rgba(255,255,255,0.08);
       color:var(--text);
-<<<<<<< ours
-=======
-      border:1px solid rgba(255,255,255,0.18);
+      border:1px solid rgba(255,255,255,0.22);
     }
     #citationYouTryField,
     #citationOrderField,
@@ -1405,17 +1276,16 @@ if (isset($_SESSION['user_id'])) {
     #editYouTryField,
     #editOrderField,
     #editBodyField{
-      background:rgba(255,255,255,0.06);
-      border:1px solid rgba(255,255,255,0.18);
+      background:rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.22);
     }
     #citationModalBackdrop input::placeholder,
     #citationModalBackdrop textarea::placeholder{
-      color:rgba(255,255,255,0.6);
+      color:rgba(226,232,240,0.72);
     }
     #citationModalBackdrop .example-panel{
-      background:rgba(255,255,255,0.02);
-      border:1px solid rgba(255,255,255,0.12);
->>>>>>> theirs
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.14);
     }
     .modal-body{flex:1;overflow:auto;padding-right:4px;}
     .modal-footer{position:sticky;bottom:0;background:var(--card);padding-top:12px;margin-top:12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
@@ -1428,10 +1298,10 @@ if (isset($_SESSION['user_id'])) {
     .section-surface{background:rgba(17,24,39,0.04);border:1px solid var(--border);border-radius:12px;padding:12px;}
     .example-panel{background:rgba(17,24,39,0.03);border:1px solid rgba(17,24,39,0.08);border-radius:14px;padding:14px;}
     .example-panel input{background:transparent;}
-    .example-panel .rich-editor{background:transparent;border-color:rgba(17,24,39,0.12);}
+    .example-panel .rich-editor{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.22);}
     .helper{color:var(--muted);font-size:12px;margin-top:6px;}
     .mini-toolbar{display:flex;gap:6px;margin:6px 0;}
-    .mini-toolbar button{border:1px solid var(--border);background:rgba(255,255,255,0.9);color:var(--text);padding:5px 10px;border-radius:8px;cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:4px;}
+    .mini-toolbar button{border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:var(--text);padding:5px 10px;border-radius:8px;cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:4px;}
     .mini-toolbar button:hover{background:rgba(37,99,235,0.08);}
     .mini-toolbar .toolbar-label{font-weight:600;}
     .rich-editor{
@@ -1439,12 +1309,34 @@ if (isset($_SESSION['user_id'])) {
       padding:10px;
       border:1px solid var(--border);
       border-radius:10px;
-      background:#fff;
+      background:rgba(255,255,255,0.08);
       color:var(--text);
       outline:none;
       white-space:pre-wrap;
     }
     .rich-editor:focus{box-shadow:0 0 0 2px rgba(37,99,235,0.25);border-color:rgba(37,99,235,0.45);}
+    html.theme-light #citationModalBackdrop input,
+    html.theme-light #citationModalBackdrop textarea,
+    html.theme-light #citationModalBackdrop select{
+      background:#fff;
+      border:1px solid rgba(17,24,39,0.18);
+    }
+    html.theme-light #citationModalBackdrop input::placeholder,
+    html.theme-light #citationModalBackdrop textarea::placeholder{
+      color:rgba(71,85,105,0.72);
+    }
+    html.theme-light .mini-toolbar button{
+      background:rgba(255,255,255,0.9);
+      border:1px solid var(--border);
+    }
+    html.theme-light .rich-editor{
+      background:#fff;
+      border:1px solid var(--border);
+    }
+    html.theme-light .example-panel .rich-editor{
+      background:#fff;
+      border:1px solid var(--border);
+    }
     .layout-card.active{outline:2px solid var(--primary); box-shadow:0 0 0 3px rgba(59,130,246,0.35);}
     .layout-card .checkmark{display:none; position:absolute; top:8px; right:8px; background:var(--primary); color:#fff; border-radius:999px; width:22px; height:22px; font-size:14px; align-items:center; justify-content:center;}
     .layout-card.active .checkmark{display:flex;}
@@ -1465,8 +1357,11 @@ if (isset($_SESSION['user_id'])) {
     table.page-table tbody tr{border-top:1px solid var(--border);}
     table.page-table tbody tr:hover{background:rgba(37,99,235,0.06);}
     table.page-table td, table.page-table th{padding:10px 8px;vertical-align:middle;}
-    .title-main{font-weight:800;font-size:15px;}
+    .title-main{font-weight:800;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
     .title-path{font-family:"SFMono-Regular","Menlo",monospace;font-size:12px;color:var(--muted);}
+    .page-kind-badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.2;border:1px solid transparent;}
+    .page-kind-badge.home-logged-out{background:rgba(59,130,246,.12);color:#1d4ed8;border-color:rgba(59,130,246,.35);}
+    .page-kind-badge.home-logged-in{background:rgba(16,185,129,.12);color:#047857;border-color:rgba(16,185,129,.35);}
     .btn.icon{padding:8px 10px;gap:6px;}
     .btn.text{background:transparent;border-color:transparent;padding:8px 10px;}
     .btn.danger-outline{color:#fca5a5;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.05);}
@@ -1487,6 +1382,7 @@ if (isset($_SESSION['user_id'])) {
   .citation-table{width:100%;border-collapse:collapse;}
   .citation-table th,.citation-table td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;}
   .citation-table th{color:var(--muted);font-size:12px;letter-spacing:0.3px;text-transform:uppercase;}
+  .citation-row{cursor:pointer;}
   .citation-row:hover{background:rgba(255,255,255,0.04);}
   .citation-label{font-weight:800;font-size:15px;}
   .citation-style-pill{border-radius:999px;padding:6px 10px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;}
@@ -1506,15 +1402,15 @@ if (isset($_SESSION['user_id'])) {
   .chart-line span{flex:1;border-radius:6px;background:linear-gradient(180deg, rgba(37,99,235,.65), rgba(37,99,235,.28));min-height:2px;}
   .trend-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.03);font-weight:700;font-size:12px;}
   .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;}
-  .cite-viewer{position:fixed;top:0;right:0;width:520px;max-width:90vw;height:100vh;background:var(--panel);border-left:1px solid var(--border);box-shadow:-12px 0 24px rgba(0,0,0,0.25);transition:transform 0.25s ease;z-index:1500;display:flex;flex-direction:column;transform:translateX(100%);}
+  .cite-viewer{position:fixed;inset:0 0 0 auto;width:520px;max-width:90vw;height:100dvh;max-height:100dvh;background:var(--panel);border-left:1px solid var(--border);box-shadow:none;transition:transform 0.25s ease;z-index:2600;display:flex;flex-direction:column;transform:translateX(100%);overflow:hidden;}
   .cite-viewer.active{transform:translateX(0);}
   .cite-viewer header{padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;}
-  .cite-viewer .actions-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border);padding:10px 14px;}
+  .cite-viewer .actions-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border);padding:12px 16px;}
   .cite-viewer main{padding:14px;overflow:auto;flex:1;display:grid;gap:10px;max-width:100%;margin:0;width:100%;}
   .cite-viewer .section{margin:0;}
   .cite-viewer footer{padding:12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
   .cite-viewer main.viewer-body{display:flex;flex-direction:column;align-items:stretch;}
-  .cite-viewer .viewer-body{padding:14px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:12px;background:var(--panel);align-items:stretch;}
+  .cite-viewer .viewer-body{padding:16px;overflow-y:auto;overflow-x:hidden;flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;background:var(--panel);align-items:stretch;}
   .cite-viewer .viewer-body > *{width:100%;max-width:none;}
   .cite-viewer .viewer-body .citation-field{width:100%;max-width:none;}
   .cite-viewer .viewer-body .callout{width:100%;max-width:none;}
@@ -1559,12 +1455,21 @@ if (isset($_SESSION['user_id'])) {
   .revision-row{cursor:pointer;}
   .revision-row:hover{background:rgba(255,255,255,0.04);}
   .cite-viewer .callout{padding:10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,0.03);width:100%;}
+  .view-meta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,0.02);}
+  .view-meta-item{min-width:0;}
+  .view-meta-item strong{display:block;font-size:11px;letter-spacing:0.3px;text-transform:uppercase;color:var(--muted);}
+  .view-meta-item .meta-value{margin-top:4px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  @media(max-width:720px){.view-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
   </style>
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css">
 </head>
   <body>
-    <?php include __DIR__ . '/partials/header.php'; ?>
+    <?php if (!$citationsOnly): ?>
+      <?php include __DIR__ . '/partials/header.php'; ?>
+    <?php endif; ?>
   <main>
     <div class="wrap">
+      <?php if (!$citationsOnly): ?>
       <div class="top">
         <div>
           <h1 style="margin:0;font-size:26px"><?= Security::e($site['name']) ?></h1>
@@ -1584,13 +1489,9 @@ if (isset($_SESSION['user_id'])) {
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="tab active" data-tab="pages" type="button">Pages</button>
           <button class="tab" data-tab="header-footer" type="button">Header & Footer</button>
-          <button class="tab" data-tab="collections" type="button">Collections</button>
           <button class="tab" data-tab="appearance" type="button">Appearance</button>
           <button class="tab" data-tab="analytics" type="button">Analytics</button>
           <button class="tab" data-tab="settings" type="button">Settings</button>
-          <?php if ($siteSlug === 'cite-them-right'): ?>
-            <button class="tab" data-tab="citations" type="button">Citation DB</button>
-          <?php endif; ?>
         </div>
       </div>
 
@@ -1630,7 +1531,6 @@ if (isset($_SESSION['user_id'])) {
                 <th>Title</th>
                 <th>Path</th>
                 <th>Status</th>
-                <th>Collection</th>
                 <th>Updated</th>
                 <th>Actions</th>
               </tr>
@@ -1638,26 +1538,30 @@ if (isset($_SESSION['user_id'])) {
             <tbody id="pageTable">
               <?php foreach ($pages as $p): ?>
                 <?php
-                  $colName = '—';
-                  if (!empty($p['collection_id'])) {
-                    foreach ($collections as $c) {
-                      if ((int)$c['id'] === (int)$p['collection_id']) { $colName = Security::e($c['name']); break; }
-                    }
+                  $slug = strtolower((string)($p['slug'] ?? ''));
+                  $homeLabel = '';
+                  $homeLabelClass = '';
+                  if ($slug === 'home') {
+                    $homeLabel = 'Homepage (Logged Out)';
+                    $homeLabelClass = 'home-logged-out';
+                  } elseif ($slug === 'home-signed-in') {
+                    $homeLabel = 'Homepage (Logged In)';
+                    $homeLabelClass = 'home-logged-in';
                   }
-                  $colNameLower = strtolower(trim(strip_tags($colName === '—' ? '' : $colName)));
                 ?>
                 <tr
                   data-title="<?= Security::e(strtolower($p['title'])) ?>"
                   data-path="<?= Security::e(strtolower($p['slug'])) ?>"
                   data-status="<?= Security::e(strtolower($p['status'])) ?>"
-                  data-collection-id="<?= isset($p['collection_id']) ? (int)$p['collection_id'] : 0 ?>"
-                  data-collection-name="<?= Security::e($colNameLower) ?>"
                 >
                   <td>
                     <div class="title-main">
                       <a href="<?= $base ?>/s/<?= Security::e($site['slug']) ?>/<?= Security::e($p['slug']) ?>" target="_blank" style="color:inherit;text-decoration:none;">
                         <?= Security::e($p['title']) ?>
                       </a>
+                      <?php if ($homeLabel !== ''): ?>
+                        <span class="page-kind-badge <?= Security::e($homeLabelClass) ?>"><?= Security::e($homeLabel) ?></span>
+                      <?php endif; ?>
                     </div>
                     <div class="title-path">/<?= Security::e($p['slug']) ?></div>
                   </td>
@@ -1669,9 +1573,6 @@ if (isset($_SESSION['user_id'])) {
                       <?= $st === 'published' ? 'Published' : 'Draft' ?>
                     </span>
                   </td>
-                  <td class="muted">
-                    <?= $colName ?>
-                  </td>
                   <td class="muted updated-cell" data-updated="<?= Security::e($p['updated_at'] ?? '') ?>"><?= Security::e($p['updated_at'] ?? '') ?></td>
                   <td style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
                     <a class="btn small" style="background:linear-gradient(135deg,var(--primary),var(--primary));color:#fff;border-color:rgba(255,255,255,.12)" href="<?= $base ?>/admin/page_builder.php?id=<?= (int)$p['id'] ?>">Edit</a>
@@ -1679,21 +1580,6 @@ if (isset($_SESSION['user_id'])) {
                       <button class="kebab-btn" type="button" aria-haspopup="true" aria-expanded="false">⋯</button>
                       <div class="kebab-menu" role="menu">
                         <button type="button" data-duplicate-page data-page-id="<?= (int)$p['id'] ?>" aria-label="Duplicate page">Duplicate</button>
-                        <div style="padding:8px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
-                          <div class="muted" style="font-size:12px;margin-bottom:6px;">Change collection</div>
-                          <form method="post" action="site.php?id=<?= (int)$site['id'] ?>" style="display:grid;gap:6px">
-                            <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
-                            <input type="hidden" name="change_collection" value="1">
-                            <input type="hidden" name="page_id" value="<?= (int)$p['id'] ?>">
-                            <select name="collection_id" style="width:100%;padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);">
-                              <option value="0">No collection</option>
-                              <?php foreach ($collections as $col): ?>
-                                <option value="<?= (int)$col['id'] ?>" <?= ((int)($p['collection_id'] ?? 0) === (int)$col['id']) ? 'selected' : '' ?>><?= Security::e($col['name']) ?></option>
-                              <?php endforeach; ?>
-                            </select>
-                            <button class="btn small" type="submit" aria-label="Save collection">Save</button>
-                          </form>
-                        </div>
                         <button type="button" class="danger" data-delete-page data-page-id="<?= (int)$p['id'] ?>" data-page-title="<?= Security::e($p['title']) ?>" aria-label="Delete page">Delete</button>
                       </div>
                     </div>
@@ -1754,81 +1640,6 @@ if (isset($_SESSION['user_id'])) {
                 </form>
                 <button class="btn" data-copy="#assetsPath" type="button">Copy paths</button>
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- COLLECTIONS -->
-      <div class="panel" id="panel-collections">
-        <div class="card" style="margin-top:14px">
-          <div style="display:grid;gap:14px">
-            <div class="section" style="margin-top:0">
-              <h3>Create a collection</h3>
-              <div class="muted">Collections group related pages for listings and navigation.</div>
-              <form method="post" style="margin-top:12px;display:grid;gap:10px;">
-                <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
-                <input type="hidden" name="add_collection" value="1">
-                <div class="row">
-                  <div>
-                    <label>Collection name</label>
-                    <input name="collection_name" placeholder="e.g. Articles" required>
-                  </div>
-                  <div>
-                    <label>Slug</label>
-                    <input name="collection_slug" placeholder="articles" required>
-                  </div>
-                </div>
-                <div class="actions">
-                  <button type="submit" class="btn primary">Create collection</button>
-                </div>
-              </form>
-            </div>
-
-            <div class="section" style="background:rgba(255,255,255,0.02);">
-              <h3>Existing collections</h3>
-              <div class="muted">Use the slug to display pages from this collection in listings or templates.</div>
-              <?php if ($collections): ?>
-                <table class="collection-table" aria-label="Collections table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Slug</th>
-                      <th>Pages</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <?php foreach ($collections as $col): $cid=(int)$col['id']; $count = $collectionUsage[$cid] ?? 0; ?>
-                      <tr data-collection-id="<?= $cid ?>" data-collection-name="<?= Security::e($col['name']) ?>">
-                        <td>
-                          <div class="collection-name"><?= Security::e($col['name']) ?></div>
-                        </td>
-                        <td><span class="collection-slug"><?= Security::e($col['slug']) ?></span></td>
-                        <td>
-                          <button class="btn text" type="button" data-view-collection="<?= $cid ?>" style="padding:6px 8px">
-                            <?= $count ?> page<?= $count===1 ? '' : 's' ?>
-                          </button>
-                        </td>
-                        <td>
-                          <div class="kebab">
-                            <button class="kebab-btn" type="button" aria-haspopup="true" aria-expanded="false">⋯</button>
-                            <div class="kebab-menu" role="menu">
-                              <button type="button" data-view-collection="<?= $cid ?>">View pages</button>
-                              <button type="button" class="danger" data-delete-collection="<?= $cid ?>" data-collection-name="<?= Security::e($col['name']) ?>">Delete</button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    <?php endforeach; ?>
-                  </tbody>
-                </table>
-              <?php else: ?>
-                <div class="muted" style="display:flex;align-items:center;gap:10px;margin-top:10px">
-                  <span style="font-size:20px;">📁</span>
-                  <div>No collections yet. Create one to group related pages like Articles or Tutorials.</div>
-                </div>
-              <?php endif; ?>
             </div>
           </div>
         </div>
@@ -2449,10 +2260,11 @@ if (isset($_SESSION['user_id'])) {
           </div>
         </div>
       </div>
+      <?php endif; ?>
 
-      <?php if ($siteSlug === 'cite-them-right'): ?>
+      <?php if ($siteSlug === 'cite-them-right' && $citationsOnly): ?>
       <!-- CITATION DATABASE (read-only) -->
-      <div class="panel" id="panel-citations">
+      <div class="panel active" id="panel-citations">
         <div class="card" style="margin-top:14px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
             <div>
@@ -2617,9 +2429,10 @@ if (isset($_SESSION['user_id'])) {
                     <th>Reference type</th>
                     <th>Style</th>
                     <th>Category</th>
+                    <th>Sub-category</th>
                     <th>Key</th>
                     <th>Status</th>
-                    <th>Actions</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2634,32 +2447,32 @@ if (isset($_SESSION['user_id'])) {
                     elseif ($hasRevision) { $statusLabel = 'Edited (other release)'; $statusTone = 'badge-chip'; }
                     $statusValue = $staged ? 'staged' : ($hasRevision ? 'edited' : 'clean');
                   ?>
-                    <tr class="citation-row" data-style="<?= Security::e($ex['referencing_style'] ?? '') ?>" data-status="<?= Security::e($statusValue) ?>" data-category="<?= Security::e($ex['category'] ?? '') ?>">
+                    <tr
+                      class="citation-row"
+                      data-style="<?= Security::e($ex['referencing_style'] ?? '') ?>"
+                      data-status="<?= Security::e($statusValue) ?>"
+                      data-category="<?= Security::e($ex['category'] ?? '') ?>"
+                      data-sub-category="<?= Security::e($ex['sub_category'] ?? '') ?>"
+                      data-key="<?= Security::e($ex['example_key'] ?? '') ?>"
+                      data-label="<?= Security::e($ex['label'] ?? '') ?>"
+                      data-order="<?= Security::e($ex['citation_order'] ?? '') ?>"
+                      data-heading="<?= Security::e($ex['example_heading'] ?? '') ?>"
+                      data-body="<?= Security::e($ex['example_body'] ?? '') ?>"
+                      data-youtry="<?= Security::e($ex['you_try'] ?? '') ?>"
+                      data-notes="<?= Security::e($ex['notes'] ?? '') ?>"
+                      data-id="<?= (int)($ex['id'] ?? 0) ?>"
+                    >
                       <td>
                         <div class="citation-label"><?= Security::e($ex['label'] ?? '') ?></div>
                       </td>
                       <td><span class="citation-style-pill"><?= Security::e($ex['referencing_style'] ?? '') ?></span></td>
                       <td class="muted"><?= Security::e($ex['category'] ?? '') ?></td>
+                      <td class="muted"><?= Security::e($ex['sub_category'] ?? '—') ?></td>
                       <td class="muted collection-slug" title="<?= Security::e($key) ?>"><?= Security::e($keyDisplay) ?></td>
                       <td>
                         <span class="<?= $statusTone ?>"><?= Security::e($statusLabel) ?></span>
                       </td>
                       <td style="display:flex;gap:6px;flex-wrap:wrap;">
-                        <button
-                          class="btn small"
-                          type="button"
-                          data-view-citation
-                          data-style="<?= Security::e($ex['referencing_style'] ?? '') ?>"
-                          data-category="<?= Security::e($ex['category'] ?? '') ?>"
-                          data-key="<?= Security::e($ex['example_key'] ?? '') ?>"
-                          data-label="<?= Security::e($ex['label'] ?? '') ?>"
-                          data-order="<?= Security::e($ex['citation_order'] ?? '') ?>"
-                          data-heading="<?= Security::e($ex['example_heading'] ?? '') ?>"
-                          data-body="<?= Security::e($ex['example_body'] ?? '') ?>"
-                          data-youtry="<?= Security::e($ex['you_try'] ?? '') ?>"
-                          data-notes="<?= Security::e($ex['notes'] ?? '') ?>"
-                          data-id="<?= (int)($ex['id'] ?? 0) ?>"
-                        >View</button>
                         <form method="post" style="margin:0">
                           <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
                           <input type="hidden" name="delete_citation" value="1">
@@ -2819,7 +2632,6 @@ if (isset($_SESSION['user_id'])) {
     <input type="hidden" name="modal_title" id="modal_title_field">
     <input type="hidden" name="modal_slug" id="modal_slug_field">
     <input type="hidden" name="modal_layout" id="modal_layout_field">
-    <input type="hidden" name="modal_collection" id="modal_collection_field">
   </form>
   <form id="deletePageForm" method="post" action="site.php?id=<?= (int)$site['id'] ?>" style="display:none">
     <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
@@ -2829,11 +2641,6 @@ if (isset($_SESSION['user_id'])) {
   <form id="duplicatePageForm" method="post" action="site.php?id=<?= (int)$site['id'] ?>" style="display:none">
     <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
     <input type="hidden" name="duplicate_page" id="duplicate_page_id" value="0">
-  </form>
-  <form id="deleteCollectionForm" method="post" action="site.php?id=<?= (int)$site['id'] ?>" style="display:none">
-    <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
-    <input type="hidden" name="delete_collection" value="1">
-    <input type="hidden" name="collection_id" id="delete_collection_id">
   </form>
   <form id="deleteSiteForm" method="post" action="site.php?id=<?= (int)$site['id'] ?>" style="display:none">
     <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
@@ -2879,6 +2686,10 @@ if (isset($_SESSION['user_id'])) {
                       <option value="<?= Security::e($cat) ?>"><?= Security::e($cat) ?></option>
                     <?php endforeach; ?>
                   </select>
+                </label>
+                <label class="citation-field" style="display:block">
+                  <strong>Sub-category (optional)</strong>
+                  <input name="citation_sub_category" id="citationSubCategoryField" placeholder="e.g. Print books" style="margin-top:6px;width:100%">
                 </label>
                 <label class="citation-field" style="display:block">
                   <strong>Label</strong>
@@ -2951,21 +2762,23 @@ if (isset($_SESSION['user_id'])) {
       <button class="btn" type="button" id="viewerRevisions">View revisions</button>
     </div>
     <main id="viewBody" class="viewer-body">
-      <div class="citation-field">
-        <strong>Style</strong>
-        <div id="viewStyle" class="muted">—</div>
-      </div>
-      <div class="citation-field">
-        <strong>Category</strong>
-        <div id="viewCategory" class="muted">—</div>
-      </div>
-      <div class="citation-field">
-        <strong>ID</strong>
-        <div id="viewId" class="muted">—</div>
-      </div>
-      <div class="citation-field">
-        <strong>Key</strong>
-        <div id="viewKey" class="collection-slug">—</div>
+      <div class="view-meta-grid">
+        <div class="view-meta-item">
+          <strong>Style</strong>
+          <div id="viewStyle" class="meta-value">—</div>
+        </div>
+        <div class="view-meta-item">
+          <strong>Category</strong>
+          <div id="viewCategory" class="meta-value">—</div>
+        </div>
+        <div class="view-meta-item">
+          <strong>Sub-category</strong>
+          <div id="viewSubCategory" class="meta-value">—</div>
+        </div>
+        <div class="view-meta-item">
+          <strong>ID</strong>
+          <div id="viewId" class="meta-value">—</div>
+        </div>
       </div>
       <div class="citation-field">
         <strong>Citation order</strong>
@@ -2998,6 +2811,10 @@ if (isset($_SESSION['user_id'])) {
             <option value="<?= Security::e($cat) ?>"><?= Security::e($cat) ?></option>
           <?php endforeach; ?>
         </select>
+      </div>
+      <div class="citation-field citation-edit-field">
+        <strong>Sub-category (optional)</strong>
+        <input name="citation_sub_category" id="editSubCategoryField">
       </div>
       <div class="citation-field citation-edit-field">
         <strong>Label</strong>
@@ -3091,27 +2908,17 @@ if (isset($_SESSION['user_id'])) {
 
   <script>
     (function(){
-      const themeBtn = document.getElementById('themeToggleBtn');
-      function setTheme(mode){
-        if(mode==='light'){
-          document.documentElement.classList.add('theme-light');
-          if(themeBtn) themeBtn.textContent='🌙 Switch to dark';
-        } else {
-          document.documentElement.classList.remove('theme-light');
-          if(themeBtn) themeBtn.textContent='☀️ Switch to light';
-        }
-        try{localStorage.setItem('nexusTheme', mode);}catch(e){}
-      }
-      if(themeBtn){
-        const stored = (()=>{try{return localStorage.getItem('nexusTheme');}catch(e){return null;}})();
-        if(stored==='light') setTheme('light'); else setTheme('dark');
-        themeBtn.addEventListener('click',()=>{
-          const isLight=document.documentElement.classList.contains('theme-light');
-          setTheme(isLight?'dark':'light');
-        });
-      }
     })();
     const basePath = <?= json_encode($base) ?>;
+    const updateDrawerScrollLock = () => {
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      document.body.style.width = '';
+    };
     
     // tabs with hash support
     const tabs = Array.from(document.querySelectorAll('.tab'));
@@ -3132,34 +2939,25 @@ if (isset($_SESSION['user_id'])) {
     const rows = Array.from(document.querySelectorAll('#pageTable tr'));
     const empty = document.getElementById('pageEmpty');
     const clearFilters = document.getElementById('clearFilters');
-    let collectionFilter = '';
-    const collectionFilterBadge = document.getElementById('collectionFilterBadge');
     function applyPageFilters() {
       const q = (searchInput?.value || '').toLowerCase();
       const st = (statusFilter?.value || '').toLowerCase();
       let visible = 0;
       rows.forEach(r => {
-        const matchesSearch = (!q || r.dataset.title.includes(q) || r.dataset.path.includes(q) || (r.dataset.collectionName || '').includes(q));
+        const matchesSearch = (!q || r.dataset.title.includes(q) || r.dataset.path.includes(q));
         const matchesStatus = (!st || r.dataset.status === st);
-        const matchesCollection = (!collectionFilter || r.dataset.collectionId === collectionFilter);
-        const match = matchesSearch && matchesStatus && matchesCollection;
+        const match = matchesSearch && matchesStatus;
         r.style.display = match ? '' : 'none';
         if (match) visible++;
       });
       if (empty) empty.style.display = visible ? 'none' : '';
       if (clearFilters) clearFilters.style.display = (q || st) ? 'inline-flex' : 'none';
-      if (collectionFilterBadge) collectionFilterBadge.style.display = collectionFilter ? 'inline-flex' : 'none';
-      if (collectionFilterBadge && collectionFilter) {
-        const name = rows.find(r => r.dataset.collectionId === collectionFilter)?.dataset.collectionName || 'Collection';
-        collectionFilterBadge.querySelector('.badge-label').textContent = name;
-      }
     }
     searchInput?.addEventListener('input', applyPageFilters);
     statusFilter?.addEventListener('change', applyPageFilters);
     clearFilters?.addEventListener('click', () => {
       if (searchInput) searchInput.value = '';
       if (statusFilter) statusFilter.value = '';
-      collectionFilter = '';
       applyPageFilters();
     });
     applyPageFilters();
@@ -3361,6 +3159,7 @@ if (isset($_SESSION['user_id'])) {
     const citationIdField = document.getElementById('citationIdField');
     const citationStyleField = document.getElementById('citationStyleField');
     const citationCategoryField = document.getElementById('citationCategoryField');
+    const citationSubCategoryField = document.getElementById('citationSubCategoryField');
     const citationLabelField = document.getElementById('citationLabelField');
     const citationOrderField = document.getElementById('citationOrderField');
     const citationHeadingField = document.getElementById('citationHeadingField');
@@ -3371,8 +3170,8 @@ if (isset($_SESSION['user_id'])) {
     const citationModalForm = document.getElementById('citationModalForm');
     const viewStyle = document.getElementById('viewStyle');
     const viewCategory = document.getElementById('viewCategory');
+    const viewSubCategory = document.getElementById('viewSubCategory');
     const viewId = document.getElementById('viewId');
-    const viewKey = document.getElementById('viewKey');
     const viewOrder = document.getElementById('viewOrder');
     const viewExampleHeading = document.getElementById('viewExampleHeading');
     const viewExampleBody = document.getElementById('viewExampleBody');
@@ -3383,10 +3182,17 @@ if (isset($_SESSION['user_id'])) {
     const editYouTryField = document.getElementById('editYouTryField');
     const editNotesField = document.getElementById('editNotesField');
     const editCategoryField = document.getElementById('editCategoryField');
+    const editSubCategoryField = document.getElementById('editSubCategoryField');
 
     const mdToHtml = (str) => {
       if (!str) return '';
-      const withBold = str.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+      const escaped = String(str)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
+      const withBold = escaped.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
       // Italics: single asterisks that are not part of bold markers
       const withItalics = withBold.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g,'<em>$1</em>');
       const lines = withItalics.split(/\r?\n/);
@@ -3399,7 +3205,7 @@ if (isset($_SESSION['user_id'])) {
           html += '<li>' + m[1] + '</li>';
         } else {
           if (inList) { html += '</ul>'; inList = false; }
-          html += line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          html += line;
           if (idx !== lines.length -1) html += '<br>';
         }
       });
@@ -3510,6 +3316,13 @@ if (isset($_SESSION['user_id'])) {
       if (!ta) return;
       ta.value = htmlToMd(ed.innerHTML);
     });
+    const syncEditorFromTextarea = (taId) => {
+      const ta = document.getElementById(taId);
+      if (!ta) return;
+      const ed = editors.find(e => e.dataset.bind === taId);
+      if (!ed) return;
+      ed.innerHTML = mdToHtml(ta.value || '');
+    };
 
     citationModalForm?.addEventListener('submit', () => {
       syncAllEditors();
@@ -3566,6 +3379,7 @@ if (isset($_SESSION['user_id'])) {
       if (citationIdField) citationIdField.value = '';
       if (citationStyleField) citationStyleField.value = citationStyleField.options?.[0]?.value || '';
       if (citationCategoryField) citationCategoryField.value = citationCategoryField.options?.[0]?.value || '';
+      if (citationSubCategoryField) citationSubCategoryField.value = '';
       if (citationLabelField) citationLabelField.value = '';
       if (citationOrderField) citationOrderField.value = '';
       if (citationHeadingField) citationHeadingField.value = '';
@@ -3592,6 +3406,7 @@ if (isset($_SESSION['user_id'])) {
         if (citationIdField) citationIdField.value = get('data-id');
         if (citationStyleField) citationStyleField.value = get('data-style');
         if (citationCategoryField) citationCategoryField.value = get('data-category') || (citationCategoryField.options?.[0]?.value || '');
+        if (citationSubCategoryField) citationSubCategoryField.value = get('data-sub-category');
         if (citationKeyField) citationKeyField.value = get('data-key');
         if (citationLabelField) citationLabelField.value = get('data-label');
         if (citationOrderField) citationOrderField.value = get('data-order');
@@ -3665,7 +3480,8 @@ if (isset($_SESSION['user_id'])) {
         if (!data) return;
         if (editIdField) editIdField.value = data.id || '';
         if (editStyleField) editStyleField.value = data.style || '';
-        if (editCategoryField) editCategoryField.value = data.category || (citationCategoryField?.options?.[0]?.value ?? '');
+        if (editCategoryField) editCategoryField.value = data.category || (editCategoryField.options?.[0]?.value ?? '');
+        if (editSubCategoryField) editSubCategoryField.value = data.subCategory || '';
         const keyInputEdit = document.getElementById('editKeyField');
         const keyVal = data.key || '';
         if (keyInputEdit) keyInputEdit.value = keyVal;
@@ -3675,6 +3491,10 @@ if (isset($_SESSION['user_id'])) {
         if (editBodyField) { editBodyField.value = data.body || ''; }
         if (editYouTryField) { editYouTryField.value = data.youtry || ''; }
         if (editNotesField) { editNotesField.value = data.notes || ''; }
+        syncEditorFromTextarea('editOrderField');
+        syncEditorFromTextarea('editBodyField');
+        syncEditorFromTextarea('editYouTryField');
+        syncEditorFromTextarea('editNotesField');
       };
 
       const setView = (data) => {
@@ -3711,10 +3531,6 @@ if (isset($_SESSION['user_id'])) {
           if (!el) return;
           el.textContent = val || '—';
         };
-        const truncate = (str, limit=30) => {
-          if (!str) return '—';
-          return str.length > limit ? str.slice(0, limit) + '…' : str;
-        };
         const fillHtml = (id, val) => {
           const el = document.getElementById(id);
           if (!el) return;
@@ -3725,8 +3541,8 @@ if (isset($_SESSION['user_id'])) {
         fill('viewSubtitle', 'Read-only view');
         fill('viewStyle', data.style);
         fill('viewCategory', data.category);
+        fill('viewSubCategory', data.subCategory || '—');
         fill('viewId', data.id ? `#${data.id}` : '—');
-        fill('viewKey', truncate(data.key));
         fillHtml('viewOrder', data.order);
         fillHtml('viewExampleHeading', data.heading);
         fillHtml('viewExampleBody', data.body);
@@ -3739,16 +3555,19 @@ if (isset($_SESSION['user_id'])) {
         applyEditFields(data);
         setMode('view');
         viewer.classList.add('active');
+        updateDrawerScrollLock();
       };
 
-      document.querySelectorAll('[data-view-citation]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const get = (attr) => btn.getAttribute(attr) || '';
+      document.querySelectorAll('.citation-row').forEach(row => {
+        row.addEventListener('click', (e) => {
+          if (e.target.closest('button, form, a, input, select, textarea, label')) return;
+          const get = (attr) => row.getAttribute(attr) || '';
           setView({
-            id: btn.getAttribute('data-id'),
+            id: row.getAttribute('data-id'),
             label: get('data-label'),
             style: get('data-style'),
             category: get('data-category'),
+            subCategory: get('data-sub-category'),
             key: get('data-key'),
             order: get('data-order'),
             heading: get('data-heading'),
@@ -3763,15 +3582,17 @@ if (isset($_SESSION['user_id'])) {
         if (viewerMode === 'edit' && editDirty && !confirm('Discard unsaved changes?')) return;
         viewer.classList.remove('active');
         setMode('view');
+        updateDrawerScrollLock();
       });
 
       document.addEventListener('click', (e) => {
         const withinViewer = viewer.contains(e.target);
-        const isViewBtn = (e.target.closest?.('[data-view-citation]') ?? null) !== null;
-        if (!withinViewer && !isViewBtn) {
+        const isViewRow = (e.target.closest?.('.citation-row') ?? null) !== null;
+        if (!withinViewer && !isViewRow) {
           if (viewerMode === 'edit' && editDirty && !confirm('Discard unsaved changes?')) return;
           viewer.classList.remove('active');
           setMode('view');
+          updateDrawerScrollLock();
         }
       });
 
@@ -3805,6 +3626,7 @@ if (isset($_SESSION['user_id'])) {
         showSubtab('revisions');
         viewer.classList.remove('active');
         setMode('view');
+        updateDrawerScrollLock();
         document.getElementById('panel-citations')?.scrollIntoView({behavior:'smooth'});
       });
     })();
@@ -4008,9 +3830,13 @@ if (isset($_SESSION['user_id'])) {
         fillBlock('revBefore', before, 'Not available');
         if (restoreId) restoreId.value = id || '';
         viewer.classList.add('active');
+        updateDrawerScrollLock();
       };
 
-      const closeRevision = () => viewer.classList.remove('active');
+      const closeRevision = () => {
+        viewer.classList.remove('active');
+        updateDrawerScrollLock();
+      };
       closeBtn?.addEventListener('click', closeRevision);
       revCloseBtn?.addEventListener('click', closeRevision);
       document.addEventListener('click', (e) => {
@@ -4166,17 +3992,6 @@ if (isset($_SESSION['user_id'])) {
             <input id="modalSlugInput" placeholder="landing-page">
           </div>
         </div>
-        <div class="row" style="margin-bottom:10px">
-          <div>
-            <label>Collection</label>
-            <select id="modalCollectionSelect">
-              <option value="">(No collection)</option>
-              <?php foreach ($collections as $col): ?>
-                <option value="<?= (int)$col['id'] ?>"><?= Security::e($col['name']) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-        </div>
         <div class="muted" style="margin-bottom:6px">Choose a layout</div>
         <div class="grid layout-grid" id="modalLayoutGrid">
           <button class="layout-card blank" type="button" data-layout="blank">
@@ -4247,13 +4062,10 @@ if (isset($_SESSION['user_id'])) {
     modalBackdrop.querySelector('#modalCreateBtn')?.addEventListener('click', () => {
       const title = (document.getElementById('modalTitleInput')?.value || '').trim();
       const slug = slugify(document.getElementById('modalSlugInput')?.value || '');
-      const collectionSelect = document.getElementById('modalCollectionSelect');
-      const collectionId = collectionSelect ? parseInt(collectionSelect.value, 10) : 0;
       if (!title || !slug) { alert('Enter a title and slug'); return; }
       document.getElementById('modal_title_field').value = title;
       document.getElementById('modal_slug_field').value = slug;
       document.getElementById('modal_layout_field').value = selectedLayout;
-      document.getElementById('modal_collection_field').value = collectionId || '';
       document.getElementById('modalCreateForm').submit();
     });
 
@@ -4295,30 +4107,6 @@ if (isset($_SESSION['user_id'])) {
         if (!pid) return;
         document.getElementById('duplicate_page_id').value = pid;
         document.getElementById('duplicatePageForm').submit();
-      });
-    });
-
-    // View pages for a collection
-    document.querySelectorAll('[data-view-collection]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const cid = btn.dataset.viewCollection;
-        if (!cid) return;
-        collectionFilter = cid;
-        activate('pages');
-        applyPageFilters();
-        document.getElementById('panel-pages')?.scrollIntoView({behavior:'smooth',block:'start'});
-      });
-    });
-
-    // Delete collection confirmation
-    document.querySelectorAll('[data-delete-collection]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const cid = btn.dataset.deleteCollection;
-        const name = btn.dataset.collectionName || 'this collection';
-        const msg = `Delete "${name}"?\nPages will not be deleted, but will become unassigned.`;
-        if (!confirm(msg)) return;
-        document.getElementById('delete_collection_id').value = cid;
-        document.getElementById('deleteCollectionForm').submit();
       });
     });
 

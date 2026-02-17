@@ -75,6 +75,7 @@ try {
 $doc = json_decode($page['builder_json'] ?? '{}', true) ?: ['version'=>1,'rows'=>[]];
 $csrf = Security::csrfToken();
 $base = base_path();
+$uiTheme = ui_theme_mode();
 ?>
 <!doctype html>
 <html>
@@ -83,12 +84,7 @@ $base = base_path();
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <script>
     (function() {
-      var key = 'builderTheme';
-      var stored = null;
-      try { stored = localStorage.getItem(key); } catch (e) {}
-      var prefersDark = false;
-      try { prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
-      var theme = (stored === 'light' || stored === 'dark') ? stored : (prefersDark ? 'dark' : 'light');
+      var theme = <?= json_encode($uiTheme, JSON_UNESCAPED_SLASHES) ?>;
       document.documentElement.setAttribute('data-theme', theme);
     })();
   </script>
@@ -111,6 +107,7 @@ $base = base_path();
 <body>
 <div class="nx-shell"
   data-page-id="<?= (int)$pageId ?>"
+  data-page-updated-at="<?= Security::e((string)($page['updated_at'] ?? '')) ?>"
   data-csrf="<?= Security::e($csrf) ?>"
   data-base="<?= Security::e($base) ?>"
   data-site-slug="<?= Security::e($site['slug']) ?>"
@@ -513,25 +510,17 @@ $base = base_path();
   <script src="<?= $base ?>/public/assets/builder.js"></script>
   <script>
     (function() {
-      var key = 'builderTheme';
-      try { localStorage.removeItem('nexusTheme'); } catch (e) {}
-
       var root = document.documentElement;
       var btn = document.getElementById('themeToggle');
       var sun = btn ? btn.querySelector('.nx-theme-icon-sun') : null;
       var moon = btn ? btn.querySelector('.nx-theme-icon-moon') : null;
+      var endpoint = <?= json_encode($base . '/admin/theme.php', JSON_UNESCAPED_SLASHES) ?>;
+      var csrf = <?= json_encode($csrf, JSON_UNESCAPED_SLASHES) ?>;
 
-      var prefersDark = false;
-      try { prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
-
-      var stored = null;
-      try { stored = localStorage.getItem(key); } catch (e) {}
-
-      var initial = (stored === 'light' || stored === 'dark')
-        ? stored
-        : (root.getAttribute('data-theme') || (prefersDark ? 'dark' : 'light'));
+      var initial = root.getAttribute('data-theme') || 'dark';
 
       function setTheme(next) {
+        next = next === 'light' ? 'light' : 'dark';
         root.setAttribute('data-theme', next);
         if (btn) {
           btn.setAttribute('data-mode', next);
@@ -539,7 +528,17 @@ $base = base_path();
         }
         if (sun) sun.style.display = next === 'dark' ? 'block' : 'none';
         if (moon) moon.style.display = next === 'light' ? 'block' : 'none';
-        try { localStorage.setItem(key, next); } catch (e) {}
+        try { localStorage.setItem('nexusTheme', next); } catch (e) {}
+        try {
+          fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrf
+            },
+            body: JSON.stringify({ mode: next, _csrf: csrf })
+          });
+        } catch (e) {}
       }
 
       setTheme(initial);

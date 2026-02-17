@@ -29,6 +29,11 @@ if ($currentUser) {
   $userLabel = $name;
   $userRole = $currentUser['role'] ?? '';
 }
+
+$uiTheme = ui_theme_mode();
+$themeIsLight = $uiTheme === 'light';
+$themeEndpoint = $base . '/admin/theme.php';
+$csrfToken = Security::csrfToken();
 ?>
 <header class="top-bar" role="banner">
   <div class="brand" aria-label="NexusCMS">
@@ -40,6 +45,7 @@ if ($currentUser) {
   </div>
   <nav class="top-nav" aria-label="Admin navigation">
     <a class="nav-link <?= $nav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
+    <a class="nav-link <?= $nav === 'databases' ? 'active' : '' ?>" href="<?= $base ?>/admin/databases.php">Databases</a>
     <a class="nav-link <?= $nav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
     <a class="nav-link <?= $nav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Images</a>
   </nav>
@@ -65,3 +71,86 @@ if ($currentUser) {
     </div>
   </div>
 </header>
+<script>
+  (function() {
+    var root = document.documentElement;
+    var btn = document.getElementById('themeToggleBtn');
+    var userMenuDetails = document.querySelector('.user-menu details');
+    var endpoint = <?= json_encode($themeEndpoint, JSON_UNESCAPED_SLASHES) ?>;
+    var csrf = <?= json_encode($csrfToken, JSON_UNESCAPED_SLASHES) ?>;
+
+    function setTheme(mode) {
+      var next = mode === 'light' ? 'light' : 'dark';
+      root.classList.toggle('theme-light', next === 'light');
+      try { localStorage.setItem('nexusTheme', next); } catch (e) {}
+      if (btn) {
+        btn.dataset.mode = next;
+        btn.textContent = next === 'light' ? 'Switch to dark' : 'Switch to light';
+      }
+      return next;
+    }
+
+    function persistTheme(mode) {
+      if (!endpoint) return;
+      try {
+        fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrf
+          },
+          body: JSON.stringify({ mode: mode, _csrf: csrf })
+        });
+      } catch (e) {}
+    }
+
+    setTheme(<?= $themeIsLight ? "'light'" : "'dark'" ?>);
+    window.NexusTheme = {
+      setTheme: function(mode) {
+        var next = setTheme(mode);
+        persistTheme(next);
+        return next;
+      },
+      getTheme: function() {
+        return root.classList.contains('theme-light') ? 'light' : 'dark';
+      }
+    };
+
+    if (btn) {
+      btn.addEventListener('click', function() {
+        var next = root.classList.contains('theme-light') ? 'dark' : 'light';
+        window.NexusTheme.setTheme(next);
+      });
+    }
+
+    if (userMenuDetails) {
+      var closeUserMenu = function() {
+        if (userMenuDetails.open) userMenuDetails.open = false;
+      };
+      document.addEventListener('click', function(event) {
+        if (!userMenuDetails.open) return;
+        if (!userMenuDetails.contains(event.target)) {
+          closeUserMenu();
+        }
+      });
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && userMenuDetails.open) {
+          closeUserMenu();
+        }
+      });
+      document.querySelectorAll('iframe').forEach(function(frame) {
+        frame.addEventListener('pointerdown', closeUserMenu, true);
+        frame.addEventListener('focus', closeUserMenu, true);
+        frame.addEventListener('load', function() {
+          try {
+            var fd = frame.contentDocument;
+            if (fd) {
+              fd.addEventListener('pointerdown', closeUserMenu, true);
+              fd.addEventListener('focusin', closeUserMenu, true);
+            }
+          } catch (e) {}
+        });
+      });
+    }
+  })();
+</script>

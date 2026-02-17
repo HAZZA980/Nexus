@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pass  = (string)($_POST['password'] ?? '');
     $user = User::findByEmail($email);
     if ($user && password_verify($pass, $user['password_hash'])) {
-      $_SESSION['user_id'] = (int)$user['id'];
+      establish_user_session($user);
       redirect('/admin/');
     } else {
       $error = "Invalid credentials.";

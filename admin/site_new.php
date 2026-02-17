@@ -9,6 +9,7 @@ use NexusCMS\Core\Security;
 
 $base = base_path();
 $activeNav = 'sites';
+$themeIsLight = ui_theme_is_light();
 $errors = [];
 $values = [
   'name' => '',
@@ -101,12 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <title>Create new website</title>
   <script>
     (function(){
-      try{
-        const stored=localStorage.getItem('nexusTheme');
-        const theme=stored==='light'?'light':'dark';
-        localStorage.setItem('nexusTheme', theme);
-        document.documentElement.classList.toggle('theme-light', theme==='light');
-      }catch(e){}
+      document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
   </script>
   <style>
@@ -151,28 +147,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       box-shadow: var(--focus);
       border-color: var(--primary);
     }
-    .top-bar{display:flex;align-items:center;gap:16px;padding:14px 18px;background:linear-gradient(90deg, rgba(91,33,182,0.12), rgba(91,33,182,0));border-bottom:1px solid var(--border);position:sticky;top:0;backdrop-filter:blur(10px);z-index:10;}
-    .brand{display:inline-flex;align-items:center;gap:10px;font-weight:600;}
-    .brand-mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg, var(--primary), #22c55e);display:grid;place-items:center;font-weight:700;letter-spacing:-0.02em;}
-    .brand-text{display:flex;flex-direction:column;line-height:1.2;}
-    .brand-text small{color:var(--muted);font-weight:500;}
-    .top-nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;}
-    .top-nav .nav-link{display:inline-flex;align-items:center;justify-content:center;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.05);color:var(--text);font-weight:700;min-height:40px;text-decoration:none;}
-    .top-nav .nav-link:hover{background:rgba(255,255,255,0.1);}
-    .top-nav .nav-link.active{background:linear-gradient(135deg, var(--primary), var(--primary-strong));color:#fff;border-color:transparent;box-shadow:var(--shadow);}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;min-height:44px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--text);cursor:pointer;font-weight:700;text-decoration:none;}
-    .btn:hover{background:rgba(255,255,255,0.1);}
-    .btn.primary{background:linear-gradient(135deg, var(--primary), var(--primary-strong));border:none;color:#f8fbff;box-shadow:0 10px 30px rgba(37,99,235,0.35);}
-    .user-menu{position:relative;min-width:180px;}
-    .user-menu summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:10px;padding:10px 12px;min-height:44px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.05);font-weight:600;}
-    .user-menu summary::-webkit-details-marker{display:none;}
-    .user-avatar{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#22c55e,#3b82f6);display:grid;place-items:center;font-weight:700;color:#0b1224;}
-    .user-menu .menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px;min-width:220px;box-shadow:var(--shadow);z-index:5;}
-    .user-menu .menu button.theme-toggle{width:100%;text-align:left;border:none;background:transparent;padding:10px 10px;border-radius:10px;color:var(--text);cursor:pointer;}
-    .user-menu .menu button.theme-toggle:hover{background:rgba(255,255,255,0.06);}
-    .user-menu .menu a{display:block;padding:10px 10px;border-radius:10px;text-decoration:none;background:transparent;border:none;color:var(--text);width:100%;text-align:left;cursor:pointer;}
-    .user-menu .menu a:hover{background:rgba(255,255,255,0.06);}
-    .user-meta{color:var(--muted);font-size:14px;padding:6px 10px 10px;}
 
     main { max-width: 1200px; margin: 0 auto; padding: 24px 20px 48px; }
     .back-link {
@@ -274,6 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       .page-head h1 { font-size: 26px; }
     }
   </style>
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css">
 </head>
   <body>
     <?php include __DIR__ . '/partials/header.php'; ?>
@@ -378,26 +353,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       validate();
 
-      // Theme toggle
-      const themeBtn = document.getElementById('themeToggleBtn');
-      function setTheme(mode){
-        if(mode==='light'){
-          document.documentElement.classList.add('theme-light');
-          if(themeBtn) themeBtn.textContent='🌙';
-        } else {
-          document.documentElement.classList.remove('theme-light');
-          if(themeBtn) themeBtn.textContent='☀️';
-        }
-        try{localStorage.setItem('nexusTheme', mode);}catch(e){}
-      }
-      if(themeBtn){
-        const stored = (()=>{try{return localStorage.getItem('nexusTheme');}catch(e){return null;}})();
-        if(stored==='light') setTheme('light'); else setTheme('dark');
-        themeBtn.addEventListener('click', ()=> {
-          const isLight = document.documentElement.classList.contains('theme-light');
-          setTheme(isLight ? 'dark' : 'light');
-        });
-      }
     })();
   </script>
 </body>

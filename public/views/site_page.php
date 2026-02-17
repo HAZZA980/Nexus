@@ -298,7 +298,8 @@ function safe_include(string $path, string $root): bool {
   </style>
 </head>
 
-<body class="<?= $motionReduced === 'reduce' ? 'motion-reduce' : '' ?>">
+<?php $pageSlugClass = PartialsManager::safeSlug((string)($page['slug'] ?? '')); ?>
+<body class="<?= $motionReduced === 'reduce' ? 'motion-reduce ' : '' ?>page-<?= Security::e($pageSlugClass) ?>">
 
 <?php if ($isPreview): ?>
   <div class="nx-adminbar">

@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS citation_examples (
   id INT AUTO_INCREMENT PRIMARY KEY,
   site_slug VARCHAR(190) NOT NULL,
   referencing_style VARCHAR(100) NOT NULL DEFAULT 'Harvard',
+  category VARCHAR(80) NOT NULL DEFAULT 'Books',
+  sub_category VARCHAR(120) NULL,
   example_key VARCHAR(190) NOT NULL,
   label VARCHAR(190) NOT NULL,
   citation_order TEXT NOT NULL,

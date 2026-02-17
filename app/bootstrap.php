@@ -40,3 +40,22 @@ function require_admin(): void {
     redirect('/login.php?return=' . urlencode($return));
   }
 }
+
+function establish_user_session(array $user): void {
+  $uid = (int)($user['id'] ?? 0);
+  $role = (string)($user['role'] ?? '');
+  if ($uid <= 0) return;
+  $_SESSION['user_id'] = $uid;
+  $_SESSION['user_role'] = $role;
+  $_SESSION['user_name'] = (string)($user['display_name'] ?? '');
+  $_SESSION['site_access'] = \NexusCMS\Models\User::siteAccess($uid, $role);
+}
+
+function ui_theme_mode(): string {
+  $mode = $_SESSION['ui_theme_mode'] ?? 'dark';
+  return $mode === 'light' ? 'light' : 'dark';
+}
+
+function ui_theme_is_light(): bool {
+  return ui_theme_mode() === 'light';
+}

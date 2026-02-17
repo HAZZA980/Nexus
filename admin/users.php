@@ -8,6 +8,7 @@ use NexusCMS\Models\User;
 
 $base = base_path();
 $activeNav = 'users';
+$themeIsLight = ui_theme_is_light();
 
 $notice = null;
 $error = null;
@@ -127,12 +128,7 @@ function relative_time(?string $ts): string {
   <title>Users — NexusCMS Admin</title>
   <script>
     (function(){
-      try{
-        const stored=localStorage.getItem('nexusTheme');
-        const theme=stored==='light'?'light':'dark';
-        localStorage.setItem('nexusTheme', theme);
-        document.documentElement.classList.toggle('theme-light', theme==='light');
-      }catch(e){}
+      document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
   </script>
   <style>
@@ -166,30 +162,10 @@ function relative_time(?string $ts): string {
     a{text-decoration:none;color:inherit;}
     a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:none;box-shadow:var(--focus);border-color:var(--primary);}
     main{max-width:1200px;margin:0 auto;padding:20px 20px 48px;}
-    .top-bar{display:flex;align-items:center;gap:16px;padding:14px 18px;background:linear-gradient(90deg, rgba(91,33,182,0.12), rgba(91,33,182,0));border-bottom:1px solid var(--border);position:sticky;top:0;backdrop-filter:blur(10px);z-index:10;}
-    .brand{display:inline-flex;align-items:center;gap:10px;font-weight:600;}
-    .brand-mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg, var(--primary), #22c55e);display:grid;place-items:center;font-weight:700;letter-spacing:-0.02em;box-shadow:var(--shadow);}
-    .brand-text{display:flex;flex-direction:column;line-height:1.2;}
-    .brand-text small{color:var(--muted);font-weight:500;}
-    .top-nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;}
-    .top-nav .nav-link{display:inline-flex;align-items:center;justify-content:center;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.05);color:var(--text);font-weight:700;min-height:40px;}
-    .top-nav .nav-link:hover{background:rgba(255,255,255,0.1);}
-    .top-nav .nav-link.active{background:linear-gradient(135deg, var(--primary), var(--primary-strong));color:#fff;border-color:transparent;box-shadow:var(--shadow);}
-    .top-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--text);cursor:pointer;font-weight:700;min-height:44px;}
-    .btn:hover{background:rgba(255,255,255,0.1);}
-    .btn.primary{background:linear-gradient(135deg, var(--primary), var(--primary-strong));border:none;color:#f8fbff;box-shadow:0 10px 30px rgba(37,99,235,0.35);}
-    .user-menu{position:relative;min-width:180px;}
-    .user-menu summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:10px;padding:10px 12px;min-height:44px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.05);font-weight:600;}
-    .user-menu summary::-webkit-details-marker{display:none;}
-    .user-avatar{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#22c55e,#3b82f6);display:grid;place-items:center;font-weight:700;color:#0b1224;}
-    .user-menu .menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--card);border:1px solid var(--border);border-radius:14px;padding:10px;min-width:220px;box-shadow:var(--shadow);z-index:5;}
-    .user-menu .menu a,.user-menu .menu button{display:block;padding:10px 10px;border-radius:10px;text-decoration:none;background:transparent;border:none;color:var(--text);width:100%;text-align:left;cursor:pointer;}
-    .user-menu .menu a:hover,.user-menu .menu button:hover{background:rgba(255,255,255,0.06);}
-    .user-meta{color:var(--muted);font-size:14px;padding:6px 10px 10px;}
     .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin:24px 0 14px;}
     .page-head h1{margin:0;font-size:32px;letter-spacing:-0.02em;}
     .page-head p{margin:6px 0 0;color:var(--muted);}
+    .role-help{margin:0 0 16px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,0.03);color:var(--muted);}
     .filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0 18px;}
     .input{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.04);}
     .input input, .input select{background:transparent;border:none;color:var(--text);font-weight:600;min-width:200px;}
@@ -221,6 +197,7 @@ function relative_time(?string $ts): string {
     .modal input,.modal select{width:100%;padding:10px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--text);}
     .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:4px;}
   </style>
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css">
 </head>
 <body>
   <?php include __DIR__ . '/partials/header.php'; ?>
@@ -231,6 +208,7 @@ function relative_time(?string $ts): string {
         <p>Manage users and access permissions.</p>
       </div>
     </div>
+    <p class="role-help">Privilege guide: Super Admin has full system access, including role changes and global settings; Admin can manage most platform settings and content; Staff Admin manages staff-facing operations and staff accounts; User Admin manages standard user accounts and profile access; Editor can create and publish content; Viewer has read-only access to permitted areas; Student has basic learner-level access only.</p>
 
     <?php if ($notice): ?><div class="notice"><?= Security::e($notice) ?></div><?php endif; ?>
     <?php if ($error): ?><div class="error-banner"><?= Security::e($error) ?></div><?php endif; ?>

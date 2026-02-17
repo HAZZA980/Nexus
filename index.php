@@ -123,6 +123,15 @@ if ($method === 'GET' && preg_match('#^/s/([^/]+)/([^/]+)$#', $uri, $m)) {
   $site = Site::findBySlug($siteSlug);
   if (!$site) { http_response_code(404); echo "Site not found"; exit; }
 
+  // Cite Them Right: signed-in users see the signed-in home variant.
+  if ($siteSlug === 'cite-them-right' && $pageSlug === 'home') {
+    $isSignedIn = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
+    if ($isSignedIn) {
+      $signedHome = Page::findPublishedBySlug((int)$site['id'], 'home-signed-in');
+      if ($signedHome) $pageSlug = 'home-signed-in';
+    }
+  }
+
   $token = $_GET['preview_token'] ?? null;
 
   // ✅ PREVIEW MODE: allow preview even if page is draft/unpublished

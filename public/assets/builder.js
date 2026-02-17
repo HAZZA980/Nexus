@@ -120,8 +120,33 @@
     doc.page.citationExampleId ??= "";
 
     doc.rows = Array.isArray(doc.rows) ? doc.rows : [];
+    doc.rows.forEach((row) => {
+      const cols = Array.isArray(row?.cols) ? row.cols : [];
+      cols.forEach((col) => {
+        const blocks = Array.isArray(col?.blocks) ? col.blocks : [];
+        blocks.forEach((blk) => {
+          if (!blk || typeof blk !== 'object') return;
+          if (blk.type !== 'image') return;
+          blk.props = blk.props && typeof blk.props === 'object' ? blk.props : {};
+          blk.props.imageRatio = normalizeImageRatio(blk.props.imageRatio);
+        });
+      });
+    });
     return doc;
   }
+
+  const IMAGE_RATIO_OPTIONS = [
+    { value: '16-9', label: 'Landscape (16:9)' },
+    { value: '4-3', label: 'Standard (4:3)' },
+    { value: '3-2', label: 'Photo (3:2)' },
+    { value: '1-1', label: 'Square (1:1)' },
+    { value: '9-16', label: 'Portrait (9:16)' },
+  ];
+
+  const normalizeImageRatio = (raw) => {
+    const val = String(raw || '').trim().toLowerCase();
+    return IMAGE_RATIO_OPTIONS.some(opt => opt.value === val) ? val : '16-9';
+  };
 
   function applyPageStyles() {
     const el = document.querySelector(".nexus-page");
@@ -156,12 +181,27 @@
     sel.addRange(savedTextSelection);
   }
 
-  // --- Load doc (prefer unsaved local state)
+  // --- Load doc (prefer compatible unsaved local state)
   const storageKey = `nx_unsaved_doc_${pageId}`;
+  const pageUpdatedAt = shell?.dataset?.pageUpdatedAt || '';
+  const allowLegacyResume = new URLSearchParams(window.location.search).get('resume') === '1';
   let doc = (() => {
     try {
       const raw = sessionStorage.getItem(storageKey);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // New format: wrapped payload with metadata; only restore if source version matches.
+        if (parsed && typeof parsed === 'object' && parsed.__meta && parsed.doc) {
+          const savedUpdatedAt = String(parsed.__meta.pageUpdatedAt || '');
+          if (!pageUpdatedAt || savedUpdatedAt === pageUpdatedAt) {
+            return parsed.doc;
+          }
+        }
+        // Legacy format fallback can be explicitly resumed via ?resume=1
+        if (allowLegacyResume && parsed && typeof parsed === 'object' && Array.isArray(parsed.rows)) {
+          return parsed;
+        }
+      }
     } catch {}
     return window.NX_DOC || { version: 1, rows: [] };
   })();
@@ -170,7 +210,12 @@
   doc = normalizeDoc(doc);
 
   function persistUnsaved() {
-    try { sessionStorage.setItem(storageKey, JSON.stringify(doc)); } catch {}
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify({
+        __meta: { pageUpdatedAt },
+        doc
+      }));
+    } catch {}
     markDirty();
   }
 
@@ -326,7 +371,7 @@
     switch (type) {
       case 'heading': return { id: uuid(), type: 'heading', props: { level: 2, text: 'Heading' }, styleText:{} };
       case 'text':    return { id: uuid(), type: 'text', props: { text: 'Text…', bgColor: '' }, styleText:{} };
-      case 'image':   return { id: uuid(), type: 'image', props: { src: '', alt: '' } };
+      case 'image':   return { id: uuid(), type: 'image', props: { src: '', alt: '', imageRatio: '16-9' } };
       case 'video':   return { id: uuid(), type: 'video', props: { url: '' } };
       case 'card':    return { id: uuid(), type: 'card', props: { title: 'Card title', body: 'Card body…' }, styleText:{} };
       case 'youTry':  return { id: uuid(), type: 'youTry', props: { title: 'You try', body: 'Try it yourself…' }, styleText:{} };
@@ -2549,12 +2594,18 @@
         <div id="p_text_bg_palette" style="margin-top:6px;"></div>
       `;
     } else if (blk.type === 'image') {
+      const ratio = normalizeImageRatio(p.imageRatio);
       html += `
         <label class="nx-muted">Image URL</label><br>
         <input id="p_src" value="${esc(p.src || '')}" style="${inputStyle}">
         <br><br>
         <label class="nx-muted">Upload image</label><br>
         <input id="p_src_file" type="file" accept="image/*" style="color:#e6eaf2">
+        <br><br>
+        <label class="nx-muted">Image ratio</label><br>
+        <select id="p_img_ratio" style="${inputStyle}">
+          ${IMAGE_RATIO_OPTIONS.map(opt => `<option value="${opt.value}" ${ratio === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}
+        </select>
         <br><br>
         <label class="nx-muted">Alt text</label><br>
         <input id="p_alt" value="${esc(p.alt || '')}" style="${inputStyle}">
@@ -3433,7 +3484,11 @@
     };
 
     if (blk.type === 'heading') bind('p_level', 'level', (v) => parseInt(v || '2', 10));
-    if (blk.type === 'image')  { bind('p_src', 'src'); bind('p_alt', 'alt'); }
+    if (blk.type === 'image')  {
+      bind('p_src', 'src');
+      bind('p_alt', 'alt');
+      bind('p_img_ratio', 'imageRatio', normalizeImageRatio);
+    }
     if (blk.type === 'panel')  {
       bind('p_image', 'image');
       bind('p_alt', 'alt');

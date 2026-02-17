@@ -9,6 +9,7 @@ use NexusCMS\Core\Security;
 $siteId = (int)($_GET['site_id'] ?? 0);
 $site = Site::find($siteId);
 if (!$site) { http_response_code(404); echo "Site not found"; exit; }
+$themeIsLight = ui_theme_is_light();
 
 $templates = require __DIR__ . '/../app/templates/page_templates.php';
 
@@ -39,6 +40,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="utf-8">
   <title>New Page — <?= Security::e($site['name']) ?></title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script>
+    (function() {
+      document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
+    })();
+  </script>
+  <link rel="stylesheet" href="<?= base_path() ?>/public/assets/admin-shared.css">
   <link rel="stylesheet" href="<?= base_path() ?>/public/assets/page_new.css">
 </head>
 <body class="page-new">

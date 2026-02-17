@@ -10,6 +10,7 @@ use NexusCMS\Models\Analytics;
 
 $base = base_path();
 $activeNav = 'sites';
+$themeIsLight = ui_theme_is_light();
 $sites = Site::all();
 // attach published count
 foreach ($sites as &$s) {
@@ -152,12 +153,7 @@ if ($currentUser && isset($currentUser['role'])) {
   <title>Admin — Websites</title>
   <script>
     (function() {
-      try {
-        const stored = localStorage.getItem('nexusTheme');
-        const theme = stored === 'light' ? 'light' : 'dark';
-        localStorage.setItem('nexusTheme', theme);
-        document.documentElement.classList.toggle('theme-light', theme === 'light');
-      } catch(e) {}
+      document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
   </script>
   <style>
@@ -192,7 +188,7 @@ if ($currentUser && isset($currentUser['role'])) {
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Inter", "Helvetica Neue", system-ui, -apple-system, sans-serif;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.5;
@@ -204,29 +200,6 @@ if ($currentUser && isset($currentUser['role'])) {
       border-color: var(--primary);
     }
     main { max-width: 1200px; margin: 0 auto; padding: 18px 18px 36px; }
-    .top-bar{display:flex;align-items:center;gap:16px;padding:14px 18px;background:linear-gradient(90deg, rgba(91,33,182,0.12), rgba(91,33,182,0));border-bottom:1px solid var(--border);position:sticky;top:0;backdrop-filter:blur(10px);z-index:10;}
-    .brand{display:inline-flex;align-items:center;gap:10px;font-weight:600;}
-    .brand-mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg, var(--primary), #22c55e);display:grid;place-items:center;font-weight:700;letter-spacing:-0.02em;}
-    .brand-text{display:flex;flex-direction:column;line-height:1.2;}
-    .brand-text small{color:var(--muted);font-weight:500;}
-    .top-nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;}
-    .top-nav .nav-link{display:inline-flex;align-items:center;justify-content:center;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.05);color:var(--text);font-weight:700;min-height:40px;}
-    .top-nav .nav-link:hover{background:rgba(255,255,255,0.1);}
-    .top-nav .nav-link.active{background:linear-gradient(135deg, var(--primary), var(--primary-strong));color:#fff;border-color:transparent;box-shadow:0 10px 30px rgba(0,0,0,0.08);}
-    .top-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--text);cursor:pointer;font-weight:700;min-height:44px;}
-    .btn:hover{background:rgba(255,255,255,0.1);}
-    .btn.primary{background:linear-gradient(135deg, var(--primary), var(--primary-strong));border:none;color:#f8fbff;box-shadow:0 10px 30px rgba(37,99,235,0.35);}
-    .user-menu{position:relative;min-width:180px;}
-    .user-menu summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:10px;padding:10px 12px;min-height:44px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.05);font-weight:600;}
-    .user-menu summary::-webkit-details-marker{display:none;}
-    .user-avatar{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#22c55e,#3b82f6);display:grid;place-items:center;font-weight:700;color:#0b1224;}
-    .user-menu .menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px;min-width:220px;box-shadow:var(--shadow);z-index:5;}
-    .user-menu .menu button.theme-toggle{width:100%;text-align:left;border:none;background:transparent;padding:10px 10px;border-radius:10px;color:var(--text);cursor:pointer;}
-    .user-menu .menu button.theme-toggle:hover{background:rgba(255,255,255,0.06);}
-    .user-menu .menu a{display:block;padding:10px 10px;border-radius:10px;text-decoration:none;background:transparent;border:none;color:var(--text);width:100%;text-align:left;cursor:pointer;}
-    .user-menu .menu a:hover{background:rgba(255,255,255,0.06);}
-    .user-meta{color:var(--muted);font-size:14px;padding:6px 10px 10px;}
 
     .page-head {
       display: grid;
@@ -235,8 +208,8 @@ if ($currentUser && isset($currentUser['role'])) {
       align-items: end;
       margin: 20px 0 10px;
     }
-    .page-head h1 { margin: 0; font-size: 24px; letter-spacing: -0.01em; font-weight: 700; }
-    .page-head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+    .page-head h1 { margin: 0; font-size: 32px; letter-spacing: -0.02em; }
+    .page-head p { margin: 6px 0 0; color: var(--muted); }
 
     .filters {
       display: flex;
@@ -329,9 +302,9 @@ if ($currentUser && isset($currentUser['role'])) {
 
     @media (max-width: 720px) {
       .page-head { grid-template-columns: 1fr; }
-      .top-bar { flex-direction: column; align-items: flex-start; position: sticky; }
     }
   </style>
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css">
 </head>
 <body>
   <?php include __DIR__ . '/partials/header.php'; ?>
@@ -440,7 +413,6 @@ if ($currentUser && isset($currentUser['role'])) {
       const searchInput = document.getElementById('siteSearch');
       const statusFilter = document.getElementById('statusFilter');
       const rows = Array.from(document.querySelectorAll('.site-row'));
-      const themeBtn = document.getElementById('themeToggleBtn');
 
       function matches(row, query, status) {
         const name = (row.dataset.name || '').toLowerCase();
@@ -483,25 +455,6 @@ if ($currentUser && isset($currentUser['role'])) {
         if (!ts) return;
         el.textContent = relTime(ts);
       });
-
-      function setTheme(mode) {
-        if (mode === 'light') {
-          document.documentElement.classList.add('theme-light');
-          if (themeBtn) themeBtn.textContent = '🌙 Switch to dark';
-        } else {
-          document.documentElement.classList.remove('theme-light');
-          if (themeBtn) themeBtn.textContent = '☀️ Switch to light';
-        }
-        try { localStorage.setItem('nexusTheme', mode); } catch(e) {}
-      }
-      if (themeBtn) {
-        themeBtn.addEventListener('click', () => {
-          const isLight = document.documentElement.classList.contains('theme-light');
-          setTheme(isLight ? 'dark' : 'light');
-        });
-        const stored = (() => { try { return localStorage.getItem('nexusTheme'); } catch(e) { return null; } })();
-        if (stored === 'light') setTheme('light'); else setTheme('dark');
-      }
 
       if (searchInput) searchInput.addEventListener('input', applyFilters);
       if (statusFilter) statusFilter.addEventListener('change', applyFilters);
