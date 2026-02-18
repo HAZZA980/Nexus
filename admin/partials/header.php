@@ -36,46 +36,42 @@ $themeEndpoint = $base . '/admin/theme.php';
 $csrfToken = Security::csrfToken();
 ?>
 <header class="top-bar" role="banner">
-  <div class="brand" aria-label="NexusCMS">
-    <div class="brand-mark" aria-hidden="true">N</div>
-    <div class="brand-text">
-      <span>NexusCMS</span>
-      <small>Admin</small>
-    </div>
-  </div>
+  <div class="top-bar-inner">
+  <a class="brand" aria-label="NexusCMS" href="<?= $base ?>/index.php">
+    <span class="brand-mark" aria-hidden="true">N</span>
+    <span>NexusCMS</span>
+  </a>
   <nav class="top-nav" aria-label="Admin navigation">
     <a class="nav-link <?= $nav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
-    <a class="nav-link <?= $nav === 'databases' ? 'active' : '' ?>" href="<?= $base ?>/admin/databases.php">Databases</a>
     <a class="nav-link <?= $nav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
     <a class="nav-link <?= $nav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Images</a>
+    <a class="nav-link <?= $nav === 'databases' ? 'active' : '' ?>" href="<?= $base ?>/admin/databases.php">Databases</a>
   </nav>
   <div class="top-actions">
-    <a class="btn primary" href="<?= $base ?>/admin/site_new.php">+ Create new website</a>
     <div class="user-menu">
-      <details>
+      <details id="userMenuDetails">
         <summary aria-haspopup="menu">
           <span class="user-avatar" aria-hidden="true"><?= Security::e($userInitial) ?></span>
-          <span>
-            <?= Security::e($userLabel) ?>
-            <?php if ($userRole): ?>
-              <small style="display:block;color:var(--muted);font-weight:500;"><?= Security::e(ucfirst((string)$userRole)) ?></small>
-            <?php endif; ?>
-          </span>
+          <span><?= Security::e($userLabel) ?></span>
         </summary>
         <div class="menu" role="menu">
-          <div class="user-meta">Logged in <?= Security::e($currentUser['email'] ?? 'user') ?></div>
-          <button type="button" class="theme-toggle" id="themeToggleBtn" role="menuitem">Switch theme</button>
-          <a role="menuitem" href="<?= $base ?>/admin/logout.php">Logout</a>
+          <button type="button" class="theme-toggle" id="themeToggleBtn" role="menuitem">
+            <span class="menu-item"><span class="menu-icon">🌙</span><span>Dark mode</span></span>
+          </button>
+          <a role="menuitem" href="<?= $base ?>/admin/logout.php">
+            <span class="menu-item"><span class="menu-icon">↪</span><span>Logout</span></span>
+          </a>
         </div>
       </details>
     </div>
+  </div>
   </div>
 </header>
 <script>
   (function() {
     var root = document.documentElement;
     var btn = document.getElementById('themeToggleBtn');
-    var userMenuDetails = document.querySelector('.user-menu details');
+    var userMenuDetails = document.getElementById('userMenuDetails');
     var endpoint = <?= json_encode($themeEndpoint, JSON_UNESCAPED_SLASHES) ?>;
     var csrf = <?= json_encode($csrfToken, JSON_UNESCAPED_SLASHES) ?>;
 
@@ -84,8 +80,9 @@ $csrfToken = Security::csrfToken();
       root.classList.toggle('theme-light', next === 'light');
       try { localStorage.setItem('nexusTheme', next); } catch (e) {}
       if (btn) {
-        btn.dataset.mode = next;
-        btn.textContent = next === 'light' ? 'Switch to dark' : 'Switch to light';
+        btn.innerHTML = next === 'light'
+          ? '<span class="menu-item"><span class="menu-icon">🌙</span><span>Dark mode</span></span>'
+          : '<span class="menu-item"><span class="menu-icon">☀️</span><span>Light mode</span></span>';
       }
       return next;
     }
@@ -120,6 +117,7 @@ $csrfToken = Security::csrfToken();
       btn.addEventListener('click', function() {
         var next = root.classList.contains('theme-light') ? 'dark' : 'light';
         window.NexusTheme.setTheme(next);
+        if (userMenuDetails && userMenuDetails.open) userMenuDetails.open = false;
       });
     }
 

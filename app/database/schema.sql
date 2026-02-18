@@ -3,7 +3,7 @@ CREATE TABLE users (
   email VARCHAR(190) UNIQUE,
   password_hash VARCHAR(255),
   display_name VARCHAR(190),
-  role ENUM('super_admin','admin','student') DEFAULT 'student',
+  role ENUM('super_admin','website_admin','editor','institution_admin','student') DEFAULT 'student',
   access JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

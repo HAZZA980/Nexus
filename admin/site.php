@@ -347,6 +347,7 @@ $motionOpts = [
   ],
 ];
 $siteSlug = PartialsManager::safeSlug($site['slug'] ?? '');
+$citationsOnly = ($siteSlug === 'cite-them-right') && (($_GET['view'] ?? '') === 'citations');
 $partialPaths = PartialsManager::paths($siteSlug);
 $partialStatus = [
   'header' => file_exists($partialPaths['header']) ? 'exists' : 'missing',
@@ -848,10 +849,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     };
     $recordRevision = function($action, $before, $after, $releaseTag) use ($siteSlug, $currentUserId, $currentUserEmail, $diffFn) {
       $diff = $diffFn($before ?? [], $after ?? []);
+      $citationKey = (string)($after['example_key'] ?? $before['example_key'] ?? '');
+      $isQueuedRevision = trim((string)($releaseTag ?? '')) === '';
+      // Queue policy: only keep the latest staged revision per citation key.
+      if ($isQueuedRevision && $citationKey !== '') {
+        $pdo = nx_db();
+        $stmt = $pdo->prepare("DELETE FROM citation_revisions WHERE site_slug=? AND citation_key=? AND (release_tag IS NULL OR release_tag='')");
+        $stmt->execute([$siteSlug, $citationKey]);
+      }
       CitationRevision::record([
         'site_slug' => $siteSlug,
         'citation_id' => $after['id'] ?? $before['id'] ?? null,
-        'citation_key' => $after['example_key'] ?? $before['example_key'] ?? '',
+        'citation_key' => $citationKey,
         'action' => $action,
         'user_id' => $currentUserId,
         'user_email' => $currentUserEmail,
@@ -896,6 +905,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
       return $snapshot;
     };
+    $clearQueuedByKey = function(string $key) use ($siteSlug): void {
+      if ($key === '') return;
+      $pdo = nx_db();
+      $stmt = $pdo->prepare("DELETE FROM citation_revisions WHERE site_slug=? AND citation_key=? AND (release_tag IS NULL OR release_tag='')");
+      $stmt->execute([$siteSlug, $key]);
+    };
+    $hasQueuedByKey = function(string $key) use ($siteSlug): bool {
+      if ($key === '') return false;
+      $pdo = nx_db();
+      $stmt = $pdo->prepare("SELECT id FROM citation_revisions WHERE site_slug=? AND citation_key=? AND (release_tag IS NULL OR release_tag='') LIMIT 1");
+      $stmt->execute([$siteSlug, $key]);
+      return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+    };
+    $nextQueuedKey = function(string $style, string $label) use ($siteSlug, $hasQueuedByKey): string {
+      $baseKey = nx_generate_citation_key($siteSlug, $style, $label);
+      if (!$hasQueuedByKey($baseKey)) return $baseKey;
+      $candidate = $baseKey;
+      $n = 2;
+      while ($hasQueuedByKey($candidate) || CitationExample::find($siteSlug, $candidate)) {
+        $candidate = $baseKey . '_' . $n;
+        $n++;
+      }
+      return $candidate;
+    };
+    $applyQueuedRevision = function(array $rev) use ($siteSlug, $applySnapshot): void {
+      $action = strtolower((string)($rev['action'] ?? ''));
+      $key = (string)($rev['citation_key'] ?? '');
+      $after = json_decode((string)($rev['after_json'] ?? 'null'), true);
+      if ($action === 'delete' || !$after) {
+        $existing = CitationExample::find($siteSlug, $key);
+        if ($existing && isset($existing['id'])) CitationExample::delete((int)$existing['id'], $siteSlug);
+        return;
+      }
+      $applySnapshot($after);
+    };
 
     if (($_POST['add_citation'] ?? '') === '1') {
       try {
@@ -922,12 +966,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           'you_try' => trim((string)($_POST['citation_youtry'] ?? '')),
           'notes' => trim((string)($_POST['citation_notes'] ?? ''))
         ];
-        $data['example_key'] = nx_generate_citation_key($siteSlug, $style, $label);
-        $newId = CitationExample::create($data);
-        $after = array_merge($data, ['id'=>$newId]);
-        $recordRevision('create', null, $after, $currentReleaseTag);
+        $data['example_key'] = $citationsOnly
+          ? $nextQueuedKey($style, $label)
+          : nx_generate_citation_key($siteSlug, $style, $label);
+        if ($citationsOnly) {
+          $clearQueuedByKey($data['example_key']);
+          $after = array_merge($data, ['id' => null]);
+          $recordRevision('create', null, $after, null);
+          $notice = 'Citation queued. Live citation remains unchanged until export.';
+        } else {
+          $newId = CitationExample::create($data);
+          $after = array_merge($data, ['id'=>$newId]);
+          $recordRevision('create', null, $after, $currentReleaseTag);
+          $notice = 'Citation saved.';
+        }
         if ($pdo->inTransaction()) $pdo->commit();
-        $notice = 'Citation saved.';
       } catch (\Throwable $e) {
         nx_safe_rollback($pdo ?? null);
         $notice = 'Error saving citation: ' . $e->getMessage();
@@ -959,11 +1012,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           'you_try' => trim((string)($_POST['citation_youtry'] ?? '')),
           'notes' => trim((string)($_POST['citation_notes'] ?? ''))
         ];
-        CitationExample::update($id, $data);
         $after = array_merge($data, ['id'=>$id, 'site_slug'=>$siteSlug]);
-        $recordRevision('update', $before ?? [], $after, $currentReleaseTag);
+        if ($citationsOnly) {
+          $clearQueuedByKey((string)($data['example_key'] ?? ''));
+          $recordRevision('update', $before ?? [], $after, null);
+          $notice = 'Citation update queued. Live citation remains unchanged until export.';
+        } else {
+          CitationExample::update($id, $data);
+          $recordRevision('update', $before ?? [], $after, $currentReleaseTag);
+          $notice = 'Citation updated.';
+        }
         if ($pdo->inTransaction()) $pdo->commit();
-        $notice = 'Citation updated.';
       } catch (\Throwable $e) {
         nx_safe_rollback($pdo ?? null);
         $notice = 'Error updating citation: ' . $e->getMessage();
@@ -976,14 +1035,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['citation_id'] ?? 0);
         if ($id > 0) {
           $before = CitationExample::findById($id);
-          CitationExample::delete($id, $siteSlug);
-          $recordRevision('delete', $before ?? [], null, $currentReleaseTag);
+          if ($citationsOnly) {
+            $clearQueuedByKey((string)($before['example_key'] ?? ''));
+            $recordRevision('delete', $before ?? [], null, null);
+            $notice = 'Citation delete queued. Live citation remains unchanged until export.';
+          } else {
+            CitationExample::delete($id, $siteSlug);
+            $recordRevision('delete', $before ?? [], null, $currentReleaseTag);
+            $notice = 'Citation deleted.';
+          }
           if ($pdo->inTransaction()) $pdo->commit();
-          $notice = 'Citation deleted.';
         }
       } catch (\Throwable $e) {
         nx_safe_rollback($pdo ?? null);
         $notice = 'Error deleting citation: ' . $e->getMessage();
+      }
+    }
+
+    if ($citationsOnly && isset($_POST['export_single_citation'])) {
+      try {
+        $pdo = nx_db();
+        $pdo->beginTransaction();
+        $revId = (int)($_POST['queued_revision_id'] ?? 0);
+        if ($revId <= 0) throw new Exception('Invalid queued citation');
+        $stmt = $pdo->prepare("SELECT * FROM citation_revisions WHERE id=? AND site_slug=? AND (release_tag IS NULL OR release_tag='') LIMIT 1");
+        $stmt->execute([$revId, $siteSlug]);
+        $rev = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$rev) throw new Exception('Queued citation not found');
+        $applyQueuedRevision($rev);
+        $pdo->prepare("DELETE FROM citation_revisions WHERE id=? LIMIT 1")->execute([$revId]);
+        if ($pdo->inTransaction()) $pdo->commit();
+        $notice = 'Citation exported from bundle.';
+      } catch (\Throwable $e) {
+        nx_safe_rollback($pdo ?? null);
+        $notice = 'Export failed: ' . $e->getMessage();
+      }
+    }
+
+    if ($citationsOnly && isset($_POST['export_all_citations'])) {
+      try {
+        $pdo = nx_db();
+        $pdo->beginTransaction();
+        $stmt = $pdo->prepare("SELECT * FROM citation_revisions WHERE site_slug=? AND (release_tag IS NULL OR release_tag='') ORDER BY id ASC");
+        $stmt->execute([$siteSlug]);
+        $queued = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if (!$queued) throw new Exception('No queued citations to export');
+        $ids = [];
+        foreach ($queued as $rev) {
+          $applyQueuedRevision($rev);
+          $ids[] = (int)$rev['id'];
+        }
+        if ($ids) {
+          $in = implode(',', array_fill(0, count($ids), '?'));
+          $del = $pdo->prepare("DELETE FROM citation_revisions WHERE id IN ($in)");
+          $del->execute($ids);
+        }
+        if ($pdo->inTransaction()) $pdo->commit();
+        $notice = 'Exported all queued citations (' . count($queued) . ').';
+      } catch (\Throwable $e) {
+        nx_safe_rollback($pdo ?? null);
+        $notice = 'Export failed: ' . $e->getMessage();
+      }
+    }
+
+    if ($citationsOnly && isset($_POST['discard_all_citations'])) {
+      try {
+        $pdo = nx_db();
+        $stmt = $pdo->prepare("DELETE FROM citation_revisions WHERE site_slug=? AND (release_tag IS NULL OR release_tag='')");
+        $stmt->execute([$siteSlug]);
+        $notice = 'Discarded all queued changes.';
+      } catch (\Throwable $e) {
+        $notice = 'Discard failed: ' . $e->getMessage();
       }
     }
 
@@ -1015,7 +1137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
     }
 
-    if (isset($_POST['export_release'])) {
+    if (!$citationsOnly && isset($_POST['export_release'])) {
       try {
         $tag = trim((string)($_POST['release_tag'] ?? ''));
         if ($tag === '') $tag = $currentReleaseTag ?: '1.0.0';
@@ -1104,25 +1226,82 @@ $stagedByTag = [];
 $netEffects = [];
 $latestByKey = [];
 $stagedKeys = [];
+$queuedBundleItems = [];
+$citationExamplesView = $citationExamples;
 if ($siteSlug === 'cite-them-right') {
-  foreach ($citationRevisions as $rev) {
-    $tag = $rev['release_tag'] ?? '';
-    if ($tag) {
-      $stagedByTag[$tag] = ($stagedByTag[$tag] ?? 0) + 1;
-      if ($tag === $currentReleaseTag) $stagedCount++;
+  if ($citationsOnly) {
+    $queuedRows = array_values(array_filter($citationRevisions, function($rev){
+      $tag = trim((string)($rev['release_tag'] ?? ''));
+      return $tag === '';
+    }));
+    foreach ($queuedRows as $rev) {
+      $key = (string)($rev['citation_key'] ?? '');
+      if ($key === '') continue;
+      $latestByKey[$key] = $rev; // keep latest queued per key
     }
-    $key = $rev['citation_key'];
-    if (!isset($latestByKey[$key])) {
-      $latestByKey[$key] = $rev;
-      if ($tag === $currentReleaseTag) $stagedKeys[$key] = true;
+    $stagedCount = count($latestByKey);
+    foreach ($latestByKey as $key => $rev) {
+      $stagedKeys[$key] = true;
+      $queuedBundleItems[] = $rev;
     }
-  }
-  if ($currentReleaseTag) {
-    $currentTagRevs = CitationRevision::listByRelease($siteSlug, $currentReleaseTag);
-    foreach ($currentTagRevs as $r) {
-      $key = $r['citation_key'];
-      $after = json_decode($r['after_json'] ?? 'null', true);
-      $netEffects[$key] = $after;
+    // Build a staged "latest" view so edit/view reflects queued, unexported changes.
+    $byKeyIndex = [];
+    foreach ($citationExamplesView as $idx => $exRow) {
+      $k = (string)($exRow['example_key'] ?? '');
+      if ($k !== '') $byKeyIndex[$k] = $idx;
+    }
+    foreach ($latestByKey as $key => $rev) {
+      $action = (string)($rev['action'] ?? '');
+      $after = json_decode($rev['after_json'] ?? 'null', true);
+      $before = json_decode($rev['before_json'] ?? 'null', true);
+      if ($action === 'update' && is_array($after) && isset($byKeyIndex[$key])) {
+        $idx = $byKeyIndex[$key];
+        $baseId = $citationExamplesView[$idx]['id'] ?? null;
+        $citationExamplesView[$idx] = array_merge($citationExamplesView[$idx], $after);
+        if (!isset($citationExamplesView[$idx]['id']) || (int)$citationExamplesView[$idx]['id'] <= 0) {
+          $citationExamplesView[$idx]['id'] = $baseId;
+        }
+      } elseif ($action === 'create' && is_array($after) && !isset($byKeyIndex[$key])) {
+        $citationExamplesView[] = [
+          'id' => (int)($after['id'] ?? 0),
+          'site_slug' => $siteSlug,
+          'referencing_style' => (string)($after['referencing_style'] ?? ''),
+          'category' => (string)($after['category'] ?? ''),
+          'sub_category' => $after['sub_category'] ?? null,
+          'example_key' => (string)($after['example_key'] ?? $key),
+          'label' => (string)($after['label'] ?? ''),
+          'citation_order' => (string)($after['citation_order'] ?? ''),
+          'example_heading' => (string)($after['example_heading'] ?? ''),
+          'example_body' => (string)($after['example_body'] ?? ''),
+          'you_try' => (string)($after['you_try'] ?? ''),
+          'notes' => (string)($after['notes'] ?? ''),
+        ];
+      } elseif ($action === 'delete' && is_array($before) && isset($byKeyIndex[$key])) {
+        // Keep row visible until export, but preserve latest known staged fields if present.
+        $idx = $byKeyIndex[$key];
+        $citationExamplesView[$idx] = array_merge($citationExamplesView[$idx], $before);
+      }
+    }
+  } else {
+    foreach ($citationRevisions as $rev) {
+      $tag = $rev['release_tag'] ?? '';
+      if ($tag) {
+        $stagedByTag[$tag] = ($stagedByTag[$tag] ?? 0) + 1;
+        if ($tag === $currentReleaseTag) $stagedCount++;
+      }
+      $key = $rev['citation_key'];
+      if (!isset($latestByKey[$key])) {
+        $latestByKey[$key] = $rev;
+        if ($tag === $currentReleaseTag) $stagedKeys[$key] = true;
+      }
+    }
+    if ($currentReleaseTag) {
+      $currentTagRevs = CitationRevision::listByRelease($siteSlug, $currentReleaseTag);
+      foreach ($currentTagRevs as $r) {
+        $key = $r['citation_key'];
+        $after = json_decode($r['after_json'] ?? 'null', true);
+        $netEffects[$key] = $after;
+      }
     }
   }
 }
@@ -1130,7 +1309,6 @@ if ($siteSlug === 'cite-them-right') {
 $base = base_path();
 $themeIsLight = ui_theme_is_light();
 $activeNav = 'sites';
-$citationsOnly = (($siteSlug ?? '') === 'cite-them-right') && (($_GET['view'] ?? '') === 'citations');
 
 // Fetch current user for header menu
 $currentUser = null;
@@ -2269,18 +2447,14 @@ if (isset($_SESSION['user_id'])) {
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
             <div>
               <h2 style="margin:0">Citation database</h2>
-              <div class="muted">Manage citation records that power Citation order, Example, and You try blocks.</div>
+              <div class="muted">Edit citations safely. Changes are queued and only applied when exported.</div>
             </div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn" type="button" id="openExportBundleModal">Export bundle (<?= (int)$stagedCount ?>)</button>
               <button class="btn primary" type="button" id="openCitationModal">+ Add citation</button>
             </div>
           </div>
 
-          <div class="citation-subtabs" role="tablist" aria-label="Citation DB subtabs">
-            <button class="citation-subtab active" data-subtab="entries" type="button">Entries</button>
-            <button class="citation-subtab" data-subtab="revisions" type="button">Revisions</button>
-            <button class="citation-subtab" data-subtab="releases" type="button">Releases</button>
-          </div>
           <div class="citation-searchbar" style="margin:12px 0 16px; display:flex; gap:12px; flex-wrap:wrap;">
             <div style="flex:1; min-width:240px;">
               <label for="revSearch" class="muted" style="display:block;margin-bottom:6px;">Search</label>
@@ -2295,134 +2469,10 @@ if (isset($_SESSION['user_id'])) {
                 <?php endforeach; ?>
               </select>
             </div>
-            <div style="display:flex;align-items:flex-end">
-              <button type="button" class="btn" id="advFiltersToggle">Advanced filters</button>
-            </div>
-          </div>
-
-          <div class="row citation-panel active" style="margin-top:10px" data-subtab-panel="entries">
-            <div style="height:1px"></div>
-          </div>
-
-          <!-- Advanced filters container (content switches per tab) -->
-          <div id="advFiltersPanel" class="rev-filters" style="display:none; margin:0 0 12px 0;">
-            <div id="advFiltersEntries" style="display:none; gap:12px; flex-wrap:wrap;">
-              <div class="field" style="min-width:180px;">
-                <label for="citationStatusFilter">Status</label>
-                <select id="citationStatusFilter">
-                  <option value="">All statuses</option>
-                  <option value="staged">Staged in current release</option>
-                  <option value="edited">Edited (other release)</option>
-                  <option value="clean">Clean</option>
-                </select>
-              </div>
-            </div>
-            <div id="advFiltersRevs" style="display:none; gap:12px; flex-wrap:wrap;">
-              <div class="field" style="min-width:160px;">
-                <label for="revIdFilter">Citation ID</label>
-                <input id="revIdFilter" type="number" placeholder="e.g. 12" min="1" step="1">
-              </div>
-              <div class="field">
-                <label for="revReleaseFilter">Release tag</label>
-                <select id="revReleaseFilter">
-                  <option value="">All releases</option>
-                  <option value="__unreleased">Unreleased / Not staged</option>
-                  <?php foreach ($revTags as $tag): ?>
-                    <option value="<?= Security::e($tag) ?>"><?= Security::e($tag) ?></option>
-                  <?php endforeach; ?>
-                </select>
-              </div>
-              <div class="field">
-                <label for="revActionFilter">Action</label>
-                <select id="revActionFilter">
-                  <option value="">All</option>
-                  <option value="create">Create</option>
-                  <option value="update">Update</option>
-                  <option value="delete">Delete</option>
-                  <option value="rollback">Rollback</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="revDateRange">Date</label>
-                <select id="revDateRange">
-                  <option value="">Any time</option>
-                  <option value="24h">Last 24 hours</option>
-                  <option value="7d">Last 7 days</option>
-                  <option value="30d">Last 30 days</option>
-                  <option value="custom">Custom range</option>
-                </select>
-              </div>
-              <div class="field" id="revCustomDates" style="display:none;flex-direction:row;gap:8px;align-items:flex-end;">
-                <div style="flex:1">
-                  <label for="revDateStart">From</label>
-                  <input type="date" id="revDateStart">
-                </div>
-                <div style="flex:1">
-                  <label for="revDateEnd">To</label>
-                  <input type="date" id="revDateEnd">
-                </div>
-              </div>
-              <?php if ($revUsers): ?>
-                <div class="field">
-                  <label for="revUserFilter">User</label>
-                  <select id="revUserFilter">
-                    <option value="">All users</option>
-                    <?php foreach ($revUsers as $u): ?>
-                      <option value="<?= Security::e($u) ?>"><?= Security::e($u) ?></option>
-                    <?php endforeach; ?>
-                  </select>
-                </div>
-              <?php endif; ?>
-            </div>
-          </div>
-
-          <div class="section citation-panel" style="margin-top:12px" data-subtab-panel="releases">
-            <?php
-              $currentTagRevs = CitationRevision::listByRelease($siteSlug, $currentReleaseTag);
-              // Group staged citations by referencing style (unique citation per key)
-              $byStyle = [];
-              foreach ($currentTagRevs as $r) {
-                $after = json_decode($r['after_json'] ?? 'null', true);
-                $before = json_decode($r['before_json'] ?? 'null', true);
-                $style = $after['referencing_style'] ?? $before['referencing_style'] ?? 'Unknown';
-                $label = $after['label'] ?? $before['label'] ?? $r['citation_key'] ?? 'Untitled';
-                $key = $r['citation_key'] ?? '';
-                $uniq = $style . '|' . $key;
-                $byStyle[$style][$uniq] = $label;
-              }
-            ?>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-              <div>
-                <h3 style="margin:0">Staged citations by style</h3>
-                <div class="muted">Only citations staged for export are shown.</div>
-              </div>
-              <form method="post" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-                <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
-                <input type="hidden" name="export_release" value="1">
-                <input type="hidden" name="release_tag" value="<?= Security::e($currentReleaseTag) ?>">
-                <button class="btn primary" type="submit">Export bundle</button>
-              </form>
-            </div>
-            <?php if ($byStyle): ?>
-              <div style="display:grid;gap:12px">
-                <?php foreach ($byStyle as $style => $items): ?>
-                  <div class="citation-field">
-                    <strong><?= Security::e($style) ?></strong>
-                    <ul style="margin:6px 0 0 16px; padding:0; list-style:disc;">
-                      <?php foreach ($items as $label): ?>
-                        <li><?= Security::e($label) ?></li>
-                      <?php endforeach; ?>
-                    </ul>
-                  </div>
-                <?php endforeach; ?>
-              </div>
-            <?php else: ?>
-              <div class="muted">No staged citations for export.</div>
-            <?php endif; ?>
           </div>
 
           <?php if ($citationExamples): ?>
-            <div class="citations-list citation-panel active" id="citationList" data-subtab-panel="entries">
+            <div class="citations-list" id="citationList">
               <table class="citation-table">
                 <thead>
                   <tr>
@@ -2436,14 +2486,15 @@ if (isset($_SESSION['user_id'])) {
                   </tr>
                 </thead>
                 <tbody>
-                  <?php foreach ($citationExamples as $ex): 
+                  <?php foreach ($citationExamplesView as $ex): 
                     $key = $ex['example_key'] ?? '';
                     $keyDisplay = nx_truncate($key, 30);
                     $staged = isset($stagedKeys[$key]);
+                    $queuedRevId = $staged ? (int)($latestByKey[$key]['id'] ?? 0) : 0;
                     $hasRevision = isset($latestByKey[$key]);
                     $statusLabel = 'Clean';
                     $statusTone = 'muted';
-                    if ($staged) { $statusLabel = 'Staged in current release'; $statusTone = 'badge-chip staged'; }
+                    if ($staged) { $statusLabel = 'Queued'; $statusTone = 'badge-chip staged'; }
                     elseif ($hasRevision) { $statusLabel = 'Edited (other release)'; $statusTone = 'badge-chip'; }
                     $statusValue = $staged ? 'staged' : ($hasRevision ? 'edited' : 'clean');
                   ?>
@@ -2461,6 +2512,7 @@ if (isset($_SESSION['user_id'])) {
                       data-youtry="<?= Security::e($ex['you_try'] ?? '') ?>"
                       data-notes="<?= Security::e($ex['notes'] ?? '') ?>"
                       data-id="<?= (int)($ex['id'] ?? 0) ?>"
+                      data-queued-revision-id="<?= $queuedRevId ?>"
                     >
                       <td>
                         <div class="citation-label"><?= Security::e($ex['label'] ?? '') ?></div>
@@ -2473,18 +2525,24 @@ if (isset($_SESSION['user_id'])) {
                         <span class="<?= $statusTone ?>"><?= Security::e($statusLabel) ?></span>
                       </td>
                       <td style="display:flex;gap:6px;flex-wrap:wrap;">
-                        <form method="post" style="margin:0">
-                          <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
-                          <input type="hidden" name="delete_citation" value="1">
-                          <input type="hidden" name="citation_id" value="<?= (int)($ex['id'] ?? 0) ?>">
-                          <button class="btn danger" type="submit" onclick="return confirm('Delete this citation?')">Delete</button>
-                        </form>
+                        <?php if ($staged && $queuedRevId > 0): ?>
+                          <button class="btn text" type="button" data-view-bundle data-revision-id="<?= $queuedRevId ?>">View in bundle</button>
+                        <?php endif; ?>
+                        <?php if ((int)($ex['id'] ?? 0) > 0): ?>
+                          <form method="post" style="margin:0">
+                            <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+                            <input type="hidden" name="delete_citation" value="1">
+                            <input type="hidden" name="citation_id" value="<?= (int)($ex['id'] ?? 0) ?>">
+                            <button class="btn danger" type="submit" onclick="return confirm('Queue delete for this citation?')">Queue delete</button>
+                          </form>
+                        <?php endif; ?>
                       </td>
                     </tr>
                   <?php endforeach; ?>
                 </tbody>
               </table>
             </div>
+            <?php if (!$citationsOnly): ?>
             <div class="section citation-panel" style="margin-top:14px" data-subtab-panel="revisions">
               <h3>Revisions (latest 100)</h3>
               <?php
@@ -2614,12 +2672,138 @@ if (isset($_SESSION['user_id'])) {
                 <div class="muted">No staged revisions for this release.</div>
               <?php endif; ?>
             </div>
+            <?php endif; ?>
           <?php else: ?>
             <div class="muted" style="margin-top:12px;display:flex;align-items:center;gap:10px">
               <span style="font-size:20px">📚</span>
               <div>No citation entries found. Populate via SQL seed file.</div>
             </div>
           <?php endif; ?>
+
+          <div class="modal-backdrop" id="exportBundleBackdrop" style="display:none">
+            <div class="modal" role="dialog" aria-modal="true" aria-labelledby="exportBundleTitle" style="max-width:860px;width:100%;">
+              <header style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+                <div>
+                  <h3 id="exportBundleTitle" style="margin:0">Export bundle (<?= (int)$stagedCount ?>)</h3>
+                  <div class="muted" style="font-size:13px">Queued citations only. Live records update on export.</div>
+                </div>
+                <button type="button" class="close-btn" id="closeExportBundleModal" aria-label="Close">×</button>
+              </header>
+              <?php if ($queuedBundleItems): ?>
+                <div style="display:grid;gap:10px;max-height:60vh;overflow:auto;padding-right:2px;">
+                  <?php foreach ($queuedBundleItems as $qrev):
+                    $qid = (int)($qrev['id'] ?? 0);
+                    $qaction = strtolower((string)($qrev['action'] ?? 'update'));
+                    $qbefore = json_decode((string)($qrev['before_json'] ?? 'null'), true) ?: [];
+                    $qafter = json_decode((string)($qrev['after_json'] ?? 'null'), true) ?: [];
+                    $qlabel = $qafter['label'] ?? $qbefore['label'] ?? ($qrev['citation_key'] ?? 'Untitled');
+                    $qkey = (string)($qrev['citation_key'] ?? '');
+                    $fieldLabels = [
+                      'label' => 'Reference type',
+                      'referencing_style' => 'Style',
+                      'category' => 'Category',
+                      'sub_category' => 'Sub-category',
+                      'citation_order' => 'Citation order',
+                      'example_heading' => 'Example heading',
+                      'example_body' => 'Example body',
+                      'you_try' => 'You try',
+                      'notes' => 'Notes',
+                    ];
+                    $changedFields = [];
+                    foreach ($fieldLabels as $fk => $flabel) {
+                      $bv = trim((string)($qbefore[$fk] ?? ''));
+                      $av = trim((string)($qafter[$fk] ?? ''));
+                      if ($qaction === 'create') {
+                        if ($av !== '') $changedFields[] = $flabel;
+                      } elseif ($qaction === 'delete') {
+                        if ($bv !== '') $changedFields[] = $flabel;
+                      } elseif ($bv !== $av) {
+                        $changedFields[] = $flabel;
+                      }
+                    }
+                    if ($qaction === 'create') {
+                      $summaryText = 'New citation queued';
+                    } elseif ($qaction === 'delete') {
+                      $summaryText = 'Citation queued for deletion';
+                    } elseif (!$changedFields) {
+                      $summaryText = 'No field changes detected';
+                    } elseif (count($changedFields) <= 2) {
+                      $summaryText = implode(' and ', $changedFields) . ' updated';
+                    } else {
+                      $summaryText = count($changedFields) . ' fields changed';
+                    }
+                  ?>
+                    <div class="citation-field" id="bundle-item-<?= $qid ?>" data-bundle-item="<?= $qid ?>" style="padding:10px 12px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                        <div style="min-width:0;">
+                          <div class="collection-name" style="margin:0;"><?= Security::e($qlabel) ?></div>
+                          <div class="muted collection-slug"><?= Security::e($qkey) ?></div>
+                          <div class="muted" style="font-size:12px;"><?= Security::e($summaryText) ?></div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                          <button class="btn text" type="button" data-bundle-toggle="<?= $qid ?>" aria-expanded="false">View changes</button>
+                          <form method="post" style="margin:0;">
+                            <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+                            <input type="hidden" name="export_single_citation" value="1">
+                            <input type="hidden" name="queued_revision_id" value="<?= $qid ?>">
+                            <button class="btn" type="submit">Export individually</button>
+                          </form>
+                        </div>
+                      </div>
+                      <div id="bundle-diff-<?= $qid ?>" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+                        <?php
+                          $printedAny = false;
+                          foreach ($fieldLabels as $fk => $flabel):
+                            $bv = trim((string)($qbefore[$fk] ?? ''));
+                            $av = trim((string)($qafter[$fk] ?? ''));
+                            $changed = ($qaction === 'create')
+                              ? ($av !== '')
+                              : (($qaction === 'delete') ? ($bv !== '') : ($bv !== $av));
+                            if (!$changed) continue;
+                            $printedAny = true;
+                        ?>
+                          <div style="margin-bottom:10px;">
+                            <div class="muted" style="font-size:12px;margin-bottom:4px;"><?= Security::e($flabel) ?></div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                              <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.24);border-radius:8px;padding:8px;">
+                                <div class="muted" style="font-size:11px;margin-bottom:3px;">Before</div>
+                                <div style="white-space:pre-wrap;font-size:12px;line-height:1.4;"><?= Security::e($bv !== '' ? $bv : '—') ?></div>
+                              </div>
+                              <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.24);border-radius:8px;padding:8px;">
+                                <div class="muted" style="font-size:11px;margin-bottom:3px;">After</div>
+                                <div style="white-space:pre-wrap;font-size:12px;line-height:1.4;"><?= Security::e(($qaction === 'delete') ? '[Removed]' : ($av !== '' ? $av : '—')) ?></div>
+                              </div>
+                            </div>
+                          </div>
+                        <?php endforeach; ?>
+                        <?php if (!$printedAny): ?>
+                          <div class="muted" style="font-size:12px;">No detailed field changes available.</div>
+                        <?php endif; ?>
+                      </div>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+                <div class="actions" style="margin-top:12px;justify-content:flex-end;">
+                  <form method="post" style="margin:0;">
+                    <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+                    <input type="hidden" name="discard_all_citations" value="1">
+                    <button class="btn text" type="submit" onclick="return confirm('Discard all queued citation changes?')">Discard all</button>
+                  </form>
+                  <button class="btn" type="button" id="closeExportBundleBtn">Close</button>
+                  <form method="post" style="margin:0;">
+                    <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+                    <input type="hidden" name="export_all_citations" value="1">
+                    <button class="btn primary" type="submit">Export all</button>
+                  </form>
+                </div>
+              <?php else: ?>
+                <div class="muted">No queued citations.</div>
+                <div class="actions" style="margin-top:12px;justify-content:flex-end;">
+                  <button class="btn" type="button" id="closeExportBundleBtn">Close</button>
+                </div>
+              <?php endif; ?>
+            </div>
+          </div>
         </div>
       </div>
       <?php endif; ?>
@@ -3394,7 +3578,50 @@ if (isset($_SESSION['user_id'])) {
     closeCitationModal?.addEventListener('click', hideCitationModal);
     cancelCitationModal?.addEventListener('click', hideCitationModal);
     citationBackdrop?.addEventListener('click', (e) => { if (e.target === citationBackdrop) hideCitationModal(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCitationModal(); });
+
+    // Export bundle modal
+    const exportBundleBackdrop = document.getElementById('exportBundleBackdrop');
+    const openExportBundleModal = document.getElementById('openExportBundleModal');
+    const closeExportBundleModal = document.getElementById('closeExportBundleModal');
+    const closeExportBundleBtn = document.getElementById('closeExportBundleBtn');
+    const showExportBundle = () => { if (exportBundleBackdrop) exportBundleBackdrop.style.display = 'flex'; };
+    const hideExportBundle = () => { if (exportBundleBackdrop) exportBundleBackdrop.style.display = 'none'; };
+    openExportBundleModal?.addEventListener('click', showExportBundle);
+    closeExportBundleModal?.addEventListener('click', hideExportBundle);
+    closeExportBundleBtn?.addEventListener('click', hideExportBundle);
+    exportBundleBackdrop?.addEventListener('click', (e) => { if (e.target === exportBundleBackdrop) hideExportBundle(); });
+    document.querySelectorAll('[data-view-bundle]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const revId = btn.getAttribute('data-revision-id') || '';
+        showExportBundle();
+        if (!revId) return;
+        const item = document.getElementById('bundle-item-' + revId);
+        if (item) {
+          item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const diff = document.getElementById('bundle-diff-' + revId);
+          const toggle = document.querySelector('[data-bundle-toggle="' + revId + '"]');
+          if (diff) diff.style.display = 'block';
+          if (toggle) {
+            toggle.setAttribute('aria-expanded', 'true');
+            toggle.textContent = 'Hide changes';
+          }
+          item.style.outline = '2px solid rgba(59,130,246,0.45)';
+          setTimeout(() => { item.style.outline = ''; }, 1200);
+        }
+      });
+    });
+    document.querySelectorAll('[data-bundle-toggle]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-bundle-toggle') || '';
+        const diff = document.getElementById('bundle-diff-' + id);
+        if (!diff) return;
+        const open = diff.style.display !== 'none';
+        diff.style.display = open ? 'none' : 'block';
+        btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+        btn.textContent = open ? 'View changes' : 'Hide changes';
+      });
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideCitationModal(); hideExportBundle(); } });
     document.querySelectorAll('[data-edit-citation]').forEach(btn => {
       btn.addEventListener('click', () => {
         resetCitationForm();
@@ -3558,6 +3785,17 @@ if (isset($_SESSION['user_id'])) {
         updateDrawerScrollLock();
       };
 
+      window.NexusCitationViewer = {
+        openForData: (data, mode = 'edit') => {
+          if (!data) return;
+          setView(data);
+          if (mode === 'edit') {
+            applyEditFields(data);
+            setMode('edit');
+          }
+        }
+      };
+
       document.querySelectorAll('.citation-row').forEach(row => {
         row.addEventListener('click', (e) => {
           if (e.target.closest('button, form, a, input, select, textarea, label')) return;
@@ -3586,6 +3824,8 @@ if (isset($_SESSION['user_id'])) {
       });
 
       document.addEventListener('click', (e) => {
+        if (!viewer.classList.contains('active')) return;
+        if (e.target.closest('#exportBundleModal') || e.target.closest('#citationModal')) return;
         const withinViewer = viewer.contains(e.target);
         const isViewRow = (e.target.closest?.('.citation-row') ?? null) !== null;
         if (!withinViewer && !isViewRow) {

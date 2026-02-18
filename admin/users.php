@@ -12,7 +12,7 @@ $themeIsLight = ui_theme_is_light();
 
 $notice = null;
 $error = null;
-$allowedRoles = ['super_admin','admin','staff_admin','user_admin','editor','viewer','student'];
+$allowedRoles = ['super_admin','website_admin','editor','institution_admin','student'];
 $me = null;
 if (isset($_SESSION['user_id'])) {
   $me = User::findById((int)$_SESSION['user_id']) ?: null;
@@ -119,6 +119,23 @@ function relative_time(?string $ts): string {
   }
   return '—';
 }
+
+function role_label(string $role): string {
+  $map = [
+    'super_admin' => 'Super Admin',
+    'website_admin' => 'Website Admin',
+    'editor' => 'Editor',
+    'institution_admin' => 'Institution Admin',
+    'student' => 'Student',
+    // Legacy role labels for existing records.
+    'admin' => 'Website Admin',
+    'staff_admin' => 'Website Admin',
+    'user_admin' => 'Institution Admin',
+    'viewer' => 'Student',
+  ];
+  $key = strtolower($role);
+  return $map[$key] ?? ucwords(str_replace('_', ' ', $key));
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -165,11 +182,49 @@ function relative_time(?string $ts): string {
     .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin:24px 0 14px;}
     .page-head h1{margin:0;font-size:32px;letter-spacing:-0.02em;}
     .page-head p{margin:6px 0 0;color:var(--muted);}
-    .role-help{margin:0 0 16px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,0.03);color:var(--muted);}
+    .page-tools{display:flex;align-items:center;gap:10px;margin:8px 0 14px;}
+    .help-link{border:1px solid var(--border);background:transparent;color:var(--muted);padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:600;}
+    .help-link:hover{color:var(--text);}
     .filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0 18px;}
+    .filters .grow{flex:1;min-width:260px;}
+    .advanced-filters{margin-left:auto;}
+    .advanced-filters details{position:relative;}
+    .advanced-filters summary{list-style:none;cursor:pointer;}
+    .advanced-filters summary::-webkit-details-marker{display:none;}
+    .advanced-filters-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;min-width:260px;z-index:8;box-shadow:var(--shadow);display:grid;gap:8px;}
+    .advanced-filters-menu label{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
     .input{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.04);}
     .input input, .input select{background:transparent;border:none;color:var(--text);font-weight:600;min-width:200px;}
     .input input::placeholder{color:var(--muted);}
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      min-height:36px;
+      padding:8px 12px;
+      border-radius:10px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.06);
+      color:var(--text);
+      cursor:pointer;
+      font-weight:700;
+      text-decoration:none;
+    }
+    .btn:hover{background:rgba(255,255,255,.1);}
+    .btn.primary{
+      background:linear-gradient(135deg,var(--primary),var(--primary));
+      color:#fff;
+      border-color:rgba(255,255,255,.12);
+      box-shadow:none;
+    }
+    .btn.ghost{
+      background:transparent;
+      border-color:transparent;
+      color:var(--muted);
+      padding:8px 10px;
+    }
+    .btn.ghost:hover{background:rgba(255,255,255,.05);color:var(--text);}
     .table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
     th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--border);}
     th{color:var(--muted);font-weight:600;font-size:14px;}
@@ -178,13 +233,6 @@ function relative_time(?string $ts): string {
     .badge.role{background:rgba(59,130,246,0.12);color:#bfdbfe;}
     .badge.status{background:rgba(16,185,129,0.12);color:#a7f3d0;}
     .actions-menu{display:inline-flex;gap:6px;position:relative;}
-    .actions-dd{position:relative;}
-    .actions-dd summary{list-style:none;cursor:pointer;}
-    .actions-dd summary::-webkit-details-marker{display:none;}
-    .actions-dd .menu{position:absolute;right:0;top:calc(100% + 4px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;min-width:220px;box-shadow:var(--shadow);z-index:5;}
-    .actions-dd .menu form{display:grid;gap:8px;}
-    .actions-dd .menu select{width:100%;padding:8px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--text);}
-    .actions-dd .menu button{padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--text);cursor:pointer;font-weight:700;}
     .muted{color:var(--muted);}
     .notice{margin:10px 0;padding:10px 12px;border-radius:12px;border:1px solid rgba(34,197,94,0.35);background:rgba(34,197,94,0.08);}
     .error-banner{margin:10px 0;padding:10px 12px;border-radius:12px;border:1px solid rgba(248,113,113,0.45);background:rgba(248,113,113,0.12);color:#fecdd3;font-weight:700;}
@@ -192,6 +240,7 @@ function relative_time(?string $ts): string {
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:30;}
     .modal{background:var(--card);border-radius:16px;border:1px solid var(--border);padding:18px;min-width:320px;max-width:420px;box-shadow:var(--shadow);}
     .modal h3{margin-top:0;}
+    .modal p{margin:0;color:var(--muted);}
     .modal form{display:grid;gap:12px;}
     .modal label{font-weight:700;}
     .modal input,.modal select{width:100%;padding:10px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--text);}
@@ -208,48 +257,58 @@ function relative_time(?string $ts): string {
         <p>Manage users and access permissions.</p>
       </div>
     </div>
-    <p class="role-help">Privilege guide: Super Admin has full system access, including role changes and global settings; Admin can manage most platform settings and content; Staff Admin manages staff-facing operations and staff accounts; User Admin manages standard user accounts and profile access; Editor can create and publish content; Viewer has read-only access to permitted areas; Student has basic learner-level access only.</p>
+    <div class="page-tools">
+      <button type="button" class="help-link" id="openRoleHelp">Role help</button>
+    </div>
 
     <?php if ($notice): ?><div class="notice"><?= Security::e($notice) ?></div><?php endif; ?>
     <?php if ($error): ?><div class="error-banner"><?= Security::e($error) ?></div><?php endif; ?>
 
     <form class="filters" method="get">
-      <div class="input">
+      <div class="input grow">
         <label class="sr-only" for="q">Search users</label>
         <input id="q" name="q" type="search" placeholder="Search users…" value="<?= Security::e($q) ?>">
       </div>
-      <div class="input">
-        <label class="sr-only" for="role">Role</label>
-        <select id="role" name="role">
-          <?php
-            $roles = ['all'=>'All roles','super_admin'=>'Super_admin','admin'=>'Admin','staff_admin'=>'Staff_admin','user_admin'=>'User_admin','editor'=>'Editor','viewer'=>'Viewer','student'=>'Student'];
-            foreach ($roles as $val => $label) {
-              $sel = $roleFilter === $val ? 'selected' : '';
-              echo "<option value=\"".Security::e($val)."\" {$sel}>".Security::e($label)."</option>";
-            }
-          ?>
-        </select>
+      <div class="advanced-filters">
+        <details id="advancedFilters">
+          <summary class="btn ghost">Advanced filters</summary>
+          <div class="advanced-filters-menu">
+            <label for="role">Role</label>
+            <div class="input">
+              <select id="role" name="role">
+                <?php
+                  $roles = ['all'=>'All roles','super_admin'=>'Super Admin','website_admin'=>'Website Admin','editor'=>'Editor','institution_admin'=>'Institution Admin','student'=>'Student'];
+                  foreach ($roles as $val => $label) {
+                    $sel = $roleFilter === $val ? 'selected' : '';
+                    echo "<option value=\"".Security::e($val)."\" {$sel}>".Security::e($label)."</option>";
+                  }
+                ?>
+              </select>
+            </div>
+            <label for="status">Status</label>
+            <div class="input">
+              <select id="status" name="status">
+                <?php
+                  $statuses = ['all'=>'All statuses','active'=>'Active','invited'=>'Invited','suspended'=>'Suspended'];
+                  foreach ($statuses as $val => $label) {
+                    $sel = $statusFilter === $val ? 'selected' : '';
+                    echo "<option value=\"".Security::e($val)."\" {$sel}>".Security::e($label)."</option>";
+                  }
+                ?>
+              </select>
+            </div>
+            <button class="btn" type="submit">Apply</button>
+          </div>
+        </details>
       </div>
-      <div class="input">
-        <label class="sr-only" for="status">Status</label>
-        <select id="status" name="status">
-          <?php
-            $statuses = ['all'=>'All statuses','active'=>'Active','invited'=>'Invited','suspended'=>'Suspended'];
-            foreach ($statuses as $val => $label) {
-              $sel = $statusFilter === $val ? 'selected' : '';
-              echo "<option value=\"".Security::e($val)."\" {$sel}>".Security::e($label)."</option>";
-            }
-          ?>
-        </select>
-      </div>
-      <button class="btn primary" type="button" id="openAddUser">+ Add user</button>
+      <button class="btn primary" type="button" id="openAddUser">+ Invite User</button>
       <?php if ($q !== '' || $roleFilter !== 'all' || $statusFilter !== 'all'): ?>
-        <button class="btn text" type="submit" name="reset" value="1" onclick="window.location='<?= $base ?>/admin/users.php';return false;">Reset filters</button>
+        <button class="btn" type="submit" name="reset" value="1" onclick="window.location='<?= $base ?>/admin/users.php';return false;">Reset</button>
       <?php endif; ?>
     </form>
 
     <?php if (!$users): ?>
-      <div class="empty">No users found. <button class="btn primary" type="button" id="openAddUser2">+ Add user</button></div>
+      <div class="empty">No users found. <button class="btn primary" type="button" id="openAddUser2">+ Invite User</button></div>
     <?php else: ?>
       <table class="table" role="table">
         <thead>
@@ -274,31 +333,19 @@ function relative_time(?string $ts): string {
                 <div style="font-weight:700;"><?= Security::e($name) ?> <?= $isCurrent ? '<span class="badge status" style="background:rgba(59,130,246,0.12);color:#bfdbfe;">You</span>' : '' ?></div>
               </td>
               <td><?= Security::e($uRow['email']) ?></td>
-              <td><span class="badge role"><?= Security::e($uRow['role']) ?></span></td>
+              <td><span class="badge role"><?= Security::e(role_label((string)$uRow['role'])) ?></span></td>
               <td><span class="badge status"><?= Security::e($status) ?></span></td>
               <td><span title="<?= Security::e($uRow['created_at'] ?? '') ?>"><?= Security::e(relative_time($uRow['created_at'] ?? null)) ?></span></td>
               <td class="actions-menu">
-                <details class="actions-dd">
-                  <summary class="btn" style="min-height:36px;padding:8px 10px;">⋯</summary>
-                  <div class="menu" role="menu">
-                    <?php if (($me['role'] ?? '') === 'super_admin'): ?>
-                      <form method="post">
-                        <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
-                        <input type="hidden" name="mode" value="change_role">
-                        <input type="hidden" name="user_id" value="<?= (int)$uRow['id'] ?>">
-                        <label style="font-weight:700;">Change role</label>
-                        <select name="new_role">
-                          <?php foreach ($allowedRoles as $r): ?>
-                            <option value="<?= Security::e($r) ?>" <?= $r === $uRow['role'] ? 'selected' : '' ?>><?= Security::e(ucfirst(str_replace('_',' ',$r))) ?></option>
-                          <?php endforeach; ?>
-                        </select>
-                        <button type="submit">Update</button>
-                      </form>
-                    <?php else: ?>
-                      <div class="muted">Only super admins can change roles.</div>
-                    <?php endif; ?>
-                  </div>
-                </details>
+                <button
+                  type="button"
+                  class="btn primary"
+                  data-manage-user
+                  data-user-id="<?= (int)$uRow['id'] ?>"
+                  data-user-name="<?= Security::e($name) ?>"
+                  data-user-email="<?= Security::e($uRow['email']) ?>"
+                  data-user-role="<?= Security::e((string)$uRow['role']) ?>"
+                >Manage</button>
               </td>
             </tr>
           <?php endforeach; ?>
@@ -309,7 +356,8 @@ function relative_time(?string $ts): string {
 
   <div class="modal-backdrop" id="addUserModal">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="addUserTitle">
-      <h3 id="addUserTitle">Add user</h3>
+      <h3 id="addUserTitle">Invite user</h3>
+      <p>Create a user account and assign an initial role.</p>
       <form method="post">
         <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
         <input type="hidden" name="mode" value="create">
@@ -319,15 +367,59 @@ function relative_time(?string $ts): string {
         <input name="display_name" type="text">
         <label>Role</label>
         <select name="role" required>
-          <?php foreach (['student','viewer','editor','user_admin','staff_admin','admin','super_admin'] as $r): ?>
-            <option value="<?= Security::e($r) ?>" <?= $r==='student'?'selected':'' ?>><?= Security::e(ucfirst(str_replace('_',' ',$r))) ?></option>
+          <?php foreach (['student','institution_admin','editor','website_admin','super_admin'] as $r): ?>
+            <option value="<?= Security::e($r) ?>" <?= $r==='student'?'selected':'' ?>><?= Security::e(role_label($r)) ?></option>
           <?php endforeach; ?>
         </select>
         <div class="modal-actions">
           <button type="button" class="btn" id="cancelModal">Cancel</button>
-          <button type="submit" class="btn primary">Create user</button>
+          <button type="submit" class="btn primary">Send invite</button>
         </div>
       </form>
+    </div>
+  </div>
+  <div class="modal-backdrop" id="manageUserModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="manageUserTitle">
+      <h3 id="manageUserTitle">Manage user</h3>
+      <p id="manageUserMeta"></p>
+      <?php if (($me['role'] ?? '') === 'super_admin'): ?>
+        <form method="post">
+          <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+          <input type="hidden" name="mode" value="change_role">
+          <input type="hidden" name="user_id" id="manageUserId" value="">
+          <label for="manageUserRole">Role</label>
+          <select id="manageUserRole" name="new_role">
+            <?php foreach ($allowedRoles as $r): ?>
+              <option value="<?= Security::e($r) ?>"><?= Security::e(role_label($r)) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <div class="modal-actions">
+            <button type="button" class="btn" id="cancelManageModal">Cancel</button>
+            <button type="submit" class="btn primary">Save changes</button>
+          </div>
+        </form>
+      <?php else: ?>
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <span class="muted">Only super admins can change roles.</span>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="cancelManageModal">Close</button>
+        </div>
+      <?php endif; ?>
+    </div>
+  </div>
+  <div class="modal-backdrop" id="roleHelpModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="roleHelpTitle">
+      <h3 id="roleHelpTitle">User roles</h3>
+      <p><strong>Super Admin:</strong> full system access across all websites, including role changes.</p>
+      <p><strong>Website Admin:</strong> manage specific platforms, platform settings, content, page creation, and database access.</p>
+      <p><strong>Editor:</strong> create and publish content.</p>
+      <p><strong>Institution Admin:</strong> teachers/librarians/lecturers who assign content to students on specific websites.</p>
+      <p><strong>Student:</strong> basic learner-level access.</p>
+      <p><strong>Inheritance:</strong> each level includes all permissions of the levels below it.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="closeRoleHelp">Close</button>
+      </div>
     </div>
   </div>
   <script>
@@ -337,6 +429,38 @@ function relative_time(?string $ts): string {
     openBtns.forEach(b => b.addEventListener('click', () => { if(modal){ modal.style.display='flex'; } }));
     cancel?.addEventListener('click', () => { modal.style.display='none'; });
     modal?.addEventListener('click', (e) => { if (e.target === modal) modal.style.display='none'; });
+
+    const manageModal = document.getElementById('manageUserModal');
+    const manageMeta = document.getElementById('manageUserMeta');
+    const manageId = document.getElementById('manageUserId');
+    const manageRole = document.getElementById('manageUserRole');
+    const cancelManage = document.getElementById('cancelManageModal');
+    document.querySelectorAll('[data-manage-user]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!manageModal) return;
+        const id = btn.getAttribute('data-user-id') || '';
+        const name = btn.getAttribute('data-user-name') || 'User';
+        const email = btn.getAttribute('data-user-email') || '';
+        const role = btn.getAttribute('data-user-role') || '';
+        if (manageMeta) manageMeta.textContent = name + (email ? ' (' + email + ')' : '');
+        if (manageId) manageId.value = id;
+        if (manageRole) manageRole.value = role;
+        manageModal.style.display = 'flex';
+      });
+    });
+    cancelManage?.addEventListener('click', () => { if (manageModal) manageModal.style.display = 'none'; });
+    manageModal?.addEventListener('click', (e) => { if (e.target === manageModal) manageModal.style.display='none'; });
+
+    const roleHelp = document.getElementById('roleHelpModal');
+    document.getElementById('openRoleHelp')?.addEventListener('click', () => { if (roleHelp) roleHelp.style.display = 'flex'; });
+    document.getElementById('closeRoleHelp')?.addEventListener('click', () => { if (roleHelp) roleHelp.style.display = 'none'; });
+    roleHelp?.addEventListener('click', (e) => { if (e.target === roleHelp) roleHelp.style.display='none'; });
+
+    const advancedFilters = document.getElementById('advancedFilters');
+    document.addEventListener('click', (e) => {
+      if (!advancedFilters || !advancedFilters.open) return;
+      if (!advancedFilters.contains(e.target)) advancedFilters.open = false;
+    });
   </script>
 </body>
 </html>
