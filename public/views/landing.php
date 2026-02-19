@@ -21,6 +21,7 @@ foreach ($sites as $s) {
     'name' => trim((string)($s['name'] ?? '')) ?: 'Untitled site',
     'url' => $url,
     'status' => $status,
+    'description' => trim((string)($s['description'] ?? '')),
   ];
 }
 ?>
@@ -61,11 +62,7 @@ foreach ($sites as $s) {
       line-height:1.45;
     }
     a{color:inherit;text-decoration:none}
-    main{
-      max-width:1120px;
-      margin:0 auto;
-      padding:40px 20px 64px;
-    }
+    main{max-width:1120px;margin:0 auto;padding:28px 20px 64px;}
     .section-head{
       display:flex;
       align-items:center;
@@ -93,32 +90,55 @@ foreach ($sites as $s) {
       background:linear-gradient(135deg,var(--primary),var(--primary-strong));
       color:#fff;
     }
-    .sites-wrap{
-      background:#fff;
+    .sites-wrap{display:grid;gap:16px;}
+    .site-card{
+      display:grid;
+      grid-template-columns:280px 1fr;
+      gap:18px;
+      padding:14px;
       border:1px solid var(--border);
-      border-radius:var(--radius);
-      overflow:hidden;
+      border-radius:14px;
+      background:#fff;
+      box-shadow:0 8px 24px rgba(15,23,42,0.08);
     }
-    table{width:100%;border-collapse:collapse}
-    th,td{
-      padding:14px 16px;
-      border-bottom:1px solid var(--border);
-      text-align:left;
-      vertical-align:middle;
-      font-size:14px;
-    }
-    th{
-      font-size:12px;
+    .site-preview{
+      width:100%;
+      aspect-ratio:16 / 9;
+      border-radius:12px;
+      border:1px solid var(--border);
+      padding:12px;
+      display:flex;
+      align-items:flex-end;
+      font-size:22px;
       font-weight:700;
-      color:var(--muted);
-      letter-spacing:.06em;
-      text-transform:uppercase;
-      background:#fafafa;
+      color:#fff;
+      background:
+        linear-gradient(135deg, rgba(79,70,229,.82), rgba(14,165,233,.68)),
+        radial-gradient(circle at top right, rgba(255,255,255,.28), transparent 45%);
     }
-    tr:last-child td{border-bottom:0}
-    .site-name{font-weight:600;color:#111827}
-    .site-url{color:#4b5563;word-break:break-all}
-    .site-url:hover{color:#111827;text-decoration:underline}
+    .site-content{display:grid;gap:10px;align-content:center;}
+    .site-name{margin:0;font-size:30px;font-weight:700;letter-spacing:-.02em;color:#111827;}
+    .site-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+    .site-url{
+      display:inline-block;
+      max-width:min(64ch,100%);
+      color:#4b5563;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .site-url:hover{color:#111827;text-decoration:underline;}
+    .site-description{
+      margin:0;
+      font-size:15px;
+      line-height:1.5;
+      color:var(--muted);
+      display:-webkit-box;
+      -webkit-line-clamp:2;
+      -webkit-box-orient:vertical;
+      overflow:hidden;
+      max-width:86ch;
+    }
     .status{
       display:inline-flex;
       align-items:center;
@@ -138,30 +158,26 @@ foreach ($sites as $s) {
       display:inline-flex;
       align-items:center;
       justify-content:center;
-      min-height:34px;
-      padding:0 12px;
+      min-height:36px;
+      padding:0 14px;
       border-radius:8px;
       border:1px solid var(--border);
       background:#fff;
       color:#111827;
-      font-size:13px;
+      font-size:14px;
       font-weight:600;
     }
     .manage-btn:hover{background:#f9fafb}
-    .empty{
-      padding:30px 16px;
-      font-size:14px;
-      color:var(--muted);
-    }
+    .open-link{font-size:14px;font-weight:600;color:var(--muted);text-decoration:underline;text-underline-offset:3px;}
+    .open-link:hover{color:#111827;}
+    .site-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+    .empty{padding:30px 16px;font-size:14px;color:var(--muted);background:#fff;border:1px solid var(--border);border-radius:14px;}
     @media (max-width: 900px){
       .section-head{flex-direction:column;align-items:flex-start}
-      h1{font-size:28px}
+      h1{font-size:30px}
       .btn-primary{font-size:16px}
-      th,td{font-size:14px}
-      th{font-size:12px}
-      .status{font-size:12px}
-      .manage-btn{font-size:13px}
-      .empty{font-size:14px}
+      .site-card{grid-template-columns:1fr;}
+      .site-name{font-size:26px;}
     }
   </style>
 </head>
@@ -178,26 +194,28 @@ foreach ($sites as $s) {
         <?php if (!$siteRows): ?>
           <div class="empty">No sites yet. Create your first website to get started.</div>
         <?php else: ?>
-          <table aria-label="Your Sites">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>URL</th>
-                <th>Status</th>
-                <th>Manage</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($siteRows as $row): ?>
-                <tr>
-                  <td><span class="site-name"><?= Security::e($row['name']) ?></span></td>
-                  <td><a class="site-url" href="<?= Security::e($row['url']) ?>" target="_blank" rel="noopener noreferrer"><?= Security::e($row['url']) ?></a></td>
-                  <td><span class="status <?= Security::e($row['status']) ?>"><?= Security::e($row['status']) ?></span></td>
-                  <td><a class="manage-btn" href="<?= $base ?>/admin/site.php?id=<?= (int)$row['id'] ?>">Manage</a></td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
+          <?php foreach ($siteRows as $row): ?>
+            <?php
+              $desc = $row['description'] !== '' ? $row['description'] : 'Manage pages, content, and publishing settings for this website.';
+              $previewChar = strtoupper(substr((string)$row['name'], 0, 1));
+              if ($previewChar === '') $previewChar = 'S';
+            ?>
+            <article class="site-card">
+              <div class="site-preview" aria-hidden="true"><?= Security::e($previewChar) ?></div>
+              <div class="site-content">
+                <h2 class="site-name"><?= Security::e($row['name']) ?></h2>
+                <div class="site-meta">
+                  <a class="site-url" href="<?= Security::e($row['url']) ?>" target="_blank" rel="noopener noreferrer"><?= Security::e($row['url']) ?></a>
+                  <span class="status <?= Security::e($row['status']) ?>"><?= Security::e($row['status']) ?></span>
+                </div>
+                <p class="site-description"><?= Security::e($desc) ?></p>
+                <div class="site-actions">
+                  <a class="manage-btn" href="<?= $base ?>/admin/site.php?id=<?= (int)$row['id'] ?>">Manage</a>
+                  <a class="open-link" href="<?= Security::e($row['url']) ?>" target="_blank" rel="noopener noreferrer">Open site</a>
+                </div>
+              </div>
+            </article>
+          <?php endforeach; ?>
         <?php endif; ?>
       </div>
     </section>

@@ -850,13 +850,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $recordRevision = function($action, $before, $after, $releaseTag) use ($siteSlug, $currentUserId, $currentUserEmail, $diffFn) {
       $diff = $diffFn($before ?? [], $after ?? []);
       $citationKey = (string)($after['example_key'] ?? $before['example_key'] ?? '');
-      $isQueuedRevision = trim((string)($releaseTag ?? '')) === '';
-      // Queue policy: only keep the latest staged revision per citation key.
-      if ($isQueuedRevision && $citationKey !== '') {
-        $pdo = nx_db();
-        $stmt = $pdo->prepare("DELETE FROM citation_revisions WHERE site_slug=? AND citation_key=? AND (release_tag IS NULL OR release_tag='')");
-        $stmt->execute([$siteSlug, $citationKey]);
-      }
       CitationRevision::record([
         'site_slug' => $siteSlug,
         'citation_id' => $after['id'] ?? $before['id'] ?? null,
@@ -1062,8 +1055,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$revId, $siteSlug]);
         $rev = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$rev) throw new Exception('Queued citation not found');
-        $applyQueuedRevision($rev);
-        $pdo->prepare("DELETE FROM citation_revisions WHERE id=? LIMIT 1")->execute([$revId]);
+        $key = (string)($rev['citation_key'] ?? '');
+        if ($key === '') throw new Exception('Queued citation key missing');
+        $allForKeyStmt = $pdo->prepare("SELECT * FROM citation_revisions WHERE site_slug=? AND citation_key=? AND (release_tag IS NULL OR release_tag='') ORDER BY id ASC");
+        $allForKeyStmt->execute([$siteSlug, $key]);
+        $allForKey = $allForKeyStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if (!$allForKey) throw new Exception('No queued revisions found for citation');
+        $latest = end($allForKey);
+        if ($latest) $applyQueuedRevision($latest);
+        $releaseTag = $currentReleaseTag ?: ('export-' . date('Ymd-His'));
+        $pdo->prepare("UPDATE citation_revisions SET release_tag=? WHERE site_slug=? AND citation_key=? AND (release_tag IS NULL OR release_tag='')")->execute([$releaseTag, $siteSlug, $key]);
         if ($pdo->inTransaction()) $pdo->commit();
         $notice = 'Citation exported from bundle.';
       } catch (\Throwable $e) {
@@ -1080,16 +1081,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$siteSlug]);
         $queued = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         if (!$queued) throw new Exception('No queued citations to export');
-        $ids = [];
+        $byKey = [];
         foreach ($queued as $rev) {
-          $applyQueuedRevision($rev);
-          $ids[] = (int)$rev['id'];
+          $k = (string)($rev['citation_key'] ?? '');
+          if ($k === '') continue;
+          $byKey[$k][] = $rev;
         }
-        if ($ids) {
-          $in = implode(',', array_fill(0, count($ids), '?'));
-          $del = $pdo->prepare("DELETE FROM citation_revisions WHERE id IN ($in)");
-          $del->execute($ids);
+        foreach ($byKey as $k => $revs) {
+          $latest = end($revs);
+          if ($latest) $applyQueuedRevision($latest);
         }
+        $releaseTag = $currentReleaseTag ?: ('export-' . date('Ymd-His'));
+        $pdo->prepare("UPDATE citation_revisions SET release_tag=? WHERE site_slug=? AND (release_tag IS NULL OR release_tag='')")->execute([$releaseTag, $siteSlug]);
         if ($pdo->inTransaction()) $pdo->commit();
         $notice = 'Exported all queued citations (' . count($queued) . ').';
       } catch (\Throwable $e) {
@@ -1120,17 +1123,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$rev) throw new Exception('Revision not found');
         $before = CitationExample::find($siteSlug, $rev['citation_key']);
         $target = json_decode($rev['before_json'] ?? 'null', true);
-        if ($target) {
-          $after = $applySnapshot($target);
-          $recordRevision('rollback', $before ?? [], $after ?? [], $currentReleaseTag);
+        if ($citationsOnly) {
+          // Queue restore: do not touch live citation until export.
+          $key = (string)($rev['citation_key'] ?? ($target['example_key'] ?? $before['example_key'] ?? ''));
+          if ($key !== '') $clearQueuedByKey($key);
+          $recordRevision('rollback', $before ?? [], $target ?: null, null);
+          $notice = 'Restore queued. Export bundle to apply this version live.';
         } else {
-          if ($before && isset($before['id'])) {
-            CitationExample::delete((int)$before['id'], $siteSlug);
+          if ($target) {
+            $after = $applySnapshot($target);
+            $recordRevision('rollback', $before ?? [], $after ?? [], $currentReleaseTag);
+          } else {
+            if ($before && isset($before['id'])) {
+              CitationExample::delete((int)$before['id'], $siteSlug);
+            }
+            $recordRevision('rollback', $before ?? [], null, $currentReleaseTag);
           }
-          $recordRevision('rollback', $before ?? [], null, $currentReleaseTag);
+          $notice = 'Rolled back.';
         }
         $pdo->commit();
-        $notice = 'Rolled back.';
       } catch (\Throwable $e) {
         nx_safe_rollback($pdo ?? null);
         $notice = 'Error during rollback: ' . $e->getMessage();
@@ -1212,7 +1223,7 @@ if ($siteSlug === 'cite-them-right') {
 $citationRevisions = [];
 $citationReleases = [];
 if ($siteSlug === 'cite-them-right') {
-  $citationRevisions = CitationRevision::recent($siteSlug, 100);
+  $citationRevisions = CitationRevision::recent($siteSlug, 5000);
   $citationReleases = CitationRelease::listAll($siteSlug);
 }
 $currentReleaseTag = '';
@@ -1228,7 +1239,26 @@ $latestByKey = [];
 $stagedKeys = [];
 $queuedBundleItems = [];
 $citationExamplesView = $citationExamples;
+$revisionViewerSeed = [];
+$liveCitationSeed = [];
 if ($siteSlug === 'cite-them-right') {
+  foreach ($citationExamples as $exRow) {
+    $row = [
+      'id' => (int)($exRow['id'] ?? 0),
+      'example_key' => (string)($exRow['example_key'] ?? ''),
+      'label' => (string)($exRow['label'] ?? ''),
+      'referencing_style' => (string)($exRow['referencing_style'] ?? ''),
+      'category' => (string)($exRow['category'] ?? ''),
+      'sub_category' => (string)($exRow['sub_category'] ?? ''),
+      'citation_order' => (string)($exRow['citation_order'] ?? ''),
+      'example_heading' => (string)($exRow['example_heading'] ?? ''),
+      'example_body' => (string)($exRow['example_body'] ?? ''),
+      'you_try' => (string)($exRow['you_try'] ?? ''),
+      'notes' => (string)($exRow['notes'] ?? ''),
+    ];
+    if ($row['example_key'] !== '') $liveCitationSeed['key:' . $row['example_key']] = $row;
+    if ($row['id'] > 0) $liveCitationSeed['id:' . $row['id']] = $row;
+  }
   if ($citationsOnly) {
     $queuedRows = array_values(array_filter($citationRevisions, function($rev){
       $tag = trim((string)($rev['release_tag'] ?? ''));
@@ -1303,6 +1333,40 @@ if ($siteSlug === 'cite-them-right') {
         $netEffects[$key] = $after;
       }
     }
+  }
+  $userDisplayById = [];
+  try {
+    $uRows = DB::pdo()->query("SELECT id, display_name, email FROM users")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    foreach ($uRows as $u) {
+      $uid = (int)($u['id'] ?? 0);
+      if ($uid <= 0) continue;
+      $disp = trim((string)($u['display_name'] ?? ''));
+      $mail = trim((string)($u['email'] ?? ''));
+      $userDisplayById[$uid] = $disp !== '' ? $disp : $mail;
+    }
+  } catch (\Throwable $e) {
+    $userDisplayById = [];
+  }
+  foreach ($citationRevisions as $rev) {
+    $after = json_decode((string)($rev['after_json'] ?? 'null'), true) ?: [];
+    $before = json_decode((string)($rev['before_json'] ?? 'null'), true) ?: [];
+    $revUserId = (int)($rev['user_id'] ?? 0);
+    $revUserEmail = trim((string)($rev['user_email'] ?? ''));
+    $revUserDisplay = trim((string)($userDisplayById[$revUserId] ?? ''));
+    if ($revUserDisplay === '') $revUserDisplay = $revUserEmail;
+    $revisionViewerSeed[] = [
+      'id' => (int)($rev['id'] ?? 0),
+      'key' => (string)($rev['citation_key'] ?? ''),
+      'citationId' => (string)($rev['citation_id'] ?? ''),
+      'label' => (string)($after['label'] ?? $before['label'] ?? $rev['citation_key'] ?? 'Citation revision'),
+      'style' => (string)($after['referencing_style'] ?? $before['referencing_style'] ?? ''),
+      'action' => strtolower((string)($rev['action'] ?? '')),
+      'user' => $revUserDisplay,
+      'date' => (string)($rev['created_at'] ?? ''),
+      'release' => (string)($rev['release_tag'] ?? ''),
+      'before' => $before,
+      'after' => $after,
+    ];
   }
 }
 
@@ -1593,7 +1657,129 @@ if (isset($_SESSION['user_id'])) {
   .cite-viewer .viewer-body .citation-field{width:100%;max-width:none;}
   .cite-viewer .viewer-body .callout{width:100%;max-width:none;}
   .cite-viewer .edit-body{gap:12px;}
+  .cite-viewer .revisions-body{gap:10px;align-content:start;}
   .cite-viewer.edit-mode{background:var(--panel);}
+  .cite-viewer.revisions-mode{background:var(--panel);}
+  #revTimelineSelect{
+    width:100%;
+    min-height:38px;
+    border:1px solid var(--border);
+    border-radius:10px;
+    background:var(--panel);
+    color:var(--text);
+    padding:8px 10px;
+  }
+  .rev-diff-rows{display:grid;gap:8px;}
+  .rev-diff-row{
+    border:1px solid var(--border);
+    border-radius:10px;
+    overflow:hidden;
+    background:rgba(255,255,255,0.02);
+  }
+  .rev-diff-row-head{
+    font-size:12px;
+    font-weight:700;
+    color:var(--muted);
+    padding:7px 9px;
+    border-bottom:1px solid var(--border);
+    text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+  .rev-diff-cols{display:grid;grid-template-columns:1fr 1fr;gap:0;}
+  .rev-diff-col{padding:8px 9px;border-right:1px solid var(--border);min-height:52px;}
+  .rev-diff-col:last-child{border-right:none;}
+  .rev-diff-col-label{font-size:11px;color:var(--muted);margin-bottom:4px;}
+  .rev-diff-col-body{font-size:12px;line-height:1.4;white-space:pre-wrap;word-break:break-word;}
+  .rev-before-removed{opacity:0.78;text-decoration:line-through;}
+  .rev-after-added{background:rgba(59,130,246,0.14);border-radius:4px;padding:0 2px;}
+  .rev-inline-same{opacity:0.8;}
+  .rev-empty-state{
+    border:1px dashed var(--border);
+    border-radius:10px;
+    padding:12px;
+    color:var(--muted);
+    font-size:12px;
+  }
+  .citation-rev-item{
+    border:1px solid var(--border);
+    border-radius:10px;
+    background:rgba(255,255,255,0.02);
+    overflow:visible;
+    position:relative;
+  }
+  .citation-rev-item summary{
+    list-style:none;
+    cursor:pointer;
+    padding:10px 12px;
+    display:grid;
+    gap:4px;
+  }
+  .citation-rev-item summary::-webkit-details-marker{display:none;}
+  .citation-rev-item[open] summary{border-bottom:1px solid var(--border);}
+  .citation-rev-item[open]{z-index:40;}
+  .citation-rev-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .citation-rev-head-right{display:flex;align-items:center;gap:8px;}
+  .citation-rev-title{font-size:13px;font-weight:700;}
+  .citation-rev-meta{font-size:12px;color:var(--muted);}
+  .citation-rev-summary{font-size:12px;color:var(--muted);}
+  .citation-rev-body{padding:10px 12px;display:grid;gap:8px;}
+  .citation-rev-actions{display:flex;justify-content:flex-end;align-items:center;position:relative;margin-bottom:2px;}
+  .citation-rev-kebab{position:relative;display:inline-flex;}
+  .citation-rev-kebab-btn{
+    border:1px solid var(--border);
+    background:transparent;
+    color:var(--text);
+    border-radius:8px;
+    width:32px;
+    height:30px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    font-size:18px;
+    line-height:1;
+    padding:0;
+    text-align:center;
+  }
+  .citation-rev-kebab-menu{
+    position:absolute;
+    right:0;
+    top:34px;
+    min-width:170px;
+    border:1px solid var(--border);
+    border-radius:10px;
+    background:var(--panel);
+    padding:8px;
+    box-shadow:0 8px 20px rgba(0,0,0,0.22);
+    z-index:60;
+    display:none;
+  }
+  .citation-rev-kebab.open .citation-rev-kebab-menu{display:block;}
+  .citation-rev-menu-btn{
+    width:100%;
+    text-align:left;
+    border:1px solid var(--border);
+    background:transparent;
+    color:var(--text);
+    border-radius:8px;
+    padding:7px 9px;
+    cursor:pointer;
+    font-weight:700;
+  }
+  .citation-rev-note{font-size:11px;color:var(--muted);margin-top:2px;}
+  #citationRevisionsList{display:grid;gap:8px;align-content:start;}
+  .citation-rev-change{
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:8px;
+    background:rgba(255,255,255,0.02);
+  }
+  .citation-rev-label{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
+  .citation-rev-before,.citation-rev-after{font-size:12px;line-height:1.35;white-space:pre-wrap;word-break:break-word;}
+  .citation-rev-before{opacity:.8;}
+  .citation-rev-after strong{font-weight:800;}
+  html.theme-light #revTimelineSelect{background:#fff;}
+  html.theme-light .rev-after-added{background:rgba(37,99,235,0.12);}
   .cite-readonly-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;}
   .citation-edit-field input,
   .citation-edit-field textarea{
@@ -2981,6 +3167,13 @@ if (isset($_SESSION['user_id'])) {
         <div id="viewNotes" class="muted" style="white-space:pre-line">—</div>
       </div>
     </main>
+    <main id="revisionsBody" class="viewer-body revisions-body" style="display:none;">
+      <div class="citation-field">
+        <strong>Revision history</strong>
+        <div class="muted" id="citationRevisionsHint">Select any revision to view what changed.</div>
+      </div>
+      <div id="citationRevisionsList"></div>
+    </main>
 
     <form id="editBody" class="viewer-body edit-body" style="display:none;" method="post">
       <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
@@ -3027,56 +3220,46 @@ if (isset($_SESSION['user_id'])) {
       <button class="btn" type="button" id="editCancel">Cancel</button>
       <button class="btn primary" type="submit" form="editBody">Save changes</button>
     </footer>
+    <footer id="revisionsFooter" style="display:none;">
+      <button class="btn" type="button" id="revisionsBackBtn">Back to citation</button>
+    </footer>
   </aside>
 
   <aside class="cite-viewer" id="revisionViewer" aria-label="Revision details">
     <header>
       <div>
-        <div class="citation-label" id="revViewLabel">Revision</div>
-        <div class="muted" id="revViewSubtitle" style="font-size:12px;">Audit trail</div>
+        <div class="citation-label" id="revViewLabel">Revision timeline</div>
+        <div class="muted" id="revViewSubtitle" style="font-size:12px;">Select a revision to inspect what changed.</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <span class="cite-readonly-badge" id="revViewBadge">Read-only</span>
+        <span class="cite-readonly-badge" id="revViewBadge">History</span>
         <button class="close-btn" type="button" id="closeRevisionViewer" aria-label="Close">×</button>
       </div>
     </header>
     <div class="actions-bar" id="revActions">
-      <div class="pill-muted" id="revActionPill">—</div>
-      <div class="pill-muted" id="revReleasePill">Release: —</div>
+      <div class="pill-muted" id="revActionPill">Revision timeline</div>
+      <div class="pill-muted" id="revReleasePill">Compare with previous</div>
+      <button class="btn text small" type="button" id="revCompareToggle">Compare with current</button>
     </div>
     <main class="viewer-body" id="revViewBody">
+      <div class="citation-field">
+        <strong>Revision list</strong>
+        <div class="muted" id="revTimelineHint">Select a revision to inspect its changes.</div>
+        <div style="margin-top:8px;display:grid;gap:8px;">
+          <select id="revTimelineSelect" aria-label="Select revision"></select>
+          <div class="muted" id="revSelectionMeta">—</div>
+        </div>
+      </div>
+      <div class="citation-field">
+        <strong id="revDiffTitle">Before vs After</strong>
+        <div class="muted" id="revDiffHint">Changed fields only.</div>
+        <div id="revDiffRows" class="rev-diff-rows" style="margin-top:8px;"></div>
+      </div>
       <div class="citation-field">
         <strong>Citation</strong>
         <div class="collection-name" id="revCitationLabel">—</div>
         <div class="muted collection-slug" id="revCitationKey">—</div>
         <div class="muted" id="revCitationStyle">—</div>
-      </div>
-      <div class="citation-field">
-        <strong>Metadata</strong>
-        <div class="muted" id="revMetaUser">User: —</div>
-        <div class="muted" id="revMetaTime">When: —</div>
-      </div>
-      <div class="citation-field">
-        <strong>Resulting state</strong>
-        <div class="callout" id="revAfterBlock">
-          <div><strong>Label</strong><div id="revAfterLabel" class="muted">—</div></div>
-          <div style="margin-top:8px"><strong>Citation order</strong><div id="revAfterOrder" class="muted" style="white-space:pre-line">—</div></div>
-          <div style="margin-top:8px"><strong>Example heading</strong><div id="revAfterHeading" class="muted">—</div></div>
-          <div style="margin-top:8px"><strong>Example body</strong><div id="revAfterBody" class="muted" style="white-space:pre-line">—</div></div>
-          <div style="margin-top:8px"><strong>You try</strong><div id="revAfterYouTry" class="muted" style="white-space:pre-line">—</div></div>
-          <div style="margin-top:8px"><strong>Editorial notes</strong><div id="revAfterNotes" class="muted" style="white-space:pre-line">—</div></div>
-        </div>
-      </div>
-      <div class="citation-field">
-        <strong>Prior state</strong>
-        <div class="callout" id="revBeforeBlock">
-          <div><strong>Label</strong><div id="revBeforeLabel" class="muted">—</div></div>
-          <div style="margin-top:8px"><strong>Citation order</strong><div id="revBeforeOrder" class="muted" style="white-space:pre-line">—</div></div>
-          <div style="margin-top:8px"><strong>Example heading</strong><div id="revBeforeHeading" class="muted">—</div></div>
-          <div style="margin-top:8px"><strong>Example body</strong><div id="revBeforeBody" class="muted" style="white-space:pre-line">—</div></div>
-          <div style="margin-top:8px"><strong>You try</strong><div id="revBeforeYouTry" class="muted" style="white-space:pre-line">—</div></div>
-          <div style="margin-top:8px"><strong>Editorial notes</strong><div id="revBeforeNotes" class="muted" style="white-space:pre-line">—</div></div>
-        </div>
       </div>
     </main>
     <footer>
@@ -3089,6 +3272,9 @@ if (isset($_SESSION['user_id'])) {
       </form>
     </footer>
   </aside>
+
+  <script id="revisionViewerSeed" type="application/json"><?= (string)json_encode($revisionViewerSeed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+  <script id="liveCitationSeed" type="application/json"><?= (string)json_encode($liveCitationSeed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 
   <script>
     (function(){
@@ -3612,13 +3798,14 @@ if (isset($_SESSION['user_id'])) {
     });
     document.querySelectorAll('[data-bundle-toggle]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-bundle-toggle') || '';
-        const diff = document.getElementById('bundle-diff-' + id);
+        const revisionId = btn.getAttribute('data-bundle-toggle') || '';
+        if (!revisionId) return;
+        const diff = document.getElementById('bundle-diff-' + revisionId);
         if (!diff) return;
-        const open = diff.style.display !== 'none';
-        diff.style.display = open ? 'none' : 'block';
-        btn.setAttribute('aria-expanded', open ? 'false' : 'true');
-        btn.textContent = open ? 'View changes' : 'Hide changes';
+        const isOpen = diff.style.display !== 'none';
+        diff.style.display = isOpen ? 'none' : 'block';
+        btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+        btn.textContent = isOpen ? 'View changes' : 'Hide changes';
       });
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideCitationModal(); hideExportBundle(); } });
@@ -3660,8 +3847,12 @@ if (isset($_SESSION['user_id'])) {
       const viewerEdit = document.getElementById('viewerEdit');
       const viewerRevisions = document.getElementById('viewerRevisions');
       const viewBody = document.getElementById('viewBody');
+      const revisionsBody = document.getElementById('revisionsBody');
       const editBody = document.getElementById('editBody');
       const editFooter = document.getElementById('editFooter');
+      const revisionsFooter = document.getElementById('revisionsFooter');
+      const revisionsBackBtn = document.getElementById('revisionsBackBtn');
+      const citationRevisionsList = document.getElementById('citationRevisionsList');
       const editIdField = document.getElementById('editIdField');
       const editStyleField = document.getElementById('editStyleField');
       const editLabelField = document.getElementById('editLabelField');
@@ -3686,20 +3877,32 @@ if (isset($_SESSION['user_id'])) {
       let viewerEditId = null;
       let editDirty = false;
       let currentCitation = null;
+      const revSeedEl = document.getElementById('revisionViewerSeed');
+      const liveSeedEl = document.getElementById('liveCitationSeed');
+      let revisionSeed = [];
+      let liveCitationSeed = {};
+      try { revisionSeed = JSON.parse(revSeedEl?.textContent || '[]'); } catch(e) { revisionSeed = []; }
+      try { liveCitationSeed = JSON.parse(liveSeedEl?.textContent || '{}'); } catch(e) { liveCitationSeed = {}; }
       const setMode = (mode) => {
         viewerMode = mode;
         viewer.classList.toggle('edit-mode', mode === 'edit');
-        if (mode === 'view') {
-          if (viewBody) viewBody.style.display = 'grid';
-          if (editBody) editBody.style.display = 'none';
-          if (editFooter) editFooter.style.display = 'none';
-          editDirty = false;
-        } else {
-          if (viewBody) viewBody.style.display = 'none';
-          if (editBody) editBody.style.display = 'grid';
-          if (editFooter) editFooter.style.display = 'flex';
+        viewer.classList.toggle('revisions-mode', mode === 'revisions');
+        if (viewBody) viewBody.style.display = mode === 'view' ? 'grid' : 'none';
+        if (editBody) editBody.style.display = mode === 'edit' ? 'grid' : 'none';
+        if (revisionsBody) revisionsBody.style.display = mode === 'revisions' ? 'grid' : 'none';
+        if (editFooter) editFooter.style.display = mode === 'edit' ? 'flex' : 'none';
+        if (revisionsFooter) revisionsFooter.style.display = mode === 'revisions' ? 'flex' : 'none';
+        if (mode === 'edit') {
           viewer.scrollTop = 0;
           requestAnimationFrame(autoGrowAll);
+        } else if (mode === 'view') {
+          editDirty = false;
+        } else if (mode === 'revisions') {
+          viewer.scrollTop = 0;
+          if (revisionsBody) revisionsBody.scrollTop = 0;
+          requestAnimationFrame(() => {
+            if (revisionsBody) revisionsBody.scrollTop = 0;
+          });
         }
       };
 
@@ -3722,6 +3925,190 @@ if (isset($_SESSION['user_id'])) {
         syncEditorFromTextarea('editBodyField');
         syncEditorFromTextarea('editYouTryField');
         syncEditorFromTextarea('editNotesField');
+      };
+
+      const escapeHtml = (str) => String(str ?? '')
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
+      const formatDateShort = (raw) => {
+        if (!raw) return 'Unknown time';
+        const d = new Date(String(raw).replace(' ', 'T'));
+        if (Number.isNaN(d.getTime())) return String(raw);
+        return d.toLocaleString([], { year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+      };
+      const revFieldLabels = [
+        ['label', 'Reference type'],
+        ['referencing_style', 'Style'],
+        ['category', 'Category'],
+        ['sub_category', 'Sub-category'],
+        ['citation_order', 'Citation order'],
+        ['example_heading', 'Example heading'],
+        ['example_body', 'Example body'],
+        ['you_try', 'You try'],
+        ['notes', 'Notes'],
+      ];
+      const revisionSummary = (rev) => {
+        const action = String(rev.action || '').toLowerCase();
+        if (action === 'create') return 'Created citation';
+        if (action === 'delete') return 'Deleted citation';
+        const before = rev.before || {};
+        const after = rev.after || {};
+        const changed = revFieldLabels.filter(([f]) => String(before[f] ?? '') !== String(after[f] ?? ''));
+        if (!changed.length) return 'No field changes';
+        if (changed.length <= 2) return 'Updated ' + changed.map(([, l]) => l).join(' and ');
+        return `Updated ${changed.length} fields`;
+      };
+      const renderCitationRevisions = (citation) => {
+        if (!citationRevisionsList) return;
+        const csrfToken = document.querySelector('input[name="_csrf"]')?.value || '';
+        const key = String(citation?.key || '');
+        const cid = String(citation?.id || '');
+        const label = String(citation?.label || '').trim().toLowerCase();
+        const style = String(citation?.style || '').trim().toLowerCase();
+        let revs = revisionSeed.filter((r) => {
+          const rk = String(r.key || '');
+          const rid = String(r.citationId || '');
+          return (key && rk === key) || (cid && rid === cid);
+        });
+        if (!revs.length && (label || style)) {
+          revs = revisionSeed.filter((r) => {
+            const rLabel = String(r.label || '').trim().toLowerCase();
+            const rStyle = String(r.style || '').trim().toLowerCase();
+            const labelMatch = label && rLabel === label;
+            const styleMatch = style && rStyle === style;
+            return labelMatch && (!style || styleMatch);
+          });
+        }
+        revs.sort((a, b) => {
+          const ta = Date.parse(String(a.date || '').replace(' ', 'T')) || 0;
+          const tb = Date.parse(String(b.date || '').replace(' ', 'T')) || 0;
+          return tb - ta;
+        });
+        const liveKey = key ? ('key:' + key) : '';
+        const liveId = cid ? ('id:' + cid) : '';
+        const liveCitation = (liveKey && liveCitationSeed[liveKey]) || (liveId && liveCitationSeed[liveId]) || null;
+        const currentSnapshot = {
+          id: liveCitation?.id ?? citation?.id ?? '',
+          example_key: liveCitation?.example_key ?? citation?.key ?? '',
+          label: liveCitation?.label ?? citation?.label ?? '',
+          referencing_style: liveCitation?.referencing_style ?? citation?.style ?? '',
+          category: liveCitation?.category ?? citation?.category ?? '',
+          sub_category: liveCitation?.sub_category ?? citation?.subCategory ?? '',
+          citation_order: liveCitation?.citation_order ?? citation?.order ?? '',
+          example_heading: liveCitation?.example_heading ?? citation?.heading ?? '',
+          example_body: liveCitation?.example_body ?? citation?.body ?? '',
+          you_try: liveCitation?.you_try ?? citation?.youtry ?? '',
+          notes: liveCitation?.notes ?? citation?.notes ?? '',
+        };
+        const compareBase = revs[0]?.after || revs[0]?.before || {};
+        const liveDate = revs[0]?.date || new Date().toISOString();
+        const combined = [{
+          id: 'current',
+          user: 'Current live version',
+          date: liveDate,
+          action: 'current',
+          before: compareBase,
+          after: currentSnapshot,
+          _isCurrent: true,
+        }, ...revs.map((r) => ({ ...r, _isCurrent: false }))];
+        citationRevisionsList.innerHTML = combined.map((rev, idx) => {
+          const before = rev.before || {};
+          const after = rev.after || {};
+          const changes = revFieldLabels.filter(([f]) => String(before[f] ?? '') !== String(after[f] ?? ''));
+          const changesHtml = changes.length
+            ? changes.map(([f, label]) => {
+                const b = String(before[f] ?? '');
+                const a = String(after[f] ?? '');
+                return `<div class="citation-rev-change">
+                  <div class="citation-rev-label">${escapeHtml(label)}</div>
+                  <div class="citation-rev-before">Before: ${escapeHtml(b || '—')}</div>
+                  <div class="citation-rev-after">After: <strong>${escapeHtml(a || '—')}</strong></div>
+                </div>`;
+              }).join('')
+            : '';
+          const kebabHtml = rev._isCurrent ? '' : `<div class="citation-rev-kebab" data-rev-kebab>
+              <button class="citation-rev-kebab-btn" type="button" aria-label="Revision actions">⋮</button>
+              <div class="citation-rev-kebab-menu">
+                <form method="post" style="margin:0">
+                  <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}">
+                  <input type="hidden" name="rollback_citation" value="1">
+                  <input type="hidden" name="revision_id" value="${escapeHtml(String(rev.id || ''))}">
+                  <button class="citation-rev-menu-btn" type="submit" onclick="return confirm('Queue restore to this revision? You will still need to export for it to go live.')">Restore version</button>
+                </form>
+                <div class="citation-rev-note">Queues this version. Export to apply live.</div>
+              </div>
+            </div>`;
+          const headerTime = formatDateShort(rev.date || '');
+          const headerUser = rev._isCurrent ? 'Live state' : (rev.user || 'Unknown editor');
+          const summaryText = rev._isCurrent ? 'Current version' : revisionSummary(rev);
+          if (rev._isCurrent) {
+            return `<div class="citation-rev-item current-live">
+              <div class="citation-rev-head" style="padding:10px 12px 6px 12px;">
+                <div class="citation-rev-title">${escapeHtml(headerTime)}</div>
+                <div class="citation-rev-head-right">
+                  <div class="citation-rev-meta">${escapeHtml(headerUser)}</div>
+                </div>
+              </div>
+              <div class="citation-rev-summary" style="padding:0 12px 10px 12px;"><strong>${escapeHtml(summaryText)}</strong></div>
+              <div class="citation-rev-body">${changesHtml}</div>
+            </div>`;
+          }
+          return `<details class="citation-rev-item" ${idx === 1 ? 'open' : ''}>
+            <summary>
+              <div class="citation-rev-head">
+                <div class="citation-rev-title">${escapeHtml(headerTime)}</div>
+                <div class="citation-rev-head-right">
+                  <div class="citation-rev-meta">${escapeHtml(headerUser)}</div>
+                  ${rev._isCurrent ? '' : kebabHtml}
+                </div>
+              </div>
+              <div class="citation-rev-summary"><strong>${escapeHtml(summaryText)}</strong></div>
+            </summary>
+            <div class="citation-rev-body">${changesHtml}</div>
+          </details>`;
+        }).join('');
+        citationRevisionsList.querySelectorAll('[data-rev-kebab]').forEach((menu) => {
+          const btn = menu.querySelector('.citation-rev-kebab-btn');
+          btn?.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            citationRevisionsList.querySelectorAll('[data-rev-kebab]').forEach((other) => {
+              if (other !== menu) other.classList.remove('open');
+            });
+            menu.classList.toggle('open');
+          });
+        });
+      };
+      const openCitationRevisions = (citation) => {
+        if (!citation || (!citation.key && !citation.id)) return false;
+        currentCitation = citation;
+        renderCitationRevisions(citation);
+        setMode('revisions');
+        viewer.classList.add('active');
+        updateDrawerScrollLock();
+        return true;
+      };
+      const openCitationRevisionsByRevisionId = (revisionId) => {
+        if (!revisionId) return false;
+        const rev = revisionSeed.find((r) => String(r.id || '') === String(revisionId));
+        if (!rev) return false;
+        const snap = rev.after || rev.before || {};
+        return openCitationRevisions({
+          id: rev.citationId || snap.id || '',
+          key: rev.key || snap.example_key || '',
+          label: snap.label || rev.label || '',
+          style: snap.referencing_style || rev.style || '',
+          category: snap.category || '',
+          subCategory: snap.sub_category || '',
+          order: snap.citation_order || '',
+          heading: snap.example_heading || '',
+          body: snap.example_body || '',
+          youtry: snap.you_try || '',
+          notes: snap.notes || '',
+        });
       };
 
       const setView = (data) => {
@@ -3793,7 +4180,9 @@ if (isset($_SESSION['user_id'])) {
             applyEditFields(data);
             setMode('edit');
           }
-        }
+        },
+        openRevisionsForCitation: (citation) => openCitationRevisions(citation),
+        openRevisionsForRevisionId: (revisionId) => openCitationRevisionsByRevisionId(revisionId),
       };
 
       document.querySelectorAll('.citation-row').forEach(row => {
@@ -3863,11 +4252,17 @@ if (isset($_SESSION['user_id'])) {
 
       viewerRevisions?.addEventListener('click', (e) => {
         e.preventDefault();
-        showSubtab('revisions');
-        viewer.classList.remove('active');
-        setMode('view');
-        updateDrawerScrollLock();
-        document.getElementById('panel-citations')?.scrollIntoView({behavior:'smooth'});
+        if (viewerMode === 'edit' && editDirty && !confirm('Discard unsaved changes?')) return;
+        if (!currentCitation) return;
+        renderCitationRevisions(currentCitation);
+        setMode('revisions');
+      });
+      revisionsBackBtn?.addEventListener('click', () => setMode('view'));
+      document.addEventListener('click', (e) => {
+        if (!citationRevisionsList) return;
+        citationRevisionsList.querySelectorAll('[data-rev-kebab].open').forEach((menu) => {
+          if (!menu.contains(e.target)) menu.classList.remove('open');
+        });
       });
     })();
 
@@ -3998,79 +4393,208 @@ if (isset($_SESSION['user_id'])) {
       const badge = document.getElementById('revViewBadge');
       const actionPill = document.getElementById('revActionPill');
       const releasePill = document.getElementById('revReleasePill');
+      const timelineSelect = document.getElementById('revTimelineSelect');
+      const selectionMeta = document.getElementById('revSelectionMeta');
+      const compareToggle = document.getElementById('revCompareToggle');
+      const diffRowsWrap = document.getElementById('revDiffRows');
+      const diffTitle = document.getElementById('revDiffTitle');
+      const diffHint = document.getElementById('revDiffHint');
+      const revLabel = document.getElementById('revViewLabel');
+      const revSub = document.getElementById('revViewSubtitle');
+      const citationLabel = document.getElementById('revCitationLabel');
+      const citationKey = document.getElementById('revCitationKey');
+      const citationStyle = document.getElementById('revCitationStyle');
+      let compareMode = 'previous'; // previous | current
+      let activeTimeline = [];
+      let activeIndex = 0;
 
-      const fillText = (id, val, fallback='—') => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = val || fallback;
+      const escapeHtml = (str) => String(str ?? '')
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
+      const truncateKey = (str) => (!str ? '—' : (str.length > 30 ? str.slice(0,30) + '…' : str));
+      const parseJsonSafe = (str) => { try { return JSON.parse(str || 'null'); } catch(e) { return null; } };
+      const prettyDate = (raw) => {
+        if (!raw) return 'Unknown time';
+        const d = new Date(raw.replace(' ', 'T'));
+        if (Number.isNaN(d.getTime())) return raw;
+        return d.toLocaleString([], { year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
       };
-      const truncateKey = (str) => {
-        if (!str) return '—';
-        return str.length > 30 ? str.slice(0,30) + '…' : str;
-      };
-      const formatMarked = (str, fallback='—') => {
-        if (!str) return fallback;
-        const escaped = String(str)
-          .replace(/&/g,'&amp;')
-          .replace(/</g,'&lt;')
-          .replace(/>/g,'&gt;')
-          .replace(/"/g,'&quot;')
-          .replace(/'/g,'&#39;');
-        const withBold = escaped.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-        const withItalics = withBold.replace(/\*(.+?)\*/g,'<em>$1</em>');
-        const lines = withItalics.split(/\r?\n/);
-        let html = '';
-        let inList = false;
-        lines.forEach((line, idx) => {
-          const m = line.match(/^\s*[-*•]\s+(.+)/);
-          if (m) {
-            if (!inList) { html += '<ul>'; inList = true; }
-            html += '<li>' + m[1] + '</li>';
-          } else {
-            if (inList) { html += '</ul>'; inList = false; }
-            html += line;
-            if (idx !== lines.length -1) html += '<br>';
-          }
+      const fieldMap = [
+        ['label', 'Reference type'],
+        ['referencing_style', 'Style'],
+        ['category', 'Category'],
+        ['sub_category', 'Sub-category'],
+        ['citation_order', 'Citation order'],
+        ['example_heading', 'Example heading'],
+        ['example_body', 'Example body'],
+        ['you_try', 'You try'],
+        ['notes', 'Notes'],
+      ];
+      const summarizeChange = (before, after, action) => {
+        if (action === 'create') return 'Created citation entry';
+        if (action === 'delete') return 'Deleted citation entry';
+        const changed = [];
+        fieldMap.forEach(([field, label]) => {
+          if ((before?.[field] ?? '') !== (after?.[field] ?? '')) changed.push(label);
         });
-        if (inList) html += '</ul>';
-        return html;
+        if (!changed.length) return 'No visible field changes';
+        if (changed.length <= 2) return 'Updated ' + changed.join(' and ');
+        return `Updated ${changed.length} fields`;
       };
-      const fillHtml = (id, val, fallback='—') => {
-        const el = document.getElementById(id);
-        if (el) el.innerHTML = formatMarked(val, fallback);
+      const inlineDiffHtml = (beforeVal, afterVal, side) => {
+        const a = String(beforeVal ?? '');
+        const b = String(afterVal ?? '');
+        if (a === b) return `<span class="rev-inline-same">${escapeHtml(a || '—')}</span>`;
+        let start = 0;
+        const min = Math.min(a.length, b.length);
+        while (start < min && a[start] === b[start]) start++;
+        let endA = a.length - 1;
+        let endB = b.length - 1;
+        while (endA >= start && endB >= start && a[endA] === b[endB]) { endA--; endB--; }
+        const src = side === 'before' ? a : b;
+        const midStart = start;
+        const midEnd = side === 'before' ? endA : endB;
+        const prefix = escapeHtml(src.slice(0, midStart));
+        const middle = escapeHtml(src.slice(midStart, midEnd + 1));
+        const suffix = escapeHtml(src.slice(midEnd + 1));
+        if (!middle) return `<span class="rev-inline-same">${escapeHtml(src || '—')}</span>`;
+        const markClass = side === 'before' ? 'rev-before-removed' : 'rev-after-added';
+        return `${prefix}<span class="${markClass}">${middle}</span>${suffix}`;
       };
-      const fillBlock = (prefix, snap, emptyLabel) => {
-        const exists = !!snap;
-        document.getElementById(prefix + 'Block')?.classList.toggle('muted', !exists);
-        fillHtml(prefix + 'Label', snap?.label || (exists ? '' : emptyLabel));
-        fillHtml(prefix + 'Order', snap?.citation_order || '');
-        fillHtml(prefix + 'Heading', snap?.example_heading || '');
-        fillHtml(prefix + 'Body', snap?.example_body || '');
-        fillHtml(prefix + 'YouTry', snap?.you_try || '');
-        fillHtml(prefix + 'Notes', snap?.notes || '');
+      const renderDiffRows = (selected, baseline) => {
+        if (!diffRowsWrap) return;
+        const selectedAfter = selected?.after || {};
+        const selectedBefore = selected?.before || {};
+        const compareFrom = baseline || selectedBefore || {};
+        const compareTo = selectedAfter || {};
+        const action = selected?.action || '';
+        const rowsHtml = [];
+        fieldMap.forEach(([field, label]) => {
+          const beforeValRaw = compareFrom?.[field] ?? '';
+          const afterValRaw = compareTo?.[field] ?? '';
+          const beforeVal = String(beforeValRaw ?? '');
+          const afterVal = String(afterValRaw ?? '');
+          if (beforeVal === afterVal) return;
+          rowsHtml.push(
+            `<div class="rev-diff-row">
+              <div class="rev-diff-row-head">${escapeHtml(label)}</div>
+              <div class="rev-diff-cols">
+                <div class="rev-diff-col">
+                  <div class="rev-diff-col-label">Before</div>
+                  <div class="rev-diff-col-body">${inlineDiffHtml(beforeVal, afterVal, 'before') || '—'}</div>
+                </div>
+                <div class="rev-diff-col">
+                  <div class="rev-diff-col-label">After</div>
+                  <div class="rev-diff-col-body">${action === 'delete' ? '<span class="rev-before-removed">[Removed]</span>' : inlineDiffHtml(beforeVal, afterVal, 'after')}</div>
+                </div>
+              </div>
+            </div>`
+          );
+        });
+        diffRowsWrap.innerHTML = rowsHtml.length
+          ? rowsHtml.join('')
+          : '<div class="rev-empty-state">No field-level differences for this comparison.</div>';
       };
-
-      const openRevision = (row) => {
-        const id = row.dataset.id;
-        let after = null;
-        let before = null;
-        try { after = JSON.parse(row.dataset.after || 'null'); } catch(e){}
-        try { before = JSON.parse(row.dataset.before || 'null'); } catch(e){}
-        const preferred = after ?? before ?? {};
-        fillText('revViewLabel', preferred.label || 'Revision #' + id);
-        fillText('revCitationLabel', preferred.label || '—');
-        fillText('revCitationKey', truncateKey(row.dataset.key || '—'));
-        fillText('revCitationStyle', (preferred.referencing_style || row.dataset.style || '—'));
-        fillText('revViewSubtitle', (row.dataset.action || '').toUpperCase() + ' • #' + id);
-        fillText('revMetaUser', 'User: ' + (row.dataset.user || '—'));
-        fillText('revMetaTime', 'When: ' + (row.dataset.date || '—'));
-        badge.textContent = 'Read-only';
-        actionPill.textContent = (row.dataset.action || '—').toUpperCase();
-        releasePill.textContent = 'Release: ' + (row.dataset.release || 'Unreleased');
-        fillBlock('revAfter', after, 'Deleted');
-        fillBlock('revBefore', before, 'Not available');
-        if (restoreId) restoreId.value = id || '';
+      const renderRevisionSelect = () => {
+        if (!timelineSelect) return;
+        timelineSelect.innerHTML = activeTimeline.map((rev, idx) => {
+          const summary = summarizeChange(rev.before || {}, rev.after || {}, rev.action);
+          const time = prettyDate(rev.date || '');
+          const current = idx === 0 ? ' (Current)' : '';
+          const label = `${time} — ${summary}${current}`;
+          return `<option value="${idx}">${escapeHtml(label)}</option>`;
+        }).join('');
+        timelineSelect.value = String(activeIndex);
+      };
+      const renderSelectedRevision = () => {
+        const selected = activeTimeline[activeIndex];
+        if (!selected) return;
+        const current = activeTimeline[0] || selected;
+        const baseline = compareMode === 'current'
+          ? (current.after || current.before || {})
+          : (activeTimeline[activeIndex + 1]?.after || selected.before || {});
+        const compareLabel = compareMode === 'current' ? 'current version' : 'previous revision';
+        if (revLabel) revLabel.textContent = selected.label || 'Revision timeline';
+        if (revSub) revSub.textContent = `${selected.user || 'Unknown editor'} • ${prettyDate(selected.date || '')}`;
+        if (citationLabel) citationLabel.textContent = selected.label || '—';
+        if (citationKey) citationKey.textContent = truncateKey(selected.key || '');
+        if (citationStyle) citationStyle.textContent = selected.style || '—';
+        if (badge) badge.textContent = 'History';
+        if (actionPill) actionPill.textContent = summarizeChange(selected.before || {}, selected.after || {}, selected.action);
+        if (releasePill) releasePill.textContent = `Comparing with ${compareLabel}`;
+        if (selectionMeta) selectionMeta.textContent = `${selected.user || 'Unknown editor'} • ${prettyDate(selected.date || '')}`;
+        if (diffTitle) diffTitle.textContent = 'Before vs After';
+        if (diffHint) diffHint.textContent = `Showing changed fields only (${compareLabel}).`;
+        if (restoreId) restoreId.value = selected.id || '';
+        renderRevisionSelect();
+        renderDiffRows(selected, baseline);
+      };
+      const seedEl = document.getElementById('revisionViewerSeed');
+      let seedRows = [];
+      try { seedRows = JSON.parse(seedEl?.textContent || '[]'); } catch(e) { seedRows = []; }
+      const allRevisions = rows.length
+        ? rows.map(r => {
+            const after = parseJsonSafe(r.dataset.after || 'null');
+            const before = parseJsonSafe(r.dataset.before || 'null');
+            return {
+              id: r.dataset.id || '',
+              key: r.dataset.key || '',
+              citationId: r.dataset.citationId || '',
+              label: r.dataset.label || (after?.label || before?.label || 'Citation revision'),
+              style: r.dataset.style || (after?.referencing_style || before?.referencing_style || ''),
+              action: (r.dataset.action || '').toLowerCase(),
+              user: r.dataset.user || '',
+              date: r.dataset.date || '',
+              release: r.dataset.release || '',
+              before: before || {},
+              after: after || {},
+            };
+          })
+        : seedRows;
+      const buildTimelineByKey = (key) => allRevisions.filter(r => (r.key || '') === (key || ''));
+      const openRevisionFromRecord = (record) => {
+        if (!record) return;
+        activeTimeline = buildTimelineByKey(record.key);
+        if (!activeTimeline.length) activeTimeline = [record];
+        activeIndex = 0;
+        const idx = activeTimeline.findIndex(r => String(r.id) === String(record.id));
+        if (idx >= 0) activeIndex = idx;
+        compareMode = 'previous';
+        if (compareToggle) compareToggle.textContent = 'Compare with current';
+        renderSelectedRevision();
         viewer.classList.add('active');
         updateDrawerScrollLock();
+      };
+      const openRevisionByKey = (key) => {
+        if (!key) return false;
+        const rec = allRevisions.find(r => (r.key || '') === key);
+        if (!rec) return false;
+        openRevisionFromRecord(rec);
+        return true;
+      };
+      const openRevisionByCitationId = (citationId) => {
+        if (!citationId) return false;
+        const rec = allRevisions.find(r => String(r.citationId || '') === String(citationId));
+        if (!rec) return false;
+        openRevisionFromRecord(rec);
+        return true;
+      };
+      const openRevisionById = (revisionId) => {
+        if (!revisionId) return false;
+        const rec = allRevisions.find(r => String(r.id || '') === String(revisionId));
+        if (!rec) return false;
+        openRevisionFromRecord(rec);
+        return true;
+      };
+      window.NexusCitationRevisions = {
+        openForRevisionId: (revisionId) => openRevisionById(revisionId),
+        openForCitation: ({ key = '', citationId = '' } = {}) => {
+          if (openRevisionByKey(key)) return true;
+          return openRevisionByCitationId(citationId);
+        }
       };
 
       const closeRevision = () => {
@@ -4083,14 +4607,26 @@ if (isset($_SESSION['user_id'])) {
         if (!viewer.classList.contains('active')) return;
         const isRow = e.target.closest?.('[data-revision-row]');
         const insideViewer = viewer.contains(e.target);
-        if (!insideViewer && !isRow) closeRevision();
+        const fromCitationViewer = e.target.closest?.('#citationViewer');
+        if (!insideViewer && !isRow && !fromCitationViewer) closeRevision();
       });
 
       rows.forEach(r => {
         r.addEventListener('click', (e) => {
           if (e.target.closest('button') || e.target.closest('form')) return;
-          openRevision(r);
+          openRevisionById(r.dataset.id || '');
         });
+      });
+      compareToggle?.addEventListener('click', () => {
+        compareMode = compareMode === 'previous' ? 'current' : 'previous';
+        compareToggle.textContent = compareMode === 'previous' ? 'Compare with current' : 'Compare with previous';
+        renderSelectedRevision();
+      });
+      timelineSelect?.addEventListener('change', () => {
+        const idx = parseInt(timelineSelect.value || '0', 10);
+        if (Number.isNaN(idx)) return;
+        activeIndex = Math.max(0, Math.min(idx, activeTimeline.length - 1));
+        renderSelectedRevision();
       });
     })();
 
