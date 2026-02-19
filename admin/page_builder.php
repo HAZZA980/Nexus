@@ -13,6 +13,14 @@ if (!$page) { http_response_code(404); echo "Page not found"; exit; }
 
 $site = Site::find((int)$page['site_id']);
 if (!$site) { http_response_code(404); echo "Site not found"; exit; }
+$pageSlug = strtolower((string)($page['slug'] ?? ''));
+$isHomeVariantContext = in_array($pageSlug, ['home', 'home-signed-in'], true);
+$homeVariantPublic = null;
+$homeVariantSignedIn = null;
+if ($isHomeVariantContext) {
+  $homeVariantPublic = Page::findBySlugAnyStatus((int)$page['site_id'], 'home');
+  $homeVariantSignedIn = Page::findBySlugAnyStatus((int)$page['site_id'], 'home-signed-in');
+}
 
 $theme = json_decode($site['theme_json'] ?? '', true) ?: [];
 $shape = is_array($theme['shape'] ?? null) ? $theme['shape'] : [];
@@ -304,7 +312,30 @@ $uiTheme = ui_theme_mode();
     <main class="nx-main">
       <header class="nx-top">
         <div class="nx-top-left">
-          <div class="nx-strong"><?= Security::e($page['title']) ?></div>
+          <div class="nx-page-heading">
+            <div class="nx-strong"><?= Security::e($page['title']) ?></div>
+            <?php if ($isHomeVariantContext): ?>
+              <div class="nx-variant-switcher" aria-label="Home variants">
+                <span class="nx-variant-label">Variant</span>
+                <?php if ($homeVariantPublic): ?>
+                  <a
+                    class="nx-variant-chip <?= $pageSlug === 'home' ? 'active' : '' ?>"
+                    href="<?= $base ?>/admin/page_builder.php?id=<?= (int)$homeVariantPublic['id'] ?>"
+                  >Public</a>
+                <?php else: ?>
+                  <span class="nx-variant-chip disabled">Public</span>
+                <?php endif; ?>
+                <?php if ($homeVariantSignedIn): ?>
+                  <a
+                    class="nx-variant-chip <?= $pageSlug === 'home-signed-in' ? 'active' : '' ?>"
+                    href="<?= $base ?>/admin/page_builder.php?id=<?= (int)$homeVariantSignedIn['id'] ?>"
+                  >Signed-in users</a>
+                <?php else: ?>
+                  <span class="nx-variant-chip disabled">Signed-in users</span>
+                <?php endif; ?>
+              </div>
+            <?php endif; ?>
+          </div>
           <span id="statusBadge" class="nx-status nx-status-<?= Security::e($page['status']) ?>"><?= ucfirst(Security::e($page['status'])) ?></span>
         </div>
 

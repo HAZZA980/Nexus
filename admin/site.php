@@ -1212,6 +1212,14 @@ if (!$homeExisting) {
   $pages = Page::listBySite($siteId); // refresh
 }
 
+$hasHomeSignedInVariant = false;
+foreach ($pages as $pRow) {
+  if (strtolower((string)($pRow['slug'] ?? '')) === 'home-signed-in') {
+    $hasHomeSignedInVariant = true;
+    break;
+  }
+}
+
 $citationExamples = [];
 if ($siteSlug === 'cite-them-right') {
   try {
@@ -1903,14 +1911,12 @@ if (isset($_SESSION['user_id'])) {
               <?php foreach ($pages as $p): ?>
                 <?php
                   $slug = strtolower((string)($p['slug'] ?? ''));
+                  if ($slug === 'home-signed-in') { continue; }
                   $homeLabel = '';
                   $homeLabelClass = '';
                   if ($slug === 'home') {
-                    $homeLabel = 'Homepage (Logged Out)';
+                    $homeLabel = $hasHomeSignedInVariant ? 'Variants: Public • Signed-in' : 'Homepage';
                     $homeLabelClass = 'home-logged-out';
-                  } elseif ($slug === 'home-signed-in') {
-                    $homeLabel = 'Homepage (Logged In)';
-                    $homeLabelClass = 'home-logged-in';
                   }
                 ?>
                 <tr

@@ -126,6 +126,30 @@ button:hover,.nx-btnlink:hover{background:rgba(255,255,255,.12)}
   z-index:20;
 }
 .nx-top-left{display:flex;align-items:center;gap:10px;}
+.nx-page-heading{display:flex;flex-direction:column;gap:6px;}
+.nx-variant-switcher{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.nx-variant-label{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
+.nx-variant-chip{
+  display:inline-flex;
+  align-items:center;
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid rgba(148,163,184,.35);
+  color:var(--text);
+  text-decoration:none;
+  font-size:12px;
+  font-weight:700;
+  background:rgba(255,255,255,.04);
+}
+.nx-variant-chip.active{
+  background:rgba(59,130,246,.2);
+  border-color:rgba(59,130,246,.55);
+  color:#bfdbfe;
+}
+.nx-variant-chip.disabled{
+  opacity:.55;
+  pointer-events:none;
+}
 .nx-top-center{display:flex;flex-direction:column;align-items:center;gap:6px;}
 .nx-top-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;}
 .nx-savestate{font-weight:600;color:var(--muted);}
@@ -1495,6 +1519,16 @@ html[data-theme="light"] .nx-top{
 }
 html[data-theme="light"] .nx-top-left .nx-strong,
 html[data-theme="light"] .nx-strong{color:var(--chrome-text-1);}
+html[data-theme="light"] .nx-variant-chip{
+  background:#fff;
+  border-color:rgba(148,163,184,.45);
+  color:var(--chrome-text-1);
+}
+html[data-theme="light"] .nx-variant-chip.active{
+  background:rgba(37,99,235,.14);
+  border-color:rgba(37,99,235,.35);
+  color:#1d4ed8;
+}
 html[data-theme="light"] .nx-left-title,
 html[data-theme="light"] #rightTitle,
 html[data-theme="light"] .nx-modal-title{color:var(--chrome-text-2);}
