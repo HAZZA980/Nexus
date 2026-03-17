@@ -438,9 +438,9 @@ $uiTheme = ui_theme_mode();
 
       <select id="t_fontSize" class="nx-toolsel" title="Font size">
         <option value="">Size</option>
-        <option value="12">12</option><option value="14">14</option><option value="16">16</option>
-        <option value="18">18</option><option value="20">20</option><option value="24">24</option>
-        <option value="28">28</option><option value="32">32</option><option value="40">40</option>
+        <?php foreach (array_merge(range(10, 40), [44, 48, 56, 64, 72]) as $fs): ?>
+          <option value="<?= (int)$fs ?>"><?= (int)$fs ?></option>
+        <?php endforeach; ?>
       </select>
 
 <div class="nx-toolgroup">

@@ -12,20 +12,26 @@ public static function render(array $doc): string
   $html = '';
 
   foreach ($rows as $row) {
+$cols = is_array($row['cols'] ?? null) ? $row['cols'] : [];
 $rowStyle = is_array($row['styleRow'] ?? null) ? $row['styleRow'] : [];
 $bgEnabled = array_key_exists('bgEnabled', $rowStyle) ? (bool)$rowStyle['bgEnabled'] : true;
+$equalHeight = !empty($row['equalHeight']);
 
 $rowClass = $bgEnabled ? 'nx-row nx-row--panel' : 'nx-row nx-row--plain';
+if ($equalHeight) $rowClass .= ' nx-row--equal';
 
 $vars = [];
 if ($bgEnabled && !empty($rowStyle['bgColor']) && is_string($rowStyle['bgColor'])) {
   $vars[] = '--nexus-row-bg:' . Security::e(trim($rowStyle['bgColor']));
 }
+if ($equalHeight) {
+  $vars[] = '--nx-eq-cols:' . max(1, count($cols));
+}
 $styleAttr = $vars ? ' style="' . implode(';', $vars) . '"' : '';
 
 $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
-    foreach (($row['cols'] ?? []) as $col) {
+    foreach ($cols as $col) {
       $span = (int)($col['span'] ?? 12);
       $span = max(1, min(12, $span));
 
@@ -301,9 +307,14 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
       case 'text': {
         $htmlRaw = (string)($p['html'] ?? '');
         $bg = trim((string)($p['bgColor'] ?? ''));
-        $bgStyle = $bg !== '' ? "background:{$bg}; padding:10px; border-radius:10px; border:1px solid rgba(17,24,39,.12);" : '';
+        // Keep text block rendering faithful to editor content:
+        // do not inject extra padding/border/radius when bgColor is set.
+        $bgStyle = $bg !== '' ? "background:{$bg};" : '';
         if ($htmlRaw !== '') {
           $inner = self::safeInlineHtml($htmlRaw);
+          // Avoid phantom top/bottom spacing from stored leading/trailing <br> tags.
+          $inner = preg_replace('/^(?:\s*<br\s*\/?>\s*)+/i', '', $inner);
+          $inner = preg_replace('/(?:\s*<br\s*\/?>\s*)+$/i', '', $inner);
           $html = "<div class=\"nx-text\" style=\"{$bgStyle}\">{$inner}</div>";
         } else {
           $txt = nl2br(Security::e((string)($p['text'] ?? '')));

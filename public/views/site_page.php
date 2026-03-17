@@ -109,8 +109,8 @@ $safeSlug = PartialsManager::safeSlug($site['slug'] ?? '');
 $sitePaths = PartialsManager::paths($safeSlug);
 $partialHeader = $sitePaths['header'];
 $partialFooter = $sitePaths['footer'];
-$siteCssUrl = '/sites/' . $safeSlug . '/assets/site.css';
-$siteJsUrl  = '/sites/' . $safeSlug . '/assets/site.js';
+$siteCssUrl = $base . '/sites/' . $safeSlug . '/assets/site.css';
+$siteJsUrl  = $base . '/sites/' . $safeSlug . '/assets/site.js';
 
 // Config merge (preset + site config)
 $headerConfig = $headerPreset ? json_decode($headerPreset['config_json'] ?? '', true) ?: [] : [];

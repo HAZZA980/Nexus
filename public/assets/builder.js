@@ -654,10 +654,14 @@
     { name: 'Yellow',  val: '#eab308' },
     { name: 'Green',   val: '#22c55e' },
     { name: 'Teal',    val: '#14b8a6' },
+    { name: 'Cyan',    val: '#06b6d4' },
     { name: 'Blue',    val: '#3b82f6' },
     { name: 'Indigo',  val: '#6366f1' },
     { name: 'Purple',  val: '#a855f7' },
     { name: 'Pink',    val: '#ec4899' },
+    { name: 'Navy',    val: '#1e3a8a' },
+    { name: 'Brown',   val: '#7c2d12' },
+    { name: 'Maroon',  val: '#7f1d1d' },
   ];
 
   // Row background presets (distinct from text presets)
@@ -674,6 +678,7 @@
 
   function renderColorPalette(id, selected) {
     const sel = (selected || '#111827').toLowerCase();
+    const hasPreset = NX_COLOR_PRESETS.some(c => c.val.toLowerCase() === sel);
     return `
       <div class="nx-color-shell" id="${id}">
         <button type="button"
@@ -698,6 +703,14 @@
               </button>
             `;
           }).join('')}
+          <button type="button"
+            class="nx-swatch nx-swatch-custom ${hasPreset ? '' : 'active'}"
+            data-color-custom="1"
+            style="${hasPreset ? '' : `background:${sel}`}"
+            title="Custom color"
+            aria-label="Custom color"
+            aria-selected="${hasPreset ? 'false' : 'true'}">+</button>
+          <input type="color" class="nx-color-input" value="${sel}" aria-label="Custom hex color">
         </div>
       </div>
     `;
@@ -730,6 +743,8 @@
     if (!root) return;
     const flyout = root.querySelector('.nx-palette-flyout');
     const toggle = root.querySelector('[data-trigger="color-toggle"]');
+    const customBtn = root.querySelector('[data-color-custom="1"]');
+    const customInput = root.querySelector('.nx-color-input');
 
     const closeFlyout = () => {
       if (flyout) flyout.style.display = 'none';
@@ -739,8 +754,8 @@
     toggle?.addEventListener('click', (e) => {
       e.preventDefault();
       if (!flyout) return;
-      const isOpen = flyout.style.display === 'block';
-      flyout.style.display = isOpen ? 'none' : 'block';
+      const isOpen = flyout.style.display === 'grid';
+      flyout.style.display = isOpen ? 'none' : 'grid';
       toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
     });
 
@@ -752,6 +767,25 @@
       root.querySelectorAll('.nx-swatch[data-color]').forEach(s => s.classList.remove('active'));
       btn.classList.add('active');
       if (toggle) toggle.style.background = color || '#111827';
+      closeFlyout();
+    });
+
+    customBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      customInput?.click();
+    });
+
+    customInput?.addEventListener('input', () => {
+      const color = customInput.value || '#111827';
+      onPick(color);
+      root.querySelectorAll('.nx-swatch[data-color], .nx-swatch[data-color-custom]').forEach(s => s.classList.remove('active'));
+      customBtn?.classList.add('active');
+      if (customBtn) customBtn.style.background = color;
+      if (toggle) toggle.style.background = color;
+    });
+
+    customInput?.addEventListener('change', () => {
       closeFlyout();
     });
 
@@ -790,6 +824,7 @@
 
   function ensureRowMeta(row) {
     if (row.collapsed == null) row.collapsed = false;
+    if (row.equalHeight == null) row.equalHeight = true;
     return row;
   }
 
@@ -2015,6 +2050,66 @@
     target.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
+  function setToolbarFontSizeValue(sizePx) {
+    if (!tFontSize) return;
+    const size = parseInt(sizePx || '0', 10);
+    if (!Number.isFinite(size) || size <= 0) {
+      tFontSize.value = '';
+      return;
+    }
+    if (tFontSize.tagName !== 'SELECT') {
+      tFontSize.value = String(size);
+      return;
+    }
+
+    const numericOpts = Array.from(tFontSize.options)
+      .map((opt) => parseInt(opt.value || '', 10))
+      .filter((n) => Number.isFinite(n));
+
+    if (!numericOpts.length) {
+      tFontSize.value = '';
+      return;
+    }
+
+    let best = numericOpts[0];
+    let bestDiff = Math.abs(size - best);
+    for (let i = 1; i < numericOpts.length; i++) {
+      const n = numericOpts[i];
+      const diff = Math.abs(size - n);
+      if (diff < bestDiff) {
+        best = n;
+        bestDiff = diff;
+      }
+    }
+    tFontSize.value = String(best);
+  }
+
+  function inferBlockFontSizePx(blk) {
+    if (!blk || !blk.id) return null;
+    const st = ensureTextStyle(blk);
+    if (st.fontSize) {
+      const direct = parseInt(st.fontSize, 10);
+      if (Number.isFinite(direct) && direct > 0) return direct;
+    }
+    const blockEl = canvas.querySelector(`.block[data-bid="${CSS.escape(blk.id)}"]`);
+    const previewEl = blockEl?.querySelector('.nx-block-preview');
+    if (!previewEl) return null;
+
+    const candidates = previewEl.querySelectorAll('[style*="font-size"], h1, h2, h3, h4, h5, h6, p, li, div, span, a, strong, em');
+    let target = null;
+    for (const el of candidates) {
+      if ((el.textContent || '').trim()) {
+        target = el;
+        break;
+      }
+    }
+    if (!target) target = previewEl;
+
+    const computed = window.getComputedStyle(target).fontSize || '';
+    const px = parseInt(computed, 10);
+    return Number.isFinite(px) && px > 0 ? px : null;
+  }
+
   function syncToolbarFromSelection() {
     if (textToolbar) textToolbar.style.display = 'flex';
 
@@ -2027,16 +2122,21 @@
       // Clear state when nothing text-like is selected but keep bar visible
       document.querySelectorAll('.nx-toolbtn[data-tcmd]').forEach(b => b.classList.remove('active'));
       if (tFontFamily) tFontFamily.value = '';
-      if (tFontSize)   tFontSize.value   = '';
+      setToolbarFontSizeValue(null);
       const holder = document.getElementById('t_color_palette');
-      if (holder) holder.innerHTML = renderColorPalette('t_color_palette_inner', '#111827');
+      if (holder) {
+        holder.innerHTML = renderColorPalette('t_color_palette_inner', '#111827');
+        bindColorPalette('t_color_palette_inner', (hex) => {
+          applyRichCommand('foreColor', hex);
+        });
+      }
       return;
     }
 
     const st = ensureTextStyle(blk);
 
     if (tFontFamily) tFontFamily.value = st.fontFamily || '';
-    if (tFontSize)   tFontSize.value   = st.fontSize ? String(st.fontSize) : '';
+    setToolbarFontSizeValue(inferBlockFontSizePx(blk));
 
     const holder = document.getElementById('t_color_palette');
     if (holder) {
@@ -2125,14 +2225,27 @@
     document.execCommand('createLink', false, url);
 
     const range = sel.getRangeAt(0);
-    const container = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
-    const a = container?.closest?.('a');
-    if (a) {
+    const links = new Set();
+    const common = range.commonAncestorContainer.nodeType === 1
+      ? range.commonAncestorContainer
+      : range.commonAncestorContainer.parentElement;
+
+    [sel.anchorNode, sel.focusNode, range.startContainer, range.endContainer].forEach((node) => {
+      const el = node && node.nodeType === 1 ? node : node?.parentElement;
+      const link = el?.closest?.('a');
+      if (link && target.contains(link)) links.add(link);
+    });
+    common?.querySelectorAll?.('a').forEach((aEl) => {
+      if (target.contains(aEl)) links.add(aEl);
+    });
+
+    links.forEach((a) => {
       a.setAttribute('target', '_blank');
       a.setAttribute('rel', 'noopener noreferrer');
-      a.style.textDecoration = 'underline';
-      a.style.textUnderlineOffset = '3px';
-    }
+      // Preserve existing typography; hyperlink should not force color/underline changes.
+      a.style.color = 'inherit';
+      a.style.textDecoration = 'inherit';
+    });
 
     target.dispatchEvent(new Event('input', { bubbles: true }));
   });
@@ -4653,6 +4766,8 @@
       }
 
       if (selectedRow === r) rowEl.classList.add('selected-row');
+      if (row.equalHeight) rowEl.classList.add('row-equal');
+      if (row.equalHeight) rowEl.style.setProperty('--nx-eq-cols', String(Math.max(1, row.cols.length || 1)));
 
       const head = document.createElement('div');
       head.className = 'rowhead';
@@ -4661,6 +4776,7 @@
         <div style="display:flex;align-items:center;gap:10px;flex:1">
           <div class="nx-muted" data-act="selectrow" style="cursor:pointer">Row ${r + 1}</div>
           <button class="smallbtn" data-act="collapse" type="button">${row.collapsed ? 'Expand Row' : 'Collapse Row'}</button>
+          <button class="smallbtn nx-equal-btn ${row.equalHeight ? 'is-on' : ''}" data-act="equalheight" type="button" aria-pressed="${row.equalHeight ? 'true' : 'false'}" title="${row.equalHeight ? 'Equal height on' : 'Equal height off'}">⇳</button>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
           <button class="smallbtn" data-act="split2" type="button">6/6</button>
@@ -4689,6 +4805,14 @@
         if (act === 'collapse') {
           pushHistory();
           row.collapsed = !row.collapsed;
+          persistUnsaved();
+          render();
+          return;
+        }
+
+        if (act === 'equalheight') {
+          pushHistory();
+          row.equalHeight = !row.equalHeight;
           persistUnsaved();
           render();
           return;
@@ -4752,6 +4876,8 @@
         let span = Math.max(3, Math.min(12, col.span || 12));
         col.span = span;
         colEl.style.setProperty('--span', String(span));
+        const colBlocks = (col.blocks || []);
+        if (row.equalHeight && colBlocks.length === 1) colEl.classList.add('col-equal-one');
 
         const ch = document.createElement('div');
         ch.style.display = 'flex';
@@ -4826,12 +4952,13 @@
         });
 
         // Blocks
-        (col.blocks || []).forEach((blk, b) => {
+        (colBlocks).forEach((blk, b) => {
           if (!blk || typeof blk !== 'object') { console.warn('Skipping malformed block', blk); return; }
           if (!blk.id) blk.id = uuid();
 
           const el = document.createElement('div');
           el.className = 'block';
+          if (row.equalHeight && colBlocks.length === 1) el.classList.add('block-fill');
           el.draggable = true;
           el.dataset.bid = blk.id;
 
