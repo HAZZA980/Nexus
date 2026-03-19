@@ -1,0 +1,263 @@
+:root {
+  --primary: #5b21b6;
+  --primary-strong: #4c1d95;
+}
+
+.theme-light {
+  --primary: #2563eb;
+  --primary-strong: #1d4ed8;
+}
+
+.top-bar {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 3600;
+}
+
+.top-bar-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 16px;
+  background: linear-gradient(135deg, #64748b, #22c55e);
+}
+
+.top-nav {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.top-nav .nav-link {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1;
+  padding: 0 10px;
+  border-right: 1px solid var(--border);
+}
+
+.top-nav .nav-link:last-child {
+  border-right: 0;
+}
+
+.top-nav .nav-link:hover,
+.top-nav .nav-link.active {
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.user-menu {
+  position: relative;
+}
+
+.user-menu summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.user-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.user-menu .menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 190px;
+  padding: 8px;
+  z-index: 3700;
+  box-shadow: 0 8px 30px rgba(2, 6, 23, 0.2);
+}
+
+.user-menu .menu button.theme-toggle,
+.user-menu .menu a {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.user-menu .menu button.theme-toggle:hover,
+.user-menu .menu a:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-icon {
+  width: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.theme-light .top-bar {
+  background: #fff;
+}
+
+.theme-light .top-nav .nav-link {
+  color: #111827;
+}
+
+.theme-light .user-menu summary {
+  background: #fff;
+  color: #1f2937;
+}
+
+/* Default admin button style (matches site.php) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: rgba(255,255,255,.1);
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary));
+  color: #fff;
+  border-color: rgba(255,255,255,.12);
+  box-shadow: none;
+}
+
+.btn.small {
+  padding: 8px 10px;
+}
+
+.btn.text {
+  background: transparent;
+  border-color: transparent;
+  padding: 8px 10px;
+}
+
+.btn.danger {
+  background: linear-gradient(135deg,#ef4444,#b91c1c);
+  color: #fff;
+  border-color: rgba(255,255,255,.08);
+}
+
+.theme-light .btn {
+  background: #fff;
+  color: #111827;
+  border-color: #cbd5e1;
+}
+
+.theme-light .btn:hover {
+  background: #f8fafc;
+}
+
+.theme-light .btn.text {
+  background: transparent;
+  border-color: transparent;
+}
+
+.theme-light .btn.primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary));
+  color: #fff;
+  border-color: rgba(37,99,235,.22);
+}
+
+.theme-light .btn.primary:hover {
+  filter: brightness(1.03);
+}
+
+@media (max-width: 900px) {
+  .top-bar-inner {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .brand {
+    font-size: 20px;
+  }
+  .top-nav .nav-link {
+    font-size: 13px;
+  }
+  .user-menu summary {
+    font-size: 13px;
+  }
+}
