@@ -39,7 +39,7 @@ $author = $rev['created_by_user_id'] ?? null;
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
   </script>
-  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css">
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css?v=20260322">
   <link rel="stylesheet" href="<?= $base ?>/public/assets/site.css">
   <style>
     :root {

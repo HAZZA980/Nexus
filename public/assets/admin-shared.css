@@ -1,263 +1,391 @@
 :root {
-  --primary: #5b21b6;
-  --primary-strong: #4c1d95;
+  --admin-bg: #0f172a;
+  --admin-surface: #111827;
+  --admin-surface-2: #0b1220;
+  --admin-line: #334155;
+  --admin-text: #e5e7eb;
+  --admin-text-strong: #f8fafc;
+  --admin-muted: #94a3b8;
+  --admin-accent: #3b82f6;
+  --admin-danger: #f87171;
+  --admin-success: #22c55e;
+  --admin-warn: #f59e0b;
+  --admin-side-w: 220px;
+  --admin-top-h: 48px;
 }
 
 .theme-light {
-  --primary: #2563eb;
-  --primary-strong: #1d4ed8;
+  --admin-bg: #f3f4f6;
+  --admin-surface: #ffffff;
+  --admin-surface-2: #f9fafb;
+  --admin-line: #d1d5db;
+  --admin-text: #111827;
+  --admin-text-strong: #0f172a;
+  --admin-muted: #4b5563;
+  --admin-accent: #1d4ed8;
+  --admin-danger: #b91c1c;
+  --admin-success: #166534;
+  --admin-warn: #92400e;
 }
 
-.top-bar {
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
+* { box-sizing: border-box; }
+html, body { overflow-x: hidden; }
+
+a { color: inherit; }
+
+body {
+  background: var(--admin-bg);
+  color: var(--admin-text);
+}
+
+.nx-admin-sidebar {
+  position: fixed;
   top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--admin-side-w);
+  border-right: 1px solid var(--admin-line);
+  background: var(--admin-surface-2);
+  padding: 12px;
   z-index: 3600;
+  overflow: auto;
 }
 
-.top-bar-inner {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 14px 20px;
+.nx-admin-brand {
+  display: block;
+  margin: 2px 6px 12px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
+  text-decoration: none;
+}
+
+.nx-admin-nav-label {
+  margin: 12px 8px 6px;
+  color: var(--admin-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.nx-admin-nav-link {
+  display: block;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--admin-text-strong);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.nx-admin-nav-link:hover {
+  background: color-mix(in srgb, var(--admin-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--admin-accent) 28%, var(--admin-line));
+}
+
+.nx-admin-nav-link.active {
+  background: color-mix(in srgb, var(--admin-accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--admin-accent) 42%, var(--admin-line));
+  color: var(--admin-text-strong);
+}
+
+.nx-admin-topbar {
+  position: fixed;
+  left: var(--admin-side-w);
+  right: 0;
+  top: 0;
+  height: var(--admin-top-h);
+  border-bottom: 1px solid var(--admin-line);
+  background: var(--admin-surface);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px;
+  padding: 0 14px;
+  z-index: 3590;
 }
 
-.brand {
+.nx-admin-top-title {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 24px;
-  line-height: 1;
-  letter-spacing: -0.01em;
-}
-
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 16px;
-  background: linear-gradient(135deg, #64748b, #22c55e);
-}
-
-.top-nav {
-  display: flex;
-  align-items: center;
-  gap: 0;
-}
-
-.top-nav .nav-link {
+  gap: 8px;
   font-size: 14px;
+  font-weight: 700;
+}
+
+.nx-admin-top-role {
+  color: var(--admin-muted);
+  font-size: 12px;
   font-weight: 500;
-  color: var(--text);
-  line-height: 1;
-  padding: 0 10px;
-  border-right: 1px solid var(--border);
 }
 
-.top-nav .nav-link:last-child {
-  border-right: 0;
-}
-
-.top-nav .nav-link:hover,
-.top-nav .nav-link.active {
-  color: var(--text);
-  opacity: 0.85;
-}
-
-.top-actions {
+.nx-admin-top-actions {
   display: flex;
   align-items: center;
-  margin-left: auto;
+  gap: 10px;
+  color: var(--admin-muted);
+  font-size: 13px;
 }
 
-.user-menu {
+.nx-user-menu {
   position: relative;
 }
 
-.user-menu summary {
+.nx-user-menu summary {
   list-style: none;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel);
-  padding: 8px 12px;
-  color: var(--text);
-  font-size: 14px;
+  gap: 8px;
+  border: 1px solid var(--admin-line);
+  border-radius: 4px;
+  background: var(--admin-surface-2);
+  color: var(--admin-text-strong);
   font-weight: 600;
-  line-height: 1;
+  padding: 6px 10px;
 }
 
-.user-menu summary::-webkit-details-marker {
+.nx-user-menu summary::-webkit-details-marker {
   display: none;
 }
 
-.user-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, var(--primary), var(--primary-strong));
-  color: #fff;
-  font-weight: 700;
-  font-size: 13px;
-}
-
-.user-menu .menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 8px);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  min-width: 190px;
-  padding: 8px;
-  z-index: 3700;
-  box-shadow: 0 8px 30px rgba(2, 6, 23, 0.2);
-}
-
-.user-menu .menu button.theme-toggle,
-.user-menu .menu a {
-  display: block;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 14px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.user-menu .menu button.theme-toggle:hover,
-.user-menu .menu a:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.menu-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.menu-icon {
-  width: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
+.nx-user-arrow {
+  color: var(--admin-muted);
+  font-size: 11px;
   line-height: 1;
 }
 
-.theme-light .top-bar {
-  background: #fff;
+.nx-user-menu[open] .nx-user-arrow {
+  transform: rotate(180deg);
 }
 
-.theme-light .top-nav .nav-link {
-  color: #111827;
+.nx-user-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-line);
+  border-radius: 4px;
+  min-width: 180px;
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  z-index: 3700;
 }
 
-.theme-light .user-menu summary {
-  background: #fff;
-  color: #1f2937;
+.nx-user-dropdown a,
+.nx-user-dropdown button {
+  border: 0;
+  background: transparent;
+  color: var(--admin-text);
+  text-align: left;
+  text-decoration: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
 
-/* Default admin button style (matches site.php) */
+.nx-user-dropdown a:hover,
+.nx-user-dropdown button:hover {
+  background: color-mix(in srgb, var(--admin-accent) 14%, transparent);
+}
+
+.nx-user-dropdown a.logout {
+  color: var(--admin-danger);
+}
+
+.nx-menu-icon {
+  width: 14px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+
+body.nx-admin-layout > main {
+  margin-left: var(--admin-side-w) !important;
+  margin-top: var(--admin-top-h) !important;
+  min-width: 0;
+  max-width: 100%;
+}
+
+body.nx-admin-layout .table-wrap {
+  max-width: 100%;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 36px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,.06);
-  color: var(--text);
-  cursor: pointer;
-  font-weight: 700;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--admin-line);
+  border-radius: 4px;
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  font-size: 13px;
+  font-weight: 600;
   text-decoration: none;
 }
 
 .btn:hover {
-  background: rgba(255,255,255,.1);
+  background: color-mix(in srgb, var(--admin-accent) 10%, var(--admin-surface));
 }
 
 .btn.primary {
-  background: linear-gradient(135deg, var(--primary), var(--primary));
+  border-color: color-mix(in srgb, var(--admin-accent) 60%, var(--admin-line));
+  background: var(--admin-accent);
   color: #fff;
-  border-color: rgba(255,255,255,.12);
-  box-shadow: none;
-}
-
-.btn.small {
-  padding: 8px 10px;
-}
-
-.btn.text {
-  background: transparent;
-  border-color: transparent;
-  padding: 8px 10px;
 }
 
 .btn.danger {
-  background: linear-gradient(135deg,#ef4444,#b91c1c);
+  border-color: color-mix(in srgb, var(--admin-danger) 60%, var(--admin-line));
+  background: var(--admin-danger);
   color: #fff;
-  border-color: rgba(255,255,255,.08);
 }
 
-.theme-light .btn {
-  background: #fff;
-  color: #111827;
-  border-color: #cbd5e1;
+/* Shared admin page skin: keeps structure/layout, only colors react to theme. */
+body.nx-admin-layout main {
+  background: var(--admin-bg);
+  color: var(--admin-text);
 }
 
-.theme-light .btn:hover {
-  background: #f8fafc;
+body.nx-admin-layout .panel {
+  background: var(--admin-surface);
+  border-color: var(--admin-line);
 }
 
-.theme-light .btn.text {
-  background: transparent;
-  border-color: transparent;
+body.nx-admin-layout .panel-head {
+  border-bottom-color: var(--admin-line);
 }
 
-.theme-light .btn.primary {
-  background: linear-gradient(135deg, var(--primary), var(--primary));
-  color: #fff;
-  border-color: rgba(37,99,235,.22);
+body.nx-admin-layout .panel-title,
+body.nx-admin-layout h1,
+body.nx-admin-layout h2,
+body.nx-admin-layout h3 {
+  color: var(--admin-text-strong);
 }
 
-.theme-light .btn.primary:hover {
-  filter: brightness(1.03);
+body.nx-admin-layout .summary,
+body.nx-admin-layout .filters {
+  background: var(--admin-surface-2);
 }
 
-@media (max-width: 900px) {
-  .top-bar-inner {
-    flex-wrap: wrap;
-    gap: 12px;
+body.nx-admin-layout .metric,
+body.nx-admin-layout .field {
+  background: var(--admin-surface);
+  border-color: var(--admin-line);
+}
+
+body.nx-admin-layout .metric-label {
+  color: var(--admin-muted);
+}
+
+body.nx-admin-layout .metric.active .metric-value { color: var(--admin-success); }
+body.nx-admin-layout .metric.warn .metric-value { color: var(--admin-warn); }
+body.nx-admin-layout .metric.off .metric-value { color: var(--admin-muted); }
+
+body.nx-admin-layout table {
+  background: var(--admin-surface);
+  color: var(--admin-text);
+}
+
+body.nx-admin-layout thead th {
+  background: var(--admin-surface-2);
+  border-top: 1px solid var(--admin-line);
+  border-bottom: 1px solid var(--admin-line);
+  color: var(--admin-text);
+}
+
+body.nx-admin-layout tbody td {
+  border-bottom: 1px solid var(--admin-line);
+}
+
+body.nx-admin-layout tbody tr:hover {
+  background: color-mix(in srgb, var(--admin-accent) 10%, transparent);
+}
+
+body.nx-admin-layout .site-meta,
+body.nx-admin-layout .muted,
+body.nx-admin-layout .empty {
+  color: var(--admin-muted);
+}
+
+body.nx-admin-layout .action {
+  color: var(--admin-accent);
+}
+
+body.nx-admin-layout .status.used,
+body.nx-admin-layout .badge.status {
+  background: color-mix(in srgb, var(--admin-success) 18%, transparent);
+  border-color: color-mix(in srgb, var(--admin-success) 38%, var(--admin-line));
+  color: var(--admin-success);
+}
+
+body.nx-admin-layout .status.unused {
+  background: color-mix(in srgb, var(--admin-warn) 16%, transparent);
+  border-color: color-mix(in srgb, var(--admin-warn) 30%, var(--admin-line));
+  color: var(--admin-warn);
+}
+
+body.nx-admin-layout .badge.role {
+  background: color-mix(in srgb, var(--admin-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--admin-accent) 38%, var(--admin-line));
+  color: var(--admin-accent);
+}
+
+body.nx-admin-layout .notice {
+  border-color: color-mix(in srgb, var(--admin-success) 38%, var(--admin-line));
+  background: color-mix(in srgb, var(--admin-success) 14%, transparent);
+  color: var(--admin-success);
+}
+
+body.nx-admin-layout .error-banner {
+  border-color: color-mix(in srgb, var(--admin-danger) 42%, var(--admin-line));
+  background: color-mix(in srgb, var(--admin-danger) 14%, transparent);
+  color: var(--admin-danger);
+}
+
+body.nx-admin-layout .modal {
+  background: var(--admin-surface);
+  border-color: var(--admin-line);
+  color: var(--admin-text);
+}
+
+body.nx-admin-layout .modal p {
+  color: var(--admin-muted);
+}
+
+body.nx-admin-layout .modal input,
+body.nx-admin-layout .modal select,
+body.nx-admin-layout .modal textarea {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-line);
+  color: var(--admin-text);
+}
+
+@media (max-width: 960px) {
+  .nx-admin-sidebar {
+    display: none;
   }
-  .brand {
-    font-size: 20px;
+
+  .nx-admin-topbar {
+    left: 0;
   }
-  .top-nav .nav-link {
-    font-size: 13px;
-  }
-  .user-menu summary {
-    font-size: 13px;
+
+  body.nx-admin-layout > main {
+    margin-left: 0 !important;
   }
 }

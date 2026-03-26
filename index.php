@@ -80,8 +80,8 @@ if ($method === 'POST' && $uri === '/api/analytics/collect') {
 // Landing: list sites
 if ($method === 'GET' && $uri === '/') {
   require_admin();
-  $sites = Site::all();
-  view('landing.php', ['sites' => $sites]);
+  header('Location: ' . $base . '/admin/');
+  exit;
 }
 
 // Site search: /s/{site}/search

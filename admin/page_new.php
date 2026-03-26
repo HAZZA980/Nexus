@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
   </script>
-  <link rel="stylesheet" href="<?= base_path() ?>/public/assets/admin-shared.css">
+  <link rel="stylesheet" href="<?= base_path() ?>/public/assets/admin-shared.css?v=20260322">
   <link rel="stylesheet" href="<?= base_path() ?>/public/assets/page_new.css">
 </head>
 <body class="page-new">

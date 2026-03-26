@@ -59,7 +59,7 @@ $src = $base . '/admin/site.php?id=' . (int)$site['id'] . '&view=citations';
       z-index:1;
     }
   </style>
-  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css">
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css?v=20260322">
 </head>
 <body>
   <?php include __DIR__ . '/partials/header.php'; ?>
@@ -125,7 +125,7 @@ $src = $base . '/admin/site.php?id=' . (int)$site['id'] . '&view=citations';
         var rect = frame.getBoundingClientRect();
         var frameTopInViewport = rect.top;
         var frameBottomInViewport = rect.bottom;
-        var header = document.querySelector('.top-bar');
+        var header = document.querySelector('.nx-admin-topbar, .top-bar');
         var headerBottomInViewport = 0;
         if (header) {
           var headerRect = header.getBoundingClientRect();

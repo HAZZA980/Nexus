@@ -1833,7 +1833,7 @@ if (isset($_SESSION['user_id'])) {
   .view-meta-item .meta-value{margin-top:4px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   @media(max-width:720px){.view-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
   </style>
-  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css">
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css?v=20260322">
 </head>
   <body>
     <?php if (!$citationsOnly): ?>

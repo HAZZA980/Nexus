@@ -86,7 +86,7 @@ function rel_path(string $rootedPath): string {
     .card h3 { margin:0 0 6px; }
     .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
   </style>
-  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css">
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css?v=20260322">
 </head>
   <body>
     <?php include __DIR__ . '/partials/header.php'; ?>

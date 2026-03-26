@@ -248,7 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       .page-head h1 { font-size: 26px; }
     }
   </style>
-  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css">
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css?v=20260322">
 </head>
   <body>
     <?php include __DIR__ . '/partials/header.php'; ?>
