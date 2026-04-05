@@ -358,10 +358,31 @@ body.nx-admin-layout .error-banner {
   color: var(--admin-danger);
 }
 
+body.nx-admin-layout .modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1100;
+  background: rgba(0,0,0,0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+}
+
 body.nx-admin-layout .modal {
   background: var(--admin-surface);
   border-color: var(--admin-line);
   color: var(--admin-text);
+  max-width: 960px;
+  width: 100%;
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  border: 1px solid var(--admin-line);
+  border-radius: 10px;
 }
 
 body.nx-admin-layout .modal p {

@@ -238,8 +238,7 @@ function safe_include(string $path, string $root): bool {
 
     /* Preview admin bar only */
     .nx-adminbar{
-      position:sticky;
-      top:0;
+      position:relative;
       z-index:999;
       background:rgba(15,23,42,.92);
       color:#e6eaf2;
@@ -268,7 +267,7 @@ function safe_include(string $path, string $root): bool {
     .nx-card{
       background:var(--nexus-surface, #ffffff);
       border:1px solid var(--nexus-border, rgba(17,24,39,.12));
-      box-shadow:var(--nexus-shadow, none);
+      box-shadow:none;
     }
     .nx-btn{
       border-radius:var(--nexus-button-radius, var(--nexus-radius));

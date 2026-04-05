@@ -1,4 +1,268 @@
 <?php
+
+$titlePageBlockStyle = [
+  'marginBottom' => '18px',
+  'boxShadow' => 'none',
+];
+
+$titlePage = [
+  'version' => 1,
+  'page' => [
+    'backgroundColor' => '#ffffff',
+    'textColor' => '#333333',
+  ],
+  'rows' => [
+    [
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'cols' => [
+        [
+          'span' => 12,
+          'blocks' => [
+            [
+              'id' => 'tp-hero',
+              'type' => 'heroBanner',
+              'style' => $titlePageBlockStyle,
+              'props' => [
+                'heading' => 'Hero heading',
+                'cta' => 'Primary action',
+                'bgImage' => '',
+                'overlayOpacity' => 0.75,
+              ],
+            ],
+          ],
+        ],
+      ],
+    ],
+    [
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'equalHeight' => true,
+      'cols' => [
+        [
+          'span' => 8,
+          'blocks' => [
+            [
+              'id' => 'tp-feature-1',
+              'type' => 'card',
+              'props' => [
+                'title' => 'Feature tile 1',
+                'body' => 'Add a short title-led promo panel here.',
+              ],
+              'style' => [
+                'marginBottom' => '18px',
+                'boxShadow' => 'none',
+                'minHeight' => '138px',
+              ],
+              'styleText' => ['align' => 'center'],
+            ],
+            [
+              'id' => 'tp-feature-2',
+              'type' => 'card',
+              'props' => [
+                'title' => 'Feature tile 2',
+                'body' => 'Add a second promo panel here.',
+              ],
+              'style' => [
+                'marginBottom' => '18px',
+                'boxShadow' => 'none',
+                'minHeight' => '138px',
+              ],
+              'styleText' => ['align' => 'center'],
+            ],
+          ],
+        ],
+        [
+          'span' => 4,
+          'blocks' => [
+            [
+              'id' => 'tp-sidebar',
+              'type' => 'text',
+              'props' => [
+                'html' => '<h2 style="margin:0 0 12px">Sidebar feature</h2><p style="margin:0 0 12px">Add supporting copy for the right-hand panel.</p><ul style="margin:0;padding-left:18px"><li>Editable link item</li></ul>',
+              ],
+              'style' => [
+                'marginBottom' => '18px',
+                'boxShadow' => 'none',
+                'backgroundColor' => '#20366f',
+                'padding' => '22px 20px',
+                'minHeight' => '292px',
+                'borderRadius' => '16px',
+              ],
+              'styleText' => ['color' => '#ffffff'],
+            ],
+          ],
+        ],
+      ],
+    ],
+    [
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'cols' => [
+        [
+          'span' => 12,
+          'blocks' => [
+            [
+              'id' => 'tp-searches-heading',
+              'type' => 'heading',
+              'style' => $titlePageBlockStyle,
+              'props' => ['level' => 2, 'text' => 'Section heading'],
+              'styleText' => ['align' => 'center'],
+            ],
+          ],
+        ],
+      ],
+    ],
+    [
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'equalHeight' => true,
+      'cols' => [
+        ['span' => 4, 'blocks' => [[
+          'id' => 'tp-search-1',
+          'type' => 'card',
+          'props' => ['title' => 'Search tile 1', 'body' => 'Add search category content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
+          'styleText' => ['align' => 'center'],
+        ]]],
+        ['span' => 4, 'blocks' => [[
+          'id' => 'tp-search-2',
+          'type' => 'card',
+          'props' => ['title' => 'Search tile 2', 'body' => 'Add search category content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
+          'styleText' => ['align' => 'center'],
+        ]]],
+        ['span' => 4, 'blocks' => [[
+          'id' => 'tp-search-3',
+          'type' => 'card',
+          'props' => ['title' => 'Search tile 3', 'body' => 'Add search category content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
+          'styleText' => ['align' => 'center'],
+        ]]],
+      ],
+    ],
+    [
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'equalHeight' => true,
+      'cols' => [
+        ['span' => 4, 'blocks' => [[
+          'id' => 'tp-search-4',
+          'type' => 'card',
+          'props' => ['title' => 'Search tile 4', 'body' => 'Add search category content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
+          'styleText' => ['align' => 'center'],
+        ]]],
+        ['span' => 4, 'blocks' => [[
+          'id' => 'tp-search-5',
+          'type' => 'card',
+          'props' => ['title' => 'Search tile 5', 'body' => 'Add search category content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
+          'styleText' => ['align' => 'center'],
+        ]]],
+        ['span' => 4, 'blocks' => [[
+          'id' => 'tp-search-6',
+          'type' => 'card',
+          'props' => ['title' => 'Search tile 6', 'body' => 'Add search category content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
+          'styleText' => ['align' => 'center'],
+        ]]],
+      ],
+    ],
+    [
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'cols' => [
+        [
+          'span' => 12,
+          'blocks' => [
+            [
+              'id' => 'tp-highlights-heading',
+              'type' => 'heading',
+              'style' => $titlePageBlockStyle,
+              'props' => ['level' => 2, 'text' => 'Section heading'],
+              'styleText' => ['align' => 'center'],
+            ],
+          ],
+        ],
+      ],
+    ],
+    [
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'equalHeight' => true,
+      'cols' => [
+        ['span' => 6, 'blocks' => [[
+          'id' => 'tp-highlight-1',
+          'type' => 'card',
+          'props' => ['title' => 'Highlight item 1', 'body' => 'Add highlight summary content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
+        ]]],
+        ['span' => 6, 'blocks' => [[
+          'id' => 'tp-highlight-2',
+          'type' => 'card',
+          'props' => ['title' => 'Highlight item 2', 'body' => 'Add highlight summary content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
+        ]]],
+      ],
+    ],
+    [
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'equalHeight' => true,
+      'cols' => [
+        ['span' => 6, 'blocks' => [[
+          'id' => 'tp-highlight-3',
+          'type' => 'card',
+          'props' => ['title' => 'Highlight item 3', 'body' => 'Add highlight summary content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
+        ]]],
+        ['span' => 6, 'blocks' => [[
+          'id' => 'tp-highlight-4',
+          'type' => 'card',
+          'props' => ['title' => 'Highlight item 4', 'body' => 'Add highlight summary content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
+        ]]],
+      ],
+    ],
+    [
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'equalHeight' => true,
+      'cols' => [
+        ['span' => 6, 'blocks' => [[
+          'id' => 'tp-highlight-5',
+          'type' => 'card',
+          'props' => ['title' => 'Highlight item 5', 'body' => 'Add highlight summary content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
+        ]]],
+        ['span' => 6, 'blocks' => [[
+          'id' => 'tp-highlight-6',
+          'type' => 'card',
+          'props' => ['title' => 'Highlight item 6', 'body' => 'Add highlight summary content.'],
+          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
+        ]]],
+      ],
+    ],
+    [
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'cols' => [
+        [
+          'span' => 12,
+          'blocks' => [
+            [
+              'id' => 'tp-footer-banner',
+              'type' => 'text',
+              'props' => [
+                'html' => '<h3 style="margin:0 0 10px">Footer banner</h3><p style="margin:0">Use this space for a final homepage callout or supporting message.</p>',
+              ],
+              'style' => [
+                'marginBottom' => '18px',
+                'boxShadow' => 'none',
+                'backgroundColor' => '#f5f5f5',
+                'padding' => '22px 24px',
+                'borderRadius' => '16px',
+              ],
+              'styleText' => ['align' => 'center'],
+            ],
+          ],
+        ],
+      ],
+    ],
+  ],
+];
+
 return [
   'home' => [
     'version' => 1,
@@ -19,6 +283,8 @@ return [
       ]]
     ]
   ],
+  'title-page' => $titlePage,
+  'title-page-1' => $titlePage,
   'landing' => [
     'version' => 1,
     'rows' => [

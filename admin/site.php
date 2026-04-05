@@ -98,7 +98,7 @@ $themeDefaults = [
   ],
   'shape' => [
     'radius' => 16,
-    'shadow' => '0 10px 30px rgba(0,0,0,.18)',
+    'shadow' => 'none',
     'buttonStyle' => 'pill',
     'inputStyle' => 'rounded',
   ],
@@ -1512,6 +1512,131 @@ if (isset($_SESSION['user_id'])) {
     .modal h3{margin:0;font-size:20px;}
     .modal .close-btn{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:18px;}
     .modal .layout-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));}
+    .modal.modal-danger{
+      max-width:560px;
+      width:min(560px, 100%);
+      height:auto;
+      min-height:0;
+      padding:0;
+      overflow:hidden;
+      border-radius:24px;
+    }
+    .danger-modal-head{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:18px;
+      padding:24px 24px 18px;
+      margin:0;
+      border-bottom:1px solid rgba(255,255,255,0.06);
+      background:
+        radial-gradient(circle at top left, rgba(239,68,68,0.18), transparent 42%),
+        linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));
+    }
+    .danger-modal-titlewrap{display:flex;align-items:flex-start;gap:14px;min-width:0;}
+    .danger-modal-icon{
+      width:52px;height:52px;border-radius:16px;display:grid;place-items:center;flex:0 0 auto;
+      background:linear-gradient(180deg, rgba(239,68,68,0.26), rgba(127,29,29,0.3));
+      border:1px solid rgba(248,113,113,0.35);
+      color:#fecaca;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+      font-size:24px;
+      line-height:1;
+    }
+    .danger-modal-titlegroup{display:grid;gap:6px;}
+    .danger-modal-titlegroup h3{margin:0;font-size:28px;line-height:1.05;letter-spacing:-0.03em;}
+    .danger-modal-eyebrow{
+      display:inline-flex;align-items:center;gap:8px;
+      font-size:12px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;
+      color:#fca5a5;
+    }
+    .danger-modal-eyebrow::before{
+      content:"";
+      width:8px;height:8px;border-radius:999px;background:currentColor;display:inline-block;
+      box-shadow:0 0 0 6px rgba(248,113,113,0.12);
+    }
+    .danger-modal-body{
+      display:grid;
+      gap:18px;
+      padding:22px 24px 24px;
+    }
+    .danger-modal-copy{
+      color:var(--muted);
+      font-size:15px;
+      line-height:1.6;
+    }
+    .danger-page-card{
+      display:grid;
+      gap:10px;
+      padding:16px 18px;
+      border-radius:18px;
+      border:1px solid rgba(248,113,113,0.18);
+      background:linear-gradient(180deg, rgba(127,29,29,0.14), rgba(255,255,255,0.02));
+    }
+    .danger-page-label{
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:0.14em;
+      text-transform:uppercase;
+      color:#fca5a5;
+    }
+    .danger-page-name{
+      font-size:24px;
+      line-height:1.15;
+      font-weight:800;
+      color:var(--text);
+      word-break:break-word;
+    }
+    .danger-modal-note{
+      padding:12px 14px;
+      border-radius:14px;
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.08);
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.5;
+    }
+    .danger-modal-actions{
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:4px;
+    }
+    .btn.danger-solid{
+      background:linear-gradient(180deg,#ef4444,#b91c1c);
+      color:#fff;
+      border-color:rgba(255,255,255,0.08);
+    }
+    .btn.subtle{
+      background:rgba(255,255,255,0.04);
+      border-color:rgba(255,255,255,0.10);
+      color:var(--text);
+    }
+    html.theme-light .danger-modal-head{
+      border-bottom-color:rgba(15,23,42,0.08);
+      background:
+        radial-gradient(circle at top left, rgba(239,68,68,0.12), transparent 42%),
+        linear-gradient(180deg, rgba(248,250,252,1), rgba(248,250,252,0.96));
+    }
+    html.theme-light .danger-modal-icon{
+      color:#b91c1c;
+      border-color:rgba(239,68,68,0.22);
+      background:linear-gradient(180deg, rgba(254,226,226,1), rgba(254,242,242,1));
+      box-shadow:none;
+    }
+    html.theme-light .danger-page-card{
+      border-color:rgba(239,68,68,0.16);
+      background:linear-gradient(180deg, rgba(254,242,242,1), rgba(255,255,255,1));
+    }
+    html.theme-light .danger-modal-note{
+      background:#fff;
+      border-color:rgba(15,23,42,0.08);
+    }
+    html.theme-light .btn.subtle{
+      background:#fff;
+      border-color:rgba(15,23,42,0.10);
+    }
     /* Ensure citation form fields have clear contrast */
     #citationModalBackdrop input,
     #citationModalBackdrop textarea,
@@ -4790,6 +4915,7 @@ if (isset($_SESSION['user_id'])) {
               ['id' => 'landing', 'name' => 'Landing', 'desc' => 'Hero + features starter.'],
               ['id' => 'resource-library', 'name' => 'Resource', 'desc' => 'Resource grid with intro.'],
               ['id' => 'about-profile', 'name' => 'About', 'desc' => 'Profile/overview with highlights.'],
+              ['id' => 'title-page', 'name' => 'Title page', 'desc' => 'Cite Them Right homepage structure with editable placeholder blocks.'],
             ];
           ?>
           <?php foreach ($modalLayouts as $layout): ?>
@@ -4855,16 +4981,28 @@ if (isset($_SESSION['user_id'])) {
     const deleteBackdrop = document.createElement('div');
     deleteBackdrop.className = 'modal-backdrop';
     deleteBackdrop.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
-        <header>
-          <h3 id="deleteTitle">Delete page</h3>
+      <div class="modal modal-danger" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
+        <header class="danger-modal-head">
+          <div class="danger-modal-titlewrap">
+            <div class="danger-modal-icon" aria-hidden="true">!</div>
+            <div class="danger-modal-titlegroup">
+              <div class="danger-modal-eyebrow">Destructive action</div>
+              <h3 id="deleteTitle">Delete page</h3>
+            </div>
+          </div>
           <button class="close-btn" type="button" aria-label="Close">×</button>
         </header>
-        <p>Are you sure you want to delete this page?</p>
-        <p><strong id="deletePageName"></strong></p>
-        <div class="actions" style="margin-top:12px">
-          <button class="btn primary" type="button" id="confirmDeleteBtn">Yes, delete</button>
-          <button class="btn text" type="button" id="cancelDeleteBtn">No</button>
+        <div class="danger-modal-body">
+          <div class="danger-modal-copy">This will permanently remove the page from the site. Review the page name below before continuing.</div>
+          <div class="danger-page-card">
+            <div class="danger-page-label">Selected page</div>
+            <div class="danger-page-name" id="deletePageName"></div>
+          </div>
+          <div class="danger-modal-note">This action cannot be undone. If you might need the content later, duplicate the page first or leave it unpublished instead.</div>
+          <div class="danger-modal-actions">
+            <button class="btn subtle" type="button" id="cancelDeleteBtn">Keep page</button>
+            <button class="btn danger-solid" type="button" id="confirmDeleteBtn">Delete permanently</button>
+          </div>
         </div>
       </div>
     `;
@@ -4874,12 +5012,14 @@ if (isset($_SESSION['user_id'])) {
     const deletePageName = deleteBackdrop.querySelector('#deletePageName');
     const closeDelete = () => { deleteBackdrop.style.display = 'none'; deleteTargetId = null; };
 
-    document.querySelectorAll('[data-delete-page]').forEach(btn => {
-      btn.addEventListener('click', () => {
+    // Use event delegation for delete page buttons (robust for dynamic DOM)
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('[data-delete-page]');
+      if (btn) {
         deleteTargetId = btn.dataset.pageId || null;
         if (deletePageName) deletePageName.textContent = btn.dataset.pageTitle || '';
         deleteBackdrop.style.display = 'flex';
-      });
+      }
     });
 
     // Duplicate page buttons

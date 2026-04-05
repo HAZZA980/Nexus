@@ -85,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'resource-library' => ['name'=>'Resource Library','desc'=>'Intro text plus a grid of resource cards and a divider.'],
             'about-profile' => ['name'=>'About / Profile','desc'=>'Profile hero with body text and key facts.'],
             'home' => ['name'=>'Simple Home','desc'=>'Heading and two-column content starter.'],
+            'title-page' => ['name'=>'Title page','desc'=>'Cite Them Right homepage structure with editable placeholder blocks.'],
             'article' => ['name'=>'Article','desc'=>'Article body with related sidebar.'],
             'source-type' => ['name'=>'Source Type','desc'=>'Heading, intro text, citation order, and example block.'],
           ];

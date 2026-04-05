@@ -494,3 +494,237 @@ body {
 :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(2) .nx-col:last-child .nx-text > :first-child {
   margin-top: 0 !important;
 }
+
+/* CTR Harvard page */
+.page-ctr-harvard .nexus-page {
+  max-width: 980px;
+  margin: 0 auto;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row {
+  margin-bottom: 10px;
+}
+
+.page-ctr-harvard .nx-hero {
+  min-height: 168px;
+  border-radius: 0;
+  border: 0;
+}
+
+.page-ctr-harvard .nx-hero-inner {
+  padding: 16px 18px;
+}
+
+.page-ctr-harvard .nx-hero-card {
+  max-width: 345px;
+  border: 1px solid #8893a6;
+  border-radius: 6px;
+  box-shadow: none;
+  padding: 10px 12px;
+}
+
+.page-ctr-harvard .nx-hero-title {
+  font-size: 42px;
+  line-height: 1;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.page-ctr-harvard .nx-hero-body {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.page-ctr-harvard .ctr-quick-links-label {
+  display: block;
+  font-size: 27px;
+  font-weight: 500;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+.page-ctr-harvard .ctr-quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.page-ctr-harvard .ctr-quick-links a {
+  font-size: 12px;
+  font-weight: 700;
+  color: #153a7a;
+  text-decoration: underline !important;
+}
+
+.page-ctr-harvard .ctr-collapse-all {
+  margin-top: 4px;
+  text-align: right;
+}
+
+.page-ctr-harvard .ctr-collapse-all a {
+  color: #2d4a87;
+  text-decoration: none !important;
+  font-size: 12px;
+}
+
+.page-ctr-harvard .nx-mainbox a {
+  text-decoration: none;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:first-child {
+  width: 68%;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child {
+  width: 32%;
+}
+
+.page-ctr-harvard .nx-accordion--grouped {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.page-ctr-harvard .nx-accordion--grouped .nx-accordion-parent .nx-accordion-head {
+  background: #f3f4f6;
+  border: 1px solid #e4e7ec;
+  border-bottom: 0;
+  font-size: 16px;
+  font-weight: 500;
+  padding: 7px 10px;
+}
+
+.page-ctr-harvard .nx-accordion--grouped .nx-accordion-panel {
+  border: 1px solid #e4e7ec;
+  border-top: 0;
+}
+
+.page-ctr-harvard .nx-accordion--grouped .nx-accordion-body {
+  padding: 8px 10px;
+  line-height: 1.35;
+  font-size: 12px;
+}
+
+.page-ctr-harvard .nx-accordion--grouped .nx-accordion-sublist {
+  columns: 2;
+  column-gap: 22px;
+}
+
+.page-ctr-harvard .nx-accordion--grouped .nx-accordion-sublist li {
+  break-inside: avoid;
+  margin: 0 0 5px;
+}
+
+.page-ctr-harvard .nx-accordion--grouped .nx-accordion-sublist a {
+  color: #173e7f;
+  text-decoration: none !important;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.page-ctr-harvard .nx-accordion-childrow {
+  border-top: 1px solid #e6e8ed;
+}
+
+.page-ctr-harvard .nx-accordion-childhead {
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 7px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.page-ctr-harvard .nx-accordion-childhead .nx-accordion-plus {
+  color: #2f4f88;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child h3 {
+  font-size: 22px;
+  line-height: 1.1;
+  font-weight: 500;
+  margin: 2px 0 8px;
+  color: #2f3f5f;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child .nx-panel {
+  border: 0;
+  border-radius: 0;
+  background: #f5f5f5;
+  box-shadow: none;
+  margin-bottom: 4px;
+  grid-template-columns: 1fr !important;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child .nx-panel-media {
+  min-height: 86px;
+  max-height: 86px;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child .nx-panel-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child .nx-panel-body {
+  font-size: 11px;
+  line-height: 1.25;
+  font-weight: 700;
+  padding: 6px 7px;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child .nx-panel-body a {
+  color: #153a7a;
+  text-decoration: none !important;
+}
+
+/* Right rail: overlay guidance text on image cards (closer to source page feel) */
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child .nx-panel--img-top {
+  position: relative;
+  display: block;
+  background: #f3f4f6;
+  overflow: hidden;
+  min-height: 86px;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child .nx-panel--img-top .nx-panel-media {
+  min-height: 86px;
+  max-height: 86px;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child .nx-panel--img-top .nx-panel-body {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  width: 46%;
+  padding: 0;
+  z-index: 2;
+  text-align: center;
+  background: transparent;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child .nx-panel--img-top .nx-panel-body a {
+  color: #1f2f55;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 700;
+  text-decoration: none !important;
+}
+
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child > div:last-child .nx-text a,
+.page-ctr-harvard .nexus-page > .nx-row:nth-of-type(3) > .nx-col:last-child > div:last-child .nx-text a:hover {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 7px 18px;
+  border-radius: 999px;
+  background: #2c4e8a;
+  color: #fff;
+  text-decoration: none !important;
+  font-weight: 700;
+  font-size: 12px;
+}

@@ -168,7 +168,7 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
     // Outer wrapper always allowed
     if ($outerCss !== '') {
-      $html = '<div style="' . $outerCss . '">' . $html . '</div>';
+      $html = '<div class="nx-block-wrap" style="' . $outerCss . '">' . $html . '</div>';
     }
 
     // Text wrapper only when desired (text blocks)
@@ -206,20 +206,15 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     // remove script/style blocks
     $html = preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', '', $html);
 
-    // convert common block tags to line breaks to preserve paragraph structure
-    $html = preg_replace('#</?(div|p)\b[^>]*>#i', '<br>', $html);
-    // normalize consecutive breaks
-    $html = preg_replace('#(<br\s*/?>\s*)+#i', '<br>', $html);
-
     // remove on* handlers
     $html = preg_replace('/\son\w+="[^"]*"/i', '', $html);
     $html = preg_replace("/\son\w+='[^']*'/i", '', $html);
 
     // allow only these tags
-    $allowed = '<a><b><strong><i><em><u><br><span>';
+    $allowed = '<div><p><a><b><strong><i><em><u><br><span><ul><ol><li><h1><h2><h3><h4><h5><h6><small>';
     $html = strip_tags($html, $allowed);
 
-    // normalize <a> tags with href and force target/rel + underline
+    // normalize <a> tags with href and force target/rel
     $html = preg_replace_callback('#<a\b([^>]*)>#i', function ($m) {
       $attrs = $m[1] ?? '';
 
@@ -230,17 +225,20 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
       $href = trim($hm[2]);
 
-      // force scheme for safety/consistency
-      if (!preg_match('#^(https?://|mailto:)#i', $href)) {
+      // keep anchor/relative links, otherwise force scheme for safety/consistency
+      if (
+        !preg_match('#^(https?://|mailto:|/|\#|\?)#i', $href)
+        && !str_starts_with($href, './')
+        && !str_starts_with($href, '../')
+      ) {
         $href = 'https://' . $href;
       }
 
       $hrefEsc = Security::e($href);
-
-      // underline so users can see links
-      $style = 'text-decoration:underline;text-underline-offset:3px;';
-
-      return '<a href="' . $hrefEsc . '" target="_blank" rel="noopener noreferrer" style="' . $style . '">';
+      if (str_starts_with($href, '#')) {
+        return '<a href="' . $hrefEsc . '">';
+      }
+      return '<a href="' . $hrefEsc . '" target="_blank" rel="noopener noreferrer">';
     }, $html);
 
     return $html;
@@ -489,8 +487,14 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         if ($overlay > 1) $overlay = 1;
 
         $bgStyle = $bg !== '' ? "background-image:url('".Security::e($bg)."');" : "background:linear-gradient(135deg,#1f2937,#111827);";
+        $heroSpacing = '';
+        $blkStyle = is_array($blk['style'] ?? null) ? $blk['style'] : [];
+        $marginBottom = trim((string)($blkStyle['marginBottom'] ?? $blkStyle['margin-bottom'] ?? ''));
+        if ($marginBottom !== '' && preg_match('/^[a-zA-Z0-9\s\.\,\#\-\(\)\/%:]+$/', $marginBottom)) {
+          $heroSpacing = 'margin-bottom:' . Security::e($marginBottom) . ';';
+        }
 
-        $html = "<div class=\"nx-herobanner\" style=\"{$bgStyle}\">"
+        $html = "<div class=\"nx-herobanner\" style=\"{$bgStyle}{$heroSpacing}\">"
           . "<div class=\"nx-herobanner-inner\">"
             . "<div class=\"nx-herobanner-card\" style=\"background:rgba(0,0,0,{$overlay});\">"
               . "<div class=\"nx-herobanner-text\">{$heading}</div>"
@@ -696,20 +700,25 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         if ($defaultIndex < 0) $defaultIndex = 0;
         if ($defaultIndex >= count($items)) $defaultIndex = max(0, count($items) - 1);
 
-        $tabsDefault = in_array($p['tabsDefault'] ?? 'first', ['first','custom'], true) ? $p['tabsDefault'] : 'first';
+        $tabsDefaultRaw = $p['tabsDefault'] ?? 'first';
+        $tabsDefault = in_array($tabsDefaultRaw, ['first','custom'], true) ? $tabsDefaultRaw : 'first';
         $tabsIndex = (int)($p['tabsIndex'] ?? 0);
         if ($tabsIndex < 0) $tabsIndex = 0;
         if ($tabsIndex >= count($items)) $tabsIndex = max(0, count($items) - 1);
-        $tabsAlign = in_array($p['tabsAlign'] ?? 'left', ['left','center','right'], true) ? $p['tabsAlign'] : 'left';
-        $tabsStyle = in_array($p['tabsStyle'] ?? 'underline', ['underline','pills','segmented'], true) ? $p['tabsStyle'] : 'underline';
+        $tabsAlignRaw = $p['tabsAlign'] ?? 'left';
+        $tabsAlign = in_array($tabsAlignRaw, ['left','center','right'], true) ? $tabsAlignRaw : 'left';
+        $tabsStyleRaw = $p['tabsStyle'] ?? 'underline';
+        $tabsStyle = in_array($tabsStyleRaw, ['underline','pills','segmented'], true) ? $tabsStyleRaw : 'underline';
 
         $styleVariant = in_array($p['styleVariant'] ?? 'default', ['default','minimal','bordered'], true) ? $p['styleVariant'] : 'default';
         $showDividers = !array_key_exists('showDividers', $p) || (bool)$p['showDividers'];
         $showIndicator = !array_key_exists('showIndicator', $p) || (bool)$p['showIndicator'];
         $indicatorPosition = in_array($p['indicatorPosition'] ?? 'right', ['left','right'], true) ? $p['indicatorPosition'] : 'right';
         $spacing = in_array($p['spacing'] ?? 'default', ['compact','default','spacious'], true) ? $p['spacing'] : 'default';
-        $headerImgPos = in_array($p['headerImgPos'] ?? 'left', ['left','right'], true) ? $p['headerImgPos'] : 'left';
-        $headerImgSize = in_array($p['headerImgSize'] ?? 'medium', ['small','medium','large'], true) ? $p['headerImgSize'] : 'medium';
+        $headerImgPosRaw = $p['headerImgPos'] ?? 'left';
+        $headerImgPos = in_array($headerImgPosRaw, ['left','right'], true) ? $headerImgPosRaw : 'left';
+        $headerImgSizeRaw = $p['headerImgSize'] ?? 'medium';
+        $headerImgSize = in_array($headerImgSizeRaw, ['small','medium','large'], true) ? $headerImgSizeRaw : 'medium';
         $showBorder = !array_key_exists('showBorder', $p) || (bool)$p['showBorder'];
 
         if ($isGrouped) {
@@ -813,7 +822,7 @@ HTML;
         if ($isGrouped) {
           $parent = $items[0] ?? ['title' => 'Group', 'subItems' => []];
           $children = array_slice($items, 1);
-          $isOpen = isset($open[0]);
+          $isOpen = !empty($open);
           $headId = "acc-head-{$accId}-0";
           $panelId = "acc-panel-{$accId}-0";
           $subs = $parent['subItems'] ?? [];
@@ -829,6 +838,8 @@ HTML;
                 : '<li>' . Security::e($label) . '</li>';
             }
             $parentList .= '</ul>';
+          } else {
+            $parentList .= '<div class="nx-muted" style="padding:6px 0;">Add links…</div>';
           }
           $childHtml = '';
           foreach ($children as $i => $it) {

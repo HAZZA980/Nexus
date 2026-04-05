@@ -367,23 +367,32 @@
     });
   };
 
+  const withDefaultBlockStyle = (block) => ({
+    ...block,
+    style: {
+      marginBottom: '18px',
+      boxShadow: '',
+      ...(block.style || {})
+    }
+  });
+
   const defBlock = (type) => {
     switch (type) {
-      case 'heading': return { id: uuid(), type: 'heading', props: { level: 2, text: 'Heading' }, styleText:{} };
-      case 'text':    return { id: uuid(), type: 'text', props: { text: 'Text…', bgColor: '' }, styleText:{} };
-      case 'image':   return { id: uuid(), type: 'image', props: { src: '', alt: '', imageRatio: '16-9' } };
-      case 'video':   return { id: uuid(), type: 'video', props: { url: '' } };
-      case 'card':    return { id: uuid(), type: 'card', props: { title: 'Card title', body: 'Card body…' }, styleText:{} };
-      case 'youTry':  return { id: uuid(), type: 'youTry', props: { title: 'You try', body: 'Try it yourself…' }, styleText:{} };
-      case 'textbox': return { id: uuid(), type: 'textbox', props: { label: 'Textbox', placeholder: 'Type here…', lines: 3, bgColor: '' } };
-      case 'citationOrder': return { id: uuid(), type: 'citationOrder', props: { title: 'Citation order', body: '• Author/editor\n• Year of publication (in round brackets)\n• Title (in italics)\n• Edition (edition number if not the first edn and/or rev. edn)\n• Publisher\n• Series and volume number (where relevant)' }, styleText:{} };
-      case 'exampleCard': return { id: uuid(), type: 'exampleCard', props: { exampleId: 'book_one_author', heading: 'Example: book with one author', body: 'In-text citations\n\nThe overview by McCormick (2023) confirms Hill’s experience (2023, pp. 46–52).\n\nNB: No page number citation for McCormick because the reference is to the whole book.\n\nSpecific pages are being cited in Hill’s book.\n\nReference list\n\nHill, F. (2023) There’s nothing for you here: finding opportunity in the twenty-first century. Mariner Books.\n\nMcCormick, J.M. (2023) American foreign policy and process. 7th edn. Cambridge University Press.', youTry: 'Surname, Initial. (Year of publication) Title. Edition. Publisher.', showYouTry: true }, styleText:{} };
-      case 'panel': return { id: uuid(), type: 'panel', props: { image: '', alt: '', body: 'Panel text…', layout: 'img-top', splitRatio: '50-50' }, styleText:{} };
-      case 'testimonial': return { id: uuid(), type: 'testimonial', props: { body: 'I am meeting my deadlines consistently!' }, styleText:{} };
-      case 'download': return { id: uuid(), type: 'download', props: { label: 'Download', url: '' }, styleText:{} };
-      case 'heroBanner': return { id: uuid(), type: 'heroBanner', props: { heading: 'Welcome to Cite Them Right', cta: 'Choose your referencing style', ctaHtml: '', bgImage: '', overlayOpacity: 0.6 }, styleText:{} };
+      case 'heading': return withDefaultBlockStyle({ id: uuid(), type: 'heading', props: { level: 2, text: 'Heading' }, styleText:{} });
+      case 'text':    return withDefaultBlockStyle({ id: uuid(), type: 'text', props: { text: 'Text…', bgColor: '' }, styleText:{} });
+      case 'image':   return withDefaultBlockStyle({ id: uuid(), type: 'image', props: { src: '', alt: '', imageRatio: '16-9' } });
+      case 'video':   return withDefaultBlockStyle({ id: uuid(), type: 'video', props: { url: '' } });
+      case 'card':    return withDefaultBlockStyle({ id: uuid(), type: 'card', props: { title: 'Card title', body: 'Card body…' }, styleText:{} });
+      case 'youTry':  return withDefaultBlockStyle({ id: uuid(), type: 'youTry', props: { title: 'You try', body: 'Try it yourself…' }, styleText:{} });
+      case 'textbox': return withDefaultBlockStyle({ id: uuid(), type: 'textbox', props: { label: 'Textbox', placeholder: 'Type here…', lines: 3, bgColor: '' } });
+      case 'citationOrder': return withDefaultBlockStyle({ id: uuid(), type: 'citationOrder', props: { title: 'Citation order', body: '• Author/editor\n• Year of publication (in round brackets)\n• Title (in italics)\n• Edition (edition number if not the first edn and/or rev. edn)\n• Publisher\n• Series and volume number (where relevant)' }, styleText:{} });
+      case 'exampleCard': return withDefaultBlockStyle({ id: uuid(), type: 'exampleCard', props: { exampleId: 'book_one_author', heading: 'Example: book with one author', body: 'In-text citations\n\nThe overview by McCormick (2023) confirms Hill’s experience (2023, pp. 46–52).\n\nNB: No page number citation for McCormick because the reference is to the whole book.\n\nSpecific pages are being cited in Hill’s book.\n\nReference list\n\nHill, F. (2023) There’s nothing for you here: finding opportunity in the twenty-first century. Mariner Books.\n\nMcCormick, J.M. (2023) American foreign policy and process. 7th edn. Cambridge University Press.', youTry: 'Surname, Initial. (Year of publication) Title. Edition. Publisher.', showYouTry: true }, styleText:{} });
+      case 'panel': return withDefaultBlockStyle({ id: uuid(), type: 'panel', props: { image: '', alt: '', body: 'Panel text…', layout: 'img-top', splitRatio: '50-50' }, styleText:{} });
+      case 'testimonial': return withDefaultBlockStyle({ id: uuid(), type: 'testimonial', props: { body: 'I am meeting my deadlines consistently!' }, styleText:{} });
+      case 'download': return withDefaultBlockStyle({ id: uuid(), type: 'download', props: { label: 'Download', url: '' }, styleText:{} });
+      case 'heroBanner': return withDefaultBlockStyle({ id: uuid(), type: 'heroBanner', props: { heading: 'Welcome to Cite Them Right', cta: 'Choose your referencing style', ctaHtml: '', bgImage: '', overlayOpacity: 0.6 }, styleText:{} });
       case 'table': {
-        return {
+        return withDefaultBlockStyle({
           id: uuid(),
           type: 'table',
           props: {
@@ -400,10 +409,10 @@
             vAlign: 'middle',
             colResize: true
           }
-        };
+        });
       }
-      case 'heroCard': return { id: uuid(), type: 'heroCard', props: { title: 'Hero Title', body: 'Hero text', bgImage: '', bgColor: '#111827', overlayOpacity: 0.35 }, styleText:{} };
-      case 'dragWords': return { id: uuid(), type: 'dragWords', props: {
+      case 'heroCard': return withDefaultBlockStyle({ id: uuid(), type: 'heroCard', props: { title: 'Hero Title', body: 'Hero text', bgImage: '', bgColor: '#111827', overlayOpacity: 0.35 }, styleText:{} });
+      case 'dragWords': return withDefaultBlockStyle({ id: uuid(), type: 'dragWords', props: {
         instruction: 'Drag or click the correct words into the blanks',
         sentence: 'The {1} sat on the {2}.',
         answers: ['cat', 'mat'],
@@ -412,8 +421,8 @@
         feedbackPartial: 'Keep trying — some answers are not correct yet.',
         checkLabel: 'Check answers',
         resetLabel: 'Reset'
-      }};
-      case 'multipleChoiceQuiz': return { id: uuid(), type: 'multipleChoiceQuiz', props: {
+      }});
+      case 'multipleChoiceQuiz': return withDefaultBlockStyle({ id: uuid(), type: 'multipleChoiceQuiz', props: {
         questions: [
           {
             id: uuid(),
@@ -447,8 +456,8 @@
         accentColor: '',
         correctColor: '',
         incorrectColor: ''
-      }, styleText:{} };
-      case 'flipCard': return { id: uuid(), type: 'flipCard', props: {
+      }, styleText:{} });
+      case 'flipCard': return withDefaultBlockStyle({ id: uuid(), type: 'flipCard', props: {
         frontTitle: 'Dialogue card — front',
         frontBody: 'Front content goes here. You can add text or an image.',
         frontImage: '',
@@ -457,18 +466,19 @@
         backImage: '',
         turnLabel: 'Turn',
         turnBackLabel: 'Turn back'
-      }, styleText:{} };
-      case 'trueFalse': return { id: uuid(), type: 'trueFalse', props: {
+      }, styleText:{} });
+      case 'trueFalse': return withDefaultBlockStyle({ id: uuid(), type: 'trueFalse', props: {
         question: 'Is this statement true?',
         trueLabel: 'True',
         falseLabel: 'False',
         correct: 'true',
         feedbackCorrect: 'Correct!',
         feedbackWrong: 'Not quite — try again.'
-      }, styleText:{} };
+      }, styleText:{} });
       case 'accordion':
-      case 'accordionTabs': return { id: uuid(), type: 'accordionTabs', props: {
+      case 'accordionTabs': return withDefaultBlockStyle({ id: uuid(), type: 'accordionTabs', props: {
         mode: 'accordion', // accordion | tabs
+        accStyle: 'standard', // standard | grouped
         allowMultiple: false,
         allowCollapseAll: true,
         defaultOpen: 'none', // none | first | custom
@@ -494,8 +504,8 @@
         items: [
           { id: uuid(), title: 'Accordion item', body: '', bodyHtml: '', openDefault: false, headerImg:'', headerAlt:'', showHeaderImg:false }
         ]
-      }};
-      case 'carousel': return { id: uuid(), type: 'carousel', props: {
+      }});
+      case 'carousel': return withDefaultBlockStyle({ id: uuid(), type: 'carousel', props: {
         slidesToShow: 1,
         size: 'large',
         autoplay: false,
@@ -506,9 +516,9 @@
           { title: 'Welcome to Skills for Study', body: 'Your hub for productivity, focus and effective study habits.', image: '', layout: 'text-left' },
           { title: 'Stay on track', body: 'Set gentle reminders and pace your study sessions.', image: '', layout: 'text-right' }
         ]
-      }};
-      case 'divider': return { id: uuid(), type: 'divider', props: {} };
-      default:        return { id: uuid(), type: 'text', props: { text: 'Text…' }, styleText:{} };
+      }});
+      case 'divider': return withDefaultBlockStyle({ id: uuid(), type: 'divider', props: {} });
+      default:        return withDefaultBlockStyle({ id: uuid(), type: 'text', props: { text: 'Text…' }, styleText:{} });
     }
   };
 
@@ -530,6 +540,13 @@
       item.headerImg = item.headerImg || '';
       item.headerAlt = item.headerAlt || '';
       item.showHeaderImg = !!item.showHeaderImg;
+      item.subItems = Array.isArray(item.subItems)
+        ? item.subItems.map((sub, subIdx) => ({
+            id: (sub && typeof sub === 'object' && sub.id) ? sub.id : uuid(),
+            label: (sub && typeof sub === 'object' ? (sub.label || '') : ''),
+            url: (sub && typeof sub === 'object' ? (sub.url || '') : '')
+          }))
+        : [];
       return item;
     };
     if (!Array.isArray(p.items) || !p.items.length) {
@@ -545,6 +562,9 @@
     p.tabsDefault = ['first','custom'].includes(p.tabsDefault) ? p.tabsDefault : 'first';
     p.tabsIndex = Math.min(Math.max(0, Number.isInteger(p.tabsIndex) ? p.tabsIndex : 0), Math.max(0, p.items.length - 1));
     if (p.mode === 'tabs') p.tabsIndex = Math.min(p.tabsIndex, ACCORDION_TABS_MAX - 1);
+    p.accStyle = p.mode === 'tabs'
+      ? 'standard'
+      : (['standard','grouped'].includes(p.accStyle) ? p.accStyle : 'standard');
     p.tabsAlign = ['left','center','right'].includes(p.tabsAlign) ? p.tabsAlign : 'left';
     p.tabsStyle = ['underline','pills','segmented'].includes(p.tabsStyle) ? p.tabsStyle : 'underline';
     p.styleVariant = ['default','minimal','bordered'].includes(p.styleVariant) ? p.styleVariant : 'default';
@@ -1108,7 +1128,7 @@
       <div style="position:relative;overflow:hidden;border-radius:16px;border:1px solid rgba(17,24,39,.2);min-height:200px;background:${bg};background-size:cover;background-position:center">
         <div style="position:absolute;inset:0;background:rgba(0,0,0,${p.overlayOpacity ?? 0.35});"></div>
         <div style="position:relative;padding:16px;">
-          <div style="background:#ffffff; border-radius:14px; padding:12px 14px; max-width:70%; box-shadow:0 8px 24px rgba(0,0,0,.18);">
+          <div style="background:#ffffff; border-radius:14px; padding:12px 14px; max-width:70%;">
             <div style="font-weight:900;font-size:18px;margin-bottom:8px;color:#111827">${title}</div>
             <div style="color:#111827">${body}</div>
           </div>
@@ -1126,7 +1146,7 @@
     const overlay = Math.min(Math.max(parseFloat(p.overlayOpacity ?? 0.6), 0), 1);
     return `
       <div class="nx-hero-banner-preview" style="background:${bg};background-size:cover;background-position:center;position:relative;overflow:hidden;border-radius:10px;min-height:240px;border:1px solid rgba(0,0,0,.15);display:grid;place-items:center;padding:24px;">
-        <div style="max-width:780px;width:100%;text-align:center;color:#fff;display:grid;gap:18px;padding:24px;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.22);background:rgba(0,0,0,${overlay});">
+        <div style="max-width:780px;width:100%;text-align:center;color:#fff;display:grid;gap:18px;padding:24px;border-radius:14px;background:rgba(0,0,0,${overlay});">
           <div style="font-size:32px;font-weight:800;line-height:1.2;">${heading}</div>
           <div style="display:inline-flex;justify-content:center;">
             <span style="display:inline-flex;align-items:center;gap:8px;padding:12px 18px;background:#1f3b87;border-radius:12px;color:#fff;font-weight:800;">${ctaContent}</span>
@@ -1385,6 +1405,66 @@
       openSet.clear(); openSet.add(first);
     }
     const indPos = acc.showIndicator ? acc.indicatorPosition : 'none';
+    const isGrouped = acc.mode === 'accordion' && acc.accStyle === 'grouped';
+    const renderSubItems = (subItems) => {
+      if (!Array.isArray(subItems) || !subItems.length) return '';
+      return `
+        <ul class="nx-accordion-sublist">
+          ${subItems.map((sub) => {
+            const label = esc(sub?.label || '');
+            const url = esc(sub?.url || '');
+            if (!label) return '';
+            return `<li>${url ? `<a href="${url}">${label}</a>` : label}</li>`;
+          }).join('')}
+        </ul>
+      `;
+    };
+
+    if (isGrouped) {
+      const parent = items[0] || { title: 'Group', subItems: [] };
+      const children = items.slice(1);
+      const isOpen = openSet.has(0) || openSet.size > 0;
+      const headId = `acc-head-${blk.id}-0`;
+      const panelId = `acc-panel-${blk.id}-0`;
+      return `
+        <div class="nx-accordion nx-accordion--grouped"
+          data-allow="multiple"
+          data-collapse="allow"
+          data-indicator="right"
+          data-spacing="compact"
+          data-style="minimal"
+          data-dividers="on"
+          data-border="${acc.showBorder ? 'on' : 'off'}"
+          data-grouped="1"
+          data-bid="${blk.id}"
+          style="${vars.join(';')}">
+          <div class="nx-accordion-item nx-accordion-parent ${isOpen ? 'is-open' : ''}" data-idx="0">
+            <button type="button" class="nx-accordion-head" id="${headId}" aria-expanded="${isOpen ? 'true' : 'false'}" aria-controls="${panelId}">
+              <span class="nx-accordion-title">${esc(parent.title || 'Group')}</span>
+              <span class="nx-accordion-plus" aria-hidden="true">${isOpen ? '−' : '+'}</span>
+            </button>
+            <div class="nx-accordion-panel" id="${panelId}" role="region" aria-labelledby="${headId}" ${isOpen ? '' : 'hidden'}>
+              <div class="nx-accordion-body">
+                ${renderSubItems(parent.subItems)}
+                <div class="nx-accordion-childlist">
+                  ${children.map((it, idx) => `
+                    <div class="nx-accordion-childrow" data-idx="${idx + 1}">
+                      <button type="button" class="nx-accordion-childhead">
+                        <span class="nx-accordion-title">${esc(it.title || `Item ${idx + 2}`)}</span>
+                        <span class="nx-accordion-plus" aria-hidden="true">+</span>
+                      </button>
+                      <div class="nx-accordion-childpanel" hidden>
+                        <div class="nx-accordion-body">${renderSubItems(it.subItems) || '<span class="nx-muted">Add links…</span>'}</div>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
 
     return `
       <div class="nx-accordion"
@@ -1441,7 +1521,9 @@
     el.dataset.accInit = '1';
     const allowMultiple = el.dataset.allow === 'multiple';
     const allowCollapse = el.dataset.collapse !== 'force';
+  const isGrouped = el.dataset.grouped === '1';
   const items = el.querySelectorAll('.nx-accordion-item');
+  const childRows = isGrouped ? el.querySelectorAll('.nx-accordion-childrow') : [];
 
   const savePreviewState = () => {
     const opens = [];
@@ -1455,6 +1537,7 @@
     const btn = item.querySelector('.nx-accordion-head');
     const panel = item.querySelector('.nx-accordion-panel');
     const chevron = btn?.querySelector('.nx-accordion-chevron');
+    const plus = btn?.querySelector('.nx-accordion-plus');
     if (!btn || !panel) return;
     const applyHeight = () => {
       panel.style.maxHeight = open ? `${panel.scrollHeight}px` : '0px';
@@ -1462,6 +1545,19 @@
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
     panel.setAttribute('aria-hidden', open ? 'false' : 'true');
     if (chevron) chevron.classList.toggle('open', open);
+    if (plus) plus.textContent = open ? '−' : '+';
+    if (isGrouped && item.classList.contains('nx-accordion-parent') && !open) {
+      childRows.forEach((row) => {
+        const childPanel = row.querySelector('.nx-accordion-childpanel');
+        const childPlus = row.querySelector('.nx-accordion-plus');
+        row.classList.remove('is-open');
+        if (childPanel) {
+          childPanel.hidden = true;
+          childPanel.style.maxHeight = '0px';
+        }
+        if (childPlus) childPlus.textContent = '+';
+      });
+    }
     if (open) {
       item.classList.add('is-open');
       panel.hidden = false;
@@ -1489,6 +1585,30 @@
       };
       panel.addEventListener('transitionend', onEnd);
       setTimeout(onEnd, 300); // fallback if transitionend doesn't fire
+    }
+  };
+
+  const toggleChild = (row) => {
+    const panel = row.querySelector('.nx-accordion-childpanel');
+    const plus = row.querySelector('.nx-accordion-plus');
+    if (!panel) return;
+    const open = panel.hidden;
+    row.classList.toggle('is-open', open);
+    panel.hidden = !open;
+    if (plus) plus.textContent = open ? '−' : '+';
+    if (open) {
+      panel.style.maxHeight = `${panel.scrollHeight}px`;
+      setTimeout(() => { panel.style.maxHeight = 'none'; }, 180);
+    } else {
+      panel.style.maxHeight = `${panel.scrollHeight}px`;
+      requestAnimationFrame(() => { panel.style.maxHeight = '0px'; });
+      const onEnd = () => {
+        panel.hidden = true;
+        panel.style.maxHeight = '0px';
+        panel.removeEventListener('transitionend', onEnd);
+      };
+      panel.addEventListener('transitionend', onEnd);
+      setTimeout(onEnd, 260);
     }
   };
 
@@ -1527,6 +1647,22 @@
 
   // Initialize heights
   items.forEach(item => setOpen(item, item.classList.contains('is-open'), true));
+  childRows.forEach((row) => {
+    const head = row.querySelector('.nx-accordion-childhead');
+    if (!head) return;
+    const panel = row.querySelector('.nx-accordion-childpanel');
+    if (panel) panel.style.maxHeight = '0px';
+    head.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleChild(row);
+    });
+    head.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleChild(row);
+      }
+    });
+  });
   savePreviewState();
 }
 
@@ -3086,6 +3222,7 @@
       const renderLen = acc.mode === 'tabs' ? tabCap : items.length;
       const activeIdx = getAccordionFocus(blk.id, renderLen);
       const activeItem = items[activeIdx] || items[0];
+      const isGrouped = acc.mode === 'accordion' && acc.accStyle === 'grouped';
       const itemOptions = items.map((it,i) => `<option value="${i}" ${acc.defaultIndex===i ? 'selected' : ''}>Item ${i + 1}</option>`).join('');
       const tabOptions = items.slice(0, maxTabs).map((it,i) => `<option value="${i}" ${acc.tabsIndex===i ? 'selected' : ''}>Item ${i + 1}</option>`).join('');
       const titleForBtn = (t, i) => esc(t || `Item ${i + 1}`);
@@ -3093,6 +3230,7 @@
       const tabLimitNote = acc.mode === 'tabs'
         ? `<div class="nx-muted" style="margin-top:6px">Tabs span the full width and show up to ${maxTabs} items. Reorder to choose which appear.</div>`
         : '';
+      const subItems = Array.isArray(activeItem?.subItems) ? activeItem.subItems : [];
 
       html += `
         <div class="nx-strong" style="margin-bottom:8px">Items</div>
@@ -3124,10 +3262,19 @@
             <span class="mode-current">Current</span>
           </button>
         </div>
+        <div id="acc_layout_wrap" style="${acc.mode === 'accordion' ? 'margin-top:12px' : 'display:none'}">
+          <label class="nx-muted">Accordion layout</label>
+          <select id="acc_layout_style" class="nx-toolsel" style="width:100%;margin-top:6px">
+            <option value="standard" ${acc.accStyle === 'standard' ? 'selected' : ''}>Standard</option>
+            <option value="grouped" ${acc.accStyle === 'grouped' ? 'selected' : ''}>Cite Them Right grouped</option>
+          </select>
+          ${isGrouped ? '<div class="nx-muted" style="margin-top:6px">In grouped mode, item 1 is the main section and later items become nested expandable groups with link lists.</div>' : ''}
+        </div>
 
         <div class="nx-strong" style="margin-bottom:8px">Item content</div>
         <label class="nx-muted">Title</label><br>
         <input id="acc_item_title" value="${esc(activeItem?.title || '')}" style="${inputStyle}">
+        <div id="acc_standard_item_fields" style="${isGrouped ? 'display:none' : ''}">
         <br><br>
         <label class="nx-toggle" style="display:inline-flex;align-items:center;gap:8px;margin-bottom:8px">
           <input id="acc_item_showimg" type="checkbox" ${activeItem?.showHeaderImg ? 'checked' : ''}>
@@ -3150,10 +3297,27 @@
           <span class="nx-toggle-ui"></span>
           <span class="nx-toggle-label">Open by default (overrides global)</span>
         </label>
+        </div>
+
+        <div style="margin-top:${isGrouped ? '14px' : '18px'}">
+          <div class="nx-strong" style="margin-bottom:8px">${isGrouped ? 'Links' : 'Link list (optional)'}</div>
+          <div id="acc_subitems_list">
+            ${subItems.map((sub, idx) => `
+              <div class="nx-subitem-row" data-idx="${idx}">
+                <input data-role="label" value="${esc(sub.label || '')}" placeholder="Link label" style="${inputStyle}">
+                <input data-role="url" value="${esc(sub.url || '')}" placeholder="https://..." style="${inputStyle};margin-top:8px">
+                <button class="smallbtn" type="button" data-act="sub-del" data-idx="${idx}" style="margin-top:8px">Remove link</button>
+              </div>
+            `).join('')}
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="smallbtn" id="acc_add_subitem" type="button">Add link</button>
+          </div>
+        </div>
 
         <div class="nx-sep"></div>
         <div class="nx-strong" style="margin-bottom:8px">Behaviour</div>
-        <div id="acc_behaviour_acc" style="${acc.mode === 'accordion' ? '' : 'display:none'}">
+        <div id="acc_behaviour_acc" style="${acc.mode === 'accordion' && !isGrouped ? '' : 'display:none'}">
           <label class="nx-toggle" style="display:inline-flex;align-items:center;gap:8px;margin-bottom:8px">
             <input id="acc_allow_multi" type="checkbox" ${acc.allowMultiple ? 'checked' : ''}>
             <span class="nx-toggle-ui"></span>
@@ -4107,6 +4271,7 @@
       document.getElementById('acc_mode_acc')?.addEventListener('click', () => {
         pushHistory();
         acc.mode = 'accordion';
+        if (!['standard','grouped'].includes(acc.accStyle)) acc.accStyle = 'standard';
         setAccordionFocus(blk.id, Math.min(getAccordionFocus(blk.id, items.length), items.length - 1));
         persistUnsaved();
         renderInspector();
@@ -4116,6 +4281,7 @@
       document.getElementById('acc_mode_tabs')?.addEventListener('click', () => {
         pushHistory();
         acc.mode = 'tabs';
+        acc.accStyle = 'standard';
         const cap = Math.max(1, Math.min(items.length, maxTabs));
         const desired = getAccordionFocus(blk.id, cap);
         setAccordionFocus(blk.id, Math.max(0, Math.min(desired, cap - 1)));
@@ -4272,6 +4438,18 @@
       }
       bind('acc_tabs_align', 'tabsAlign', (v) => ['left','center','right'].includes(v) ? v : 'left');
       bind('acc_tabs_style', 'tabsStyle', (v) => ['underline','pills','segmented'].includes(v) ? v : 'underline');
+      const layoutStyle = document.getElementById('acc_layout_style');
+      if (layoutStyle) {
+        layoutStyle.addEventListener('change', (e) => {
+          startEditSession();
+          acc.accStyle = e.target.value === 'grouped' ? 'grouped' : 'standard';
+          persistUnsaved();
+          renderInspector();
+          updateBlockCard(blk);
+          bindAccordionPreviews();
+          endEditSession();
+        });
+      }
 
       bind('acc_style', 'styleVariant', (v) => ['default','minimal','bordered'].includes(v) ? v : 'default');
 
@@ -4317,6 +4495,42 @@
       bind('acc_border_color', 'borderColor', (v) => v.trim());
       bind('acc_img_pos', 'headerImgPos', (v) => ['left','right'].includes(v) ? v : 'left');
       bind('acc_img_size', 'headerImgSize', (v) => ['small','medium','large'].includes(v) ? v : 'medium');
+
+      document.getElementById('acc_add_subitem')?.addEventListener('click', () => {
+        pushHistory();
+        activeItem.subItems = Array.isArray(activeItem.subItems) ? activeItem.subItems : [];
+        activeItem.subItems.push({ id: uuid(), label: '', url: '' });
+        persistUnsaved();
+        renderInspector();
+        updateBlockCard(blk);
+      });
+      document.querySelectorAll('#acc_subitems_list [data-act="sub-del"]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx || '-1', 10);
+          if (!Number.isInteger(idx) || idx < 0) return;
+          pushHistory();
+          activeItem.subItems.splice(idx, 1);
+          persistUnsaved();
+          renderInspector();
+          updateBlockCard(blk);
+        });
+      });
+      document.querySelectorAll('#acc_subitems_list .nx-subitem-row').forEach((row) => {
+        const idx = parseInt(row.dataset.idx || '-1', 10);
+        const sub = activeItem.subItems?.[idx];
+        if (!sub) return;
+        row.querySelectorAll('input[data-role]').forEach((input) => {
+          input.addEventListener('focus', startEditSession);
+          input.addEventListener('input', (e) => {
+            const role = e.target.dataset.role;
+            if (role === 'label' || role === 'url') {
+              sub[role] = e.target.value || '';
+              refreshPreview();
+            }
+          });
+          input.addEventListener('blur', endEditSession);
+        });
+      });
     }
     if (blk.type === 'exampleCard') {
       const toggle = document.getElementById('p_youtry_toggle');
