@@ -56,11 +56,20 @@
   const scheduleSave = document.getElementById('scheduleSave');
   const scheduleCancel = document.getElementById('scheduleCancel');
   const scheduleClose = document.getElementById('scheduleClose');
+  const linkModal = document.getElementById('linkModal');
+  const linkModalClose = document.getElementById('linkModalClose');
+  const linkModalCancel = document.getElementById('linkModalCancel');
+  const linkModalApply = document.getElementById('linkModalApply');
+  const linkModalSearch = document.getElementById('linkModalSearch');
+  const linkModalRows = document.getElementById('linkModalRows');
+  const linkModalCurrent = document.getElementById('linkModalCurrent');
 
   const textToolbar = document.getElementById('textToolbar');
+  const textToolbarToggle = document.getElementById('textToolbarToggle');
   const tLink = document.getElementById('t_link');
   const tFontFamily = document.getElementById('t_fontFamily');
   const tFontSize = document.getElementById('t_fontSize');
+  const sitePages = Array.isArray(window.NX_SITE_PAGES) ? window.NX_SITE_PAGES : [];
 
   // --- Determine routing style (for debug only)
   const routingMode = apiSave.includes('/index.php/') ? 'non-clean' : 'clean';
@@ -68,6 +77,7 @@
   let savedTextSelection = null;
   let isDirty = true;
   let pageStatus = (statusBadge?.textContent || 'draft').toLowerCase();
+  let linkModalState = null;
 
   const setSaveState = (state, message) => {
     if (saveStateEl) saveStateEl.textContent = message || (state === 'saved' ? 'All changes saved' : 'Unsaved changes');
@@ -181,6 +191,159 @@
     sel.addRange(savedTextSelection);
   }
 
+  function normalizeLinkValue(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      return new URL(raw, window.location.origin).href;
+    } catch (e) {
+      return raw;
+    }
+  }
+
+  function findSelectionAnchor(target, sel) {
+    if (!target || !sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    const nodes = [sel.anchorNode, sel.focusNode, range.startContainer, range.endContainer];
+    for (const node of nodes) {
+      const el = node && node.nodeType === 1 ? node : node?.parentElement;
+      const anchor = el?.closest?.('a');
+      if (anchor && target.contains(anchor)) return anchor;
+    }
+    const common = range.commonAncestorContainer?.nodeType === 1
+      ? range.commonAncestorContainer
+      : range.commonAncestorContainer?.parentElement;
+    return common?.closest?.('a') && target.contains(common.closest('a')) ? common.closest('a') : common?.querySelector?.('a') || null;
+  }
+
+  function getLinkSelectionContext() {
+    restoreTextSelection();
+
+    const sel = window.getSelection();
+    const richFields = findVisibleRichFields();
+    const target = (sel?.anchorNode && sel.anchorNode.parentElement?.closest('.nx-rich'))
+      || document.activeElement?.closest?.('.nx-rich')
+      || richFields[0]
+      || null;
+
+    if (!target || !sel || sel.rangeCount === 0 || !target.contains(sel.anchorNode)) {
+      return { error: 'Highlight the text in the inspector, then click Link.' };
+    }
+
+    const currentAnchor = findSelectionAnchor(target, sel);
+    if (sel.isCollapsed && !currentAnchor) {
+      return { error: 'Highlight the text in the inspector, then click Link.' };
+    }
+
+    return {
+      target,
+      selectionCollapsed: !!sel.isCollapsed,
+      currentAnchor,
+      currentUrl: currentAnchor?.getAttribute('href') || ''
+    };
+  }
+
+  function renderLinkRows() {
+    if (!linkModalRows) return;
+    const query = (linkModalSearch?.value || '').trim().toLowerCase();
+    const selectedHref = normalizeLinkValue(linkModalState?.selectedPath || '');
+    const rows = sitePages.filter((page) => {
+      if (!query) return true;
+      const haystack = [page.name, page.path, String(page.id)].join(' ').toLowerCase();
+      return haystack.includes(query);
+    });
+
+    if (!rows.length) {
+      linkModalRows.innerHTML = `<tr><td class="nx-link-empty" colspan="3">No pages match that filter.</td></tr>`;
+      return;
+    }
+
+    linkModalRows.innerHTML = rows.map((page) => {
+      const path = String(page.path || '');
+      const isSelected = normalizeLinkValue(path) === selectedHref;
+      return `
+        <tr data-link-path="${esc(path)}" class="${isSelected ? 'is-selected' : ''}">
+          <td>${esc(page.name || 'Untitled')}</td>
+          <td><code>${esc(path)}</code></td>
+          <td class="nx-link-id">${esc(page.id)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function updateLinkModalCurrent() {
+    if (!linkModalCurrent) return;
+    const currentUrl = String(linkModalState?.currentUrl || '').trim();
+    if (!currentUrl) {
+      linkModalCurrent.style.display = 'none';
+      linkModalCurrent.innerHTML = '';
+      return;
+    }
+    linkModalCurrent.style.display = '';
+    linkModalCurrent.innerHTML = `<strong>Current link:</strong> <code>${esc(currentUrl)}</code>`;
+  }
+
+  function updateLinkModalApplyState() {
+    if (linkModalApply) linkModalApply.disabled = !String(linkModalState?.selectedPath || '').trim();
+  }
+
+  function closeLinkModal() {
+    if (linkModal) linkModal.style.display = 'none';
+    linkModalState = null;
+  }
+
+  function openLinkModal(context) {
+    if (!linkModal || !linkModalSearch) return;
+
+    const currentHref = normalizeLinkValue(context?.currentUrl || '');
+    const selectedPage = sitePages.find((page) => normalizeLinkValue(page.path) === currentHref);
+    linkModalState = {
+      target: context?.target || null,
+      currentAnchor: context?.currentAnchor || null,
+      currentUrl: context?.currentUrl || '',
+      selectionCollapsed: !!context?.selectionCollapsed,
+      selectedPath: selectedPage?.path || ''
+    };
+
+    linkModalSearch.value = '';
+    updateLinkModalCurrent();
+    renderLinkRows();
+    updateLinkModalApplyState();
+    linkModal.style.display = 'flex';
+    linkModalSearch.focus();
+  }
+
+  function applySelectedPageLink() {
+    const href = String(linkModalState?.selectedPath || '').trim();
+    const target = linkModalState?.target;
+    if (!href || !target) return;
+
+    restoreTextSelection();
+    const sel = window.getSelection();
+    const currentAnchor = linkModalState?.currentAnchor || findSelectionAnchor(target, sel);
+
+    if (currentAnchor && (linkModalState?.selectionCollapsed || sel?.isCollapsed)) {
+      currentAnchor.setAttribute('href', href);
+      currentAnchor.style.color = 'inherit';
+      currentAnchor.style.textDecoration = 'inherit';
+      currentAnchor.removeAttribute('target');
+      currentAnchor.removeAttribute('rel');
+    } else {
+      document.execCommand('createLink', false, href);
+      const activeSel = window.getSelection();
+      const appliedAnchor = findSelectionAnchor(target, activeSel) || currentAnchor;
+      if (appliedAnchor) {
+        appliedAnchor.style.color = 'inherit';
+        appliedAnchor.style.textDecoration = 'inherit';
+        appliedAnchor.removeAttribute('target');
+        appliedAnchor.removeAttribute('rel');
+      }
+    }
+
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    closeLinkModal();
+  }
+
   // --- Load doc (prefer compatible unsaved local state)
   const storageKey = `nx_unsaved_doc_${pageId}`;
   const pageUpdatedAt = shell?.dataset?.pageUpdatedAt || '';
@@ -244,7 +407,12 @@
 
   const siteSlug = (shell?.dataset?.siteSlug || '').toLowerCase();
   const collectionStyle = (shell?.dataset?.collectionStyle || '').trim();
-  const CITATION_URL = `${shell.dataset.base}/api/citation/examples?site_slug=${encodeURIComponent(siteSlug)}${collectionStyle ? `&referencing_style=${encodeURIComponent(collectionStyle)}` : ''}`;
+  const pageCategory = (shell?.dataset?.pageCategory || '').trim();
+  const pageCitationStyle = collectionStyle;
+  const citationParams = new URLSearchParams({ site_slug: siteSlug });
+  if (pageCitationStyle) citationParams.set('referencing_style', pageCitationStyle);
+  if (pageCategory) citationParams.set('category', pageCategory);
+  const CITATION_URL = `${shell.dataset.base}/api/citation/examples?${citationParams.toString()}`;
   const CITATION_FALLBACK = [
     {
       id: 'book_one_author',
@@ -264,7 +432,7 @@
         const res = await fetch(CITATION_URL, { credentials: 'same-origin' });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
-        if (data && data.ok && Array.isArray(data.examples) && data.examples.length) {
+        if (data && data.ok && Array.isArray(data.examples)) {
           citationExamplesCache = data.examples;
           return citationExamplesCache;
         }
@@ -289,6 +457,42 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
   }[c]));
+  const isDomNode = (value) => {
+    return !!value && typeof value === 'object' && typeof value.nodeType === 'number';
+  };
+  const toTransportSafe = (value, seen = new WeakSet()) => {
+    if (value == null) return value;
+    const type = typeof value;
+    if (type === 'string' || type === 'boolean') return value;
+    if (type === 'number') return Number.isFinite(value) ? value : null;
+    if (type === 'bigint') return value.toString();
+    if (type === 'undefined' || type === 'function' || type === 'symbol') return undefined;
+    if (isDomNode(value)) return undefined;
+
+    if (Array.isArray(value)) {
+      return value.map((item) => {
+        const next = toTransportSafe(item, seen);
+        return next === undefined ? null : next;
+      });
+    }
+
+    if (type !== 'object') return undefined;
+    if (seen.has(value)) return undefined;
+    seen.add(value);
+
+    const out = {};
+    Object.entries(value).forEach(([key, val]) => {
+      const next = toTransportSafe(val, seen);
+      if (next !== undefined) out[key] = next;
+    });
+
+    seen.delete(value);
+    return out;
+  };
+  const getTransportDoc = () => {
+    const safe = toTransportSafe(doc);
+    return safe && typeof safe === 'object' ? safe : { version: 1, rows: [] };
+  };
   const trunc = (s, n = 10) => {
     s = String(s || '');
     if (s.length <= n) return s;
@@ -387,7 +591,12 @@
       case 'textbox': return withDefaultBlockStyle({ id: uuid(), type: 'textbox', props: { label: 'Textbox', placeholder: 'Type here…', lines: 3, bgColor: '' } });
       case 'citationOrder': return withDefaultBlockStyle({ id: uuid(), type: 'citationOrder', props: { title: 'Citation order', body: '• Author/editor\n• Year of publication (in round brackets)\n• Title (in italics)\n• Edition (edition number if not the first edn and/or rev. edn)\n• Publisher\n• Series and volume number (where relevant)' }, styleText:{} });
       case 'exampleCard': return withDefaultBlockStyle({ id: uuid(), type: 'exampleCard', props: { exampleId: 'book_one_author', heading: 'Example: book with one author', body: 'In-text citations\n\nThe overview by McCormick (2023) confirms Hill’s experience (2023, pp. 46–52).\n\nNB: No page number citation for McCormick because the reference is to the whole book.\n\nSpecific pages are being cited in Hill’s book.\n\nReference list\n\nHill, F. (2023) There’s nothing for you here: finding opportunity in the twenty-first century. Mariner Books.\n\nMcCormick, J.M. (2023) American foreign policy and process. 7th edn. Cambridge University Press.', youTry: 'Surname, Initial. (Year of publication) Title. Edition. Publisher.', showYouTry: true }, styleText:{} });
-      case 'panel': return withDefaultBlockStyle({ id: uuid(), type: 'panel', props: { image: '', alt: '', body: 'Panel text…', layout: 'img-top', splitRatio: '50-50' }, styleText:{} });
+      case 'panel': return withDefaultBlockStyle({
+        id: uuid(),
+        type: 'panel',
+        props: { image: '', alt: '', body: 'Panel text…', layout: 'img-top', splitRatio: '50-50' },
+        styleText: { fontSize: 24, align: 'center' }
+      });
       case 'testimonial': return withDefaultBlockStyle({ id: uuid(), type: 'testimonial', props: { body: 'I am meeting my deadlines consistently!' }, styleText:{} });
       case 'download': return withDefaultBlockStyle({ id: uuid(), type: 'download', props: { label: 'Download', url: '' }, styleText:{} });
       case 'heroBanner': return withDefaultBlockStyle({ id: uuid(), type: 'heroBanner', props: { heading: 'Welcome to Cite Them Right', cta: 'Choose your referencing style', ctaHtml: '', bgImage: '', overlayOpacity: 0.6 }, styleText:{} });
@@ -478,20 +687,20 @@
       case 'accordion':
       case 'accordionTabs': return withDefaultBlockStyle({ id: uuid(), type: 'accordionTabs', props: {
         mode: 'accordion', // accordion | tabs
-        accStyle: 'standard', // standard | grouped
-        allowMultiple: false,
+        accStyle: 'grouped', // standard | grouped
+        allowMultiple: true,
         allowCollapseAll: true,
-        defaultOpen: 'none', // none | first | custom
+        defaultOpen: 'first', // none | first | custom
         defaultIndex: 0,
         tabsDefault: 'first', // first | custom
         tabsIndex: 0,
         tabsAlign: 'left', // left | center | right
         tabsStyle: 'underline', // underline | pills | segmented
-        styleVariant: 'default',
+        styleVariant: 'minimal',
         showDividers: true,
         showIndicator: true,
         indicatorPosition: 'right',
-        spacing: 'default',
+        spacing: 'compact',
         headerBg: '',
         headerColor: '',
         activeHeaderBg: '',
@@ -502,7 +711,63 @@
         headerImgPos: 'left',
         headerImgSize: 'large',
         items: [
-          { id: uuid(), title: 'Accordion item', body: '', bodyHtml: '', openDefault: false, headerImg:'', headerAlt:'', showHeaderImg:false }
+          {
+            id: uuid(),
+            title: 'Main browse section',
+            body: '',
+            bodyHtml: '',
+            openDefault: true,
+            headerImg:'',
+            headerAlt:'',
+            showHeaderImg:false,
+            subItems: [
+              { id: uuid(), label: 'Browse link 1', url: '#' },
+              { id: uuid(), label: 'Browse link 2', url: '#' },
+              { id: uuid(), label: 'Browse link 3', url: '#' }
+            ]
+          },
+          {
+            id: uuid(),
+            title: 'Subsection 1',
+            body: '',
+            bodyHtml: '',
+            openDefault: false,
+            headerImg:'',
+            headerAlt:'',
+            showHeaderImg:false,
+            subItems: [
+              { id: uuid(), label: 'Sub link 1', url: '#' },
+              { id: uuid(), label: 'Sub link 2', url: '#' }
+            ]
+          },
+          {
+            id: uuid(),
+            title: 'Subsection 2',
+            body: '',
+            bodyHtml: '',
+            openDefault: false,
+            headerImg:'',
+            headerAlt:'',
+            showHeaderImg:false,
+            subItems: [
+              { id: uuid(), label: 'Sub link 1', url: '#' },
+              { id: uuid(), label: 'Sub link 2', url: '#' }
+            ]
+          },
+          {
+            id: uuid(),
+            title: 'Subsection 3',
+            body: '',
+            bodyHtml: '',
+            openDefault: false,
+            headerImg:'',
+            headerAlt:'',
+            showHeaderImg:false,
+            subItems: [
+              { id: uuid(), label: 'Sub link 1', url: '#' },
+              { id: uuid(), label: 'Sub link 2', url: '#' }
+            ]
+          }
         ]
       }});
       case 'carousel': return withDefaultBlockStyle({ id: uuid(), type: 'carousel', props: {
@@ -846,6 +1111,41 @@
     if (row.collapsed == null) row.collapsed = false;
     if (row.equalHeight == null) row.equalHeight = true;
     return row;
+  }
+
+  function getRowAudience(row) {
+    if (!row || typeof row !== 'object') return 'all';
+    if (row.visibility === 'signed_in' || row.visibility === 'signed_out' || row.visibility === 'all') return row.visibility;
+    if (row.visibleForSignedIn === true) return 'signed_in';
+    if (row.visibleForSignedIn === false) return 'signed_out';
+    return 'all';
+  }
+
+  function setRowAudience(row, audience) {
+    if (!row || typeof row !== 'object') return;
+    const next = ['signed_in', 'signed_out', 'all'].includes(audience) ? audience : 'all';
+    row.visibility = next;
+    if (next === 'signed_in') row.visibleForSignedIn = true;
+    else if (next === 'signed_out') row.visibleForSignedIn = false;
+    else delete row.visibleForSignedIn;
+  }
+
+  function rowAudienceLabel(row) {
+    const audience = getRowAudience(row);
+    if (audience === 'signed_in') return 'Signed in';
+    if (audience === 'signed_out') return 'Signed out';
+    return 'Both';
+  }
+
+  function renderRowAudienceToggle(audience, scope = 'toolbar') {
+    const current = ['signed_in', 'signed_out', 'all'].includes(audience) ? audience : 'all';
+    return `
+      <div class="nx-row-audience-toggle nx-row-audience-toggle-${scope}" data-audience="${current}" role="group" aria-label="Row audience">
+        <button class="nx-row-audience-option ${current === 'signed_out' ? 'is-active' : ''}" data-act="setaudience" data-audience="signed_out" type="button">Signed out</button>
+        <button class="nx-row-audience-option ${current === 'all' ? 'is-active' : ''}" data-act="setaudience" data-audience="all" type="button">Both</button>
+        <button class="nx-row-audience-option ${current === 'signed_in' ? 'is-active' : ''}" data-act="setaudience" data-audience="signed_in" type="button">Signed in</button>
+      </div>
+    `;
   }
 
   function isTextLike(blk) {
@@ -2051,6 +2351,19 @@
   openRevisionsBtn?.addEventListener('click', showRevisions);
   backToInspectorBtn?.addEventListener('click', showInspector);
 
+  function setTextToolbarCollapsed(collapsed) {
+    if (!textToolbar || !textToolbarToggle) return;
+    textToolbar.classList.toggle('is-collapsed', collapsed);
+    textToolbarToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    textToolbarToggle.setAttribute('title', collapsed ? 'Expand formatting toolbar' : 'Collapse formatting toolbar');
+    textToolbarToggle.textContent = collapsed ? '▾' : '▴';
+  }
+
+  textToolbarToggle?.addEventListener('click', () => {
+    if (!textToolbar) return;
+    setTextToolbarCollapsed(!textToolbar.classList.contains('is-collapsed'));
+  });
+
   // Panel collapse toggles
   const toggleLeft = document.getElementById('toggleLeft');
   const toggleRight = document.getElementById('toggleRight');
@@ -2157,6 +2470,16 @@
 
   function applyFontSize(px) {
     const size = Math.max(10, Math.min(72, parseInt(px || '0', 10) || 0));
+    if (!size) return;
+    const blk = getSelectedBlock();
+    if (blk && isTextLike(blk)) {
+      const st = ensureTextStyle(blk);
+      st.fontSize = size;
+      persistUnsaved();
+      updateBlockCard(blk);
+      setToolbarFontSizeValue(size);
+    }
+
     restoreTextSelection();
     const sel = window.getSelection();
     const richFields = findVisibleRichFields();
@@ -2220,6 +2543,17 @@
     tFontSize.value = String(best);
   }
 
+  function getDefaultBlockFontSizePx(blk) {
+    if (!blk || typeof blk !== 'object') return null;
+    if (blk.type === 'panel') return 24;
+    if (blk.type === 'heading') {
+      const level = parseInt(blk.props?.level || '2', 10);
+      const map = { 1: 28, 2: 24, 3: 20, 4: 18, 5: 16, 6: 14 };
+      return map[level] || 24;
+    }
+    return 16;
+  }
+
   function inferBlockFontSizePx(blk) {
     if (!blk || !blk.id) return null;
     const st = ensureTextStyle(blk);
@@ -2227,9 +2561,10 @@
       const direct = parseInt(st.fontSize, 10);
       if (Number.isFinite(direct) && direct > 0) return direct;
     }
+    const fallbackSize = getDefaultBlockFontSizePx(blk);
     const blockEl = canvas.querySelector(`.block[data-bid="${CSS.escape(blk.id)}"]`);
     const previewEl = blockEl?.querySelector('.nx-block-preview');
-    if (!previewEl) return null;
+    if (!previewEl) return fallbackSize;
 
     const candidates = previewEl.querySelectorAll('[style*="font-size"], h1, h2, h3, h4, h5, h6, p, li, div, span, a, strong, em');
     let target = null;
@@ -2243,11 +2578,12 @@
 
     const computed = window.getComputedStyle(target).fontSize || '';
     const px = parseInt(computed, 10);
-    return Number.isFinite(px) && px > 0 ? px : null;
+    return Number.isFinite(px) && px > 0 ? px : fallbackSize;
   }
 
   function syncToolbarFromSelection() {
-    if (textToolbar) textToolbar.style.display = 'flex';
+    if (textToolbar) textToolbar.style.display = 'block';
+    setTextToolbarCollapsed(false);
 
     if (revisionsView && revisionsView.style.display !== 'none') {
       return;
@@ -2325,89 +2661,62 @@
   // Real hyperlink insertion uses contenteditable
   tLink?.addEventListener('mousedown', (e) => {
     e.preventDefault();
-
-    // If CTA text (hero banner) is active, set the CTA link directly
-    const active = document.activeElement;
-    if (active && active.id === 'p_hb_cta') {
-      const urlRaw = prompt('Enter URL for CTA (https://...)');
-      if (!urlRaw) return;
-      let url = urlRaw.trim();
-      if (!/^https?:\/\//i.test(url) && !/^mailto:/i.test(url)) url = 'https://' + url;
-      const linkInput = document.getElementById('p_hb_link');
-      if (linkInput) linkInput.value = url;
-      const blk = getSelectedBlock();
-      if (blk) { blk.props = blk.props || {}; blk.props.ctaLink = url; persistUnsaved(); updateBlockCard(blk); }
+    const context = getLinkSelectionContext();
+    if (context.error) {
+      alert(context.error);
       return;
     }
-
-    restoreTextSelection();
-
-    const sel = window.getSelection();
-    const rangeOk = sel && sel.rangeCount > 0 && !sel.isCollapsed;
-    const richFields = findVisibleRichFields();
-    const target = (sel?.anchorNode && sel.anchorNode.parentElement?.closest('.nx-rich')) || document.activeElement?.closest?.('.nx-rich') || richFields[0];
-
-    if (!rangeOk || !target || !target.contains(sel.anchorNode)) {
-      alert('Highlight the text in the inspector, then click Link.');
-      return;
-    }
-
-    const urlRaw = prompt('Enter URL (https://...)');
-    if (!urlRaw) return;
-
-    let url = urlRaw.trim();
-    if (!/^https?:\/\//i.test(url) && !/^mailto:/i.test(url)) url = 'https://' + url;
-
-    document.execCommand('createLink', false, url);
-
-    const range = sel.getRangeAt(0);
-    const links = new Set();
-    const common = range.commonAncestorContainer.nodeType === 1
-      ? range.commonAncestorContainer
-      : range.commonAncestorContainer.parentElement;
-
-    [sel.anchorNode, sel.focusNode, range.startContainer, range.endContainer].forEach((node) => {
-      const el = node && node.nodeType === 1 ? node : node?.parentElement;
-      const link = el?.closest?.('a');
-      if (link && target.contains(link)) links.add(link);
-    });
-    common?.querySelectorAll?.('a').forEach((aEl) => {
-      if (target.contains(aEl)) links.add(aEl);
-    });
-
-    links.forEach((a) => {
-      a.setAttribute('target', '_blank');
-      a.setAttribute('rel', 'noopener noreferrer');
-      // Preserve existing typography; hyperlink should not force color/underline changes.
-      a.style.color = 'inherit';
-      a.style.textDecoration = 'inherit';
-    });
-
-    target.dispatchEvent(new Event('input', { bubbles: true }));
+    openLinkModal(context);
   });
 
   // Unlink
   tUnlink?.addEventListener('mousedown', (e) => {
     e.preventDefault();
 
-    const rich = document.getElementById('p_html');
-    if (!rich || !rich.isContentEditable) return;
+    restoreTextSelection();
 
     const sel = window.getSelection();
+    const rich = (sel?.anchorNode && sel.anchorNode.parentElement?.closest('.nx-rich'))
+      || document.activeElement?.closest?.('.nx-rich')
+      || document.getElementById('p_html');
+    if (!rich || !rich.isContentEditable) return;
+
     if (!sel || sel.rangeCount === 0) return;
 
     document.execCommand('unlink', false, null);
+    rich.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 
-    const blk = getSelectedBlock();
-    if (blk) {
-      startEditSession();
-      blk.props = blk.props || {};
-      blk.props.html = rich.innerHTML;
-      blk.props.text = rich.innerText || '';
-      persistUnsaved();
-      updateBlockCard(blk);
-      endEditSession();
-    }
+  linkModalSearch?.addEventListener('input', () => {
+    renderLinkRows();
+  });
+
+  linkModalRows?.addEventListener('click', (e) => {
+    const row = e.target.closest('tr[data-link-path]');
+    if (!row) return;
+    linkModalState = {
+      ...(linkModalState || {}),
+      selectedPath: row.dataset.linkPath || ''
+    };
+    renderLinkRows();
+    updateLinkModalApplyState();
+  });
+
+  linkModalRows?.addEventListener('dblclick', (e) => {
+    const row = e.target.closest('tr[data-link-path]');
+    if (!row) return;
+    linkModalState = {
+      ...(linkModalState || {}),
+      selectedPath: row.dataset.linkPath || ''
+    };
+    applySelectedPageLink();
+  });
+
+  linkModalApply?.addEventListener('click', applySelectedPageLink);
+  linkModalCancel?.addEventListener('click', closeLinkModal);
+  linkModalClose?.addEventListener('click', closeLinkModal);
+  linkModal?.addEventListener('mousedown', (e) => {
+    if (e.target === linkModal) closeLinkModal();
   });
 
   // --- Networking
@@ -2533,7 +2842,7 @@
     if (!isDirty) return;
     try {
       setSaveState('saving', 'Saving…');
-      await post(apiSave, { _csrf: csrf, page_id: pageId, doc });
+      await post(apiSave, { _csrf: csrf, page_id: pageId, doc: getTransportDoc() });
       markSaved();
     } catch (e) {
       setSaveState('error', 'Save failed');
@@ -2560,6 +2869,13 @@
       if (e.key === 'Escape') { closeRevModal(); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { revSaveBtn?.click(); }
     }
+    if (linkModal && linkModal.style.display !== 'none') {
+      if (e.key === 'Escape') closeLinkModal();
+      if (e.key === 'Enter' && document.activeElement !== linkModalSearch && !linkModalApply?.disabled) {
+        e.preventDefault();
+        applySelectedPageLink();
+      }
+    }
   });
 
   saveAsRevisionBtn?.addEventListener('click', () => {
@@ -2569,11 +2885,12 @@
   revSaveBtn?.addEventListener('click', async () => {
     try {
       setSaveState('saving', 'Saving…');
-      await post(apiSave, { _csrf: csrf, page_id: pageId, doc });
+      const safeDoc = getTransportDoc();
+      await post(apiSave, { _csrf: csrf, page_id: pageId, doc: safeDoc });
       await post(apiRevCreate, {
         _csrf: csrf,
         page_id: pageId,
-        doc,
+        doc: safeDoc,
         name: revNameInput.value || null,
         note: revNoteInput.value || null,
         is_milestone: !!revMilestoneInput.checked
@@ -2593,7 +2910,7 @@
         await quickSave();
       }
       setSaveState('saving', 'Publishing…');
-      await post(apiPublish, { _csrf: csrf, page_id: pageId, doc });
+      await post(apiPublish, { _csrf: csrf, page_id: pageId, doc: getTransportDoc() });
       setStatusBadge('published');
       setSaveState('saved', 'Published just now');
     } catch (e) {
@@ -2682,7 +2999,7 @@
   // --- Preview (unsaved changes reflected)
   const launchPreview = async () => {
     try {
-      const resp = await post(apiPreviewToken, { _csrf: csrf, page_id: pageId, doc });
+      const resp = await post(apiPreviewToken, { _csrf: csrf, page_id: pageId, doc: getTransportDoc() });
       const token = resp.token;
       const url = `${previewUrlBase}?preview_token=${encodeURIComponent(token)}`;
       window.location.href = url;
@@ -2758,6 +3075,12 @@
       let html = `<div class="nx-muted" style="margin:8px 0">Row: <b>${selectedRow + 1}</b></div>`;
       html += `
         <div class="nx-sep"></div>
+        <div class="nx-strong" style="margin-bottom:8px">Audience</div>
+
+        ${renderRowAudienceToggle(getRowAudience(row), 'inspector')}
+        <div class="nx-muted" style="margin-bottom:12px">${rowAudienceLabel(row)}</div>
+
+        <div class="nx-sep"></div>
         <div class="nx-strong" style="margin-bottom:8px">Row background</div>
 
         <label class="nx-toggle" style="margin-bottom:10px">
@@ -2772,6 +3095,14 @@
       `;
 
       insp.innerHTML = html;
+
+      document.querySelectorAll('.nx-row-audience-toggle-inspector [data-act="setaudience"]').forEach((btn) => btn.addEventListener('click', (e) => {
+        pushHistory();
+        setRowAudience(row, e.currentTarget.dataset.audience || 'all');
+        persistUnsaved();
+        render();
+        renderInspector();
+      }));
 
       document.getElementById('row_bg_enabled')?.addEventListener('change', (e) => {
         pushHistory();
@@ -3681,6 +4012,9 @@
       el.addEventListener('focus', startEditSession, true);
       el.addEventListener('input', handleInput, true);
       el.addEventListener('blur', endEditSession, true);
+      ['mouseup', 'keyup', 'touchend'].forEach((evt) => {
+        el.addEventListener(evt, saveTextSelection, true);
+      });
 
       // allow tab insertion for accordion body instead of focus change
       if (id === 'acc_item_body') {
@@ -3877,6 +4211,9 @@
         updateBlockCard(blk);
       });
       heroCtaRich.addEventListener('blur', endEditSession);
+      ['mouseup', 'keyup', 'touchend'].forEach((evt) => {
+        heroCtaRich.addEventListener(evt, saveTextSelection, true);
+      });
     }
     const dlFile = document.getElementById('p_dl_file');
     if (dlFile) {
@@ -4547,6 +4884,10 @@
         ensureDefaultCitationExample(examples);
         const wrap = document.getElementById('exampleSelectWrap');
         if (!wrap) return;
+        if (!examples.length) {
+          wrap.innerHTML = `<div class="muted">No citation examples match this page's style and topic.</div>`;
+          return;
+        }
         const current = blk.props.exampleId || getPageCitationExample() || examples[0]?.id;
         const currentEx = examples.find(x => x.id === current) || examples[0];
 
@@ -4583,6 +4924,10 @@
         const wrap = document.getElementById('citationExampleSelect');
         if (!wrap) return;
         ensureDefaultCitationExample(examples);
+        if (!examples.length) {
+          wrap.innerHTML = `<div class="muted">No citation examples match this page's style and topic.</div>`;
+          return;
+        }
         const current = blk.props.exampleId || getPageCitationExample() || examples[0]?.id;
         wrap.innerHTML = `
           <select id="p_citation_select" class="nx-toolsel" style="width:100%">
@@ -4609,6 +4954,10 @@
         const wrap = document.getElementById('youTrySelectWrap');
         if (!wrap) return;
         ensureDefaultCitationExample(examples);
+        if (!examples.length) {
+          wrap.innerHTML = `<div class="muted">No citation examples match this page's style and topic.</div>`;
+          return;
+        }
         const current = blk.props.exampleId || getPageCitationExample() || examples[0]?.id;
         wrap.innerHTML = `
           <select id="p_youtry_select" class="nx-toolsel" style="width:100%">
@@ -4986,10 +5335,12 @@
       const head = document.createElement('div');
       head.className = 'rowhead';
       head.setAttribute('draggable', 'true');
+      const rowAudience = getRowAudience(row);
       head.innerHTML = `
         <div style="display:flex;align-items:center;gap:10px;flex:1">
           <div class="nx-muted" data-act="selectrow" style="cursor:pointer">Row ${r + 1}</div>
           <button class="smallbtn" data-act="collapse" type="button">${row.collapsed ? 'Expand Row' : 'Collapse Row'}</button>
+          ${renderRowAudienceToggle(rowAudience, 'toolbar')}
           <button class="smallbtn nx-equal-btn ${row.equalHeight ? 'is-on' : ''}" data-act="equalheight" type="button" aria-pressed="${row.equalHeight ? 'true' : 'false'}" title="${row.equalHeight ? 'Equal height on' : 'Equal height off'}">⇳</button>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
@@ -5015,6 +5366,14 @@
         const btn = e.target.closest('button');
         if (!btn) return;
         const act = btn.dataset.act;
+
+        if (act === 'setaudience') {
+          pushHistory();
+          setRowAudience(row, btn.dataset.audience || 'all');
+          persistUnsaved();
+          render();
+          return;
+        }
 
         if (act === 'collapse') {
           pushHistory();

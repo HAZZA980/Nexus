@@ -47,13 +47,17 @@ final class CitationExample {
     }
   }
 
-  public static function listForSiteSlug(string $siteSlug, ?string $referencingStyle = null): array {
+  public static function listForSiteSlug(string $siteSlug, ?string $referencingStyle = null, ?string $category = null): array {
     self::ensureSchema();
     $sql = "SELECT id, example_key AS key_alias, example_key, label, referencing_style, category, sub_category, citation_order, example_heading, example_body, you_try, notes FROM citation_examples WHERE site_slug=?";
     $params = [$siteSlug];
     if ($referencingStyle) {
       $sql .= " AND referencing_style = ?";
       $params[] = $referencingStyle;
+    }
+    if ($category) {
+      $sql .= " AND category = ?";
+      $params[] = $category;
     }
     $sql .= " ORDER BY label";
     $st = DB::pdo()->prepare($sql);

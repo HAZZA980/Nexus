@@ -2,6 +2,7 @@
 namespace NexusCMS\Models;
 
 use NexusCMS\Core\DB;
+use NexusCMS\Support\PagePath;
 use PDO;
 
 final class Page {
@@ -48,6 +49,7 @@ final class Page {
 
   public static function create(int $siteId, string $title, string $slug, array $doc, string $templateKey = 'landing', ?array $shellOverride = null, ?int $collectionId = null): int {
     self::ensureSchema();
+    $slug = PagePath::normalizePath($slug);
     $search = self::computeSearchText($title, $slug, $doc);
     $st = DB::pdo()->prepare("INSERT INTO pages(site_id,title,slug,status,builder_json,template_key,shell_override_json,search_text,collection_id) VALUES (?,?,?,?,?,?,?,?,?)");
     $st->execute([
@@ -74,6 +76,7 @@ final class Page {
 
   public static function findPublishedBySlug(int $siteId, string $slug): ?array {
     self::ensureSchema();
+    $slug = PagePath::normalizePath($slug);
     $st = DB::pdo()->prepare("SELECT * FROM pages WHERE site_id=? AND slug=? AND status='published' LIMIT 1");
     $st->execute([$siteId,$slug]);
     $r = $st->fetch();
@@ -130,6 +133,7 @@ public static function unpublish(int $pageId): void {
 
 public static function findBySlugAnyStatus(int $siteId, string $slug): ?array {
   self::ensureSchema();
+  $slug = PagePath::normalizePath($slug);
   $pdo = \NexusCMS\Core\DB::pdo();
   $stmt = $pdo->prepare("SELECT * FROM pages WHERE site_id=? AND slug=? LIMIT 1");
   $stmt->execute([$siteId, $slug]);

@@ -6,6 +6,7 @@ use NexusCMS\Models\Page;
 use NexusCMS\Models\Site;
 use NexusCMS\Core\Security;
 use NexusCMS\Core\DB;
+use NexusCMS\Support\PagePath;
 
 $pageId = (int)($_GET['id'] ?? 0);
 $page = Page::find($pageId);
@@ -14,13 +15,6 @@ if (!$page) { http_response_code(404); echo "Page not found"; exit; }
 $site = Site::find((int)$page['site_id']);
 if (!$site) { http_response_code(404); echo "Site not found"; exit; }
 $pageSlug = strtolower((string)($page['slug'] ?? ''));
-$isHomeVariantContext = in_array($pageSlug, ['home', 'home-signed-in'], true);
-$homeVariantPublic = null;
-$homeVariantSignedIn = null;
-if ($isHomeVariantContext) {
-  $homeVariantPublic = Page::findBySlugAnyStatus((int)$page['site_id'], 'home');
-  $homeVariantSignedIn = Page::findBySlugAnyStatus((int)$page['site_id'], 'home-signed-in');
-}
 
 $theme = json_decode($site['theme_json'] ?? '', true) ?: [];
 $shape = is_array($theme['shape'] ?? null) ? $theme['shape'] : [];
@@ -28,6 +22,7 @@ $themeRadius = (int)($shape['radius'] ?? ($theme['radius'] ?? 16));
 
 $pageCollection = null;
 $pageCollectionStyle = '';
+$pageCitationCategory = '';
 // Normalize a collection label to a referencing style string used by citations
 $normalizeStyle = function(string $val): string {
   $clean = trim($val);
@@ -66,6 +61,27 @@ $normalizeStyle = function(string $val): string {
   if (isset($map[$key])) return $map[$key];
   return $clean;
 };
+$normalizeCategory = function(string $val): string {
+  $clean = trim($val);
+  if ($clean === '') return '';
+  $clean = preg_replace('/[-_]+/', ' ', $clean);
+  $clean = preg_replace('/\s+/', ' ', $clean);
+  $clean = trim($clean);
+  $map = [
+    'books' => 'Books',
+    'journals' => 'Journals',
+    'digital and internet' => 'Digital & Internet',
+    'digital internet' => 'Digital & Internet',
+    'media and art' => 'Media & Art',
+    'media art' => 'Media & Art',
+    'research' => 'Research',
+    'legal' => 'Legal',
+    'governmental' => 'Governmental',
+    'communications' => 'Communications'
+  ];
+  $key = strtolower($clean);
+  return $map[$key] ?? $clean;
+};
 try {
   if (!empty($page['collection_id'])) {
     $stmt = DB::pdo()->prepare("SELECT * FROM site_collections WHERE id=? LIMIT 1");
@@ -80,10 +96,37 @@ try {
   }
 } catch (\Throwable $e) {}
 
+$pagePathParts = PagePath::split((string)($page['slug'] ?? ''));
+if ($pageCollectionStyle === '' && !empty($pagePathParts[0])) {
+  $pageCollectionStyle = $normalizeStyle((string)$pagePathParts[0]);
+}
+if (!empty($pagePathParts[1])) {
+  $pageCitationCategory = $normalizeCategory((string)$pagePathParts[1]);
+}
+
 $doc = json_decode($page['builder_json'] ?? '{}', true) ?: ['version'=>1,'rows'=>[]];
 $csrf = Security::csrfToken();
 $base = base_path();
+$sitePages = array_map(static function(array $row) use ($base, $site): array {
+  $slug = (string)($row['slug'] ?? '');
+  return [
+    'id' => (int)($row['id'] ?? 0),
+    'name' => (string)($row['title'] ?? ''),
+    'path' => PagePath::publicUrl($base, (string)($site['slug'] ?? ''), $slug),
+    'slug' => $slug,
+  ];
+}, Page::listBySite((int)$site['id']));
 $uiTheme = ui_theme_mode();
+$builderCssPath = __DIR__ . '/../public/assets/builder.css';
+$builderJsPath = __DIR__ . '/../public/assets/builder.js';
+$nexusCssPath = __DIR__ . '/../public/assets/nexus-page.css';
+$builderCssVer = is_file($builderCssPath) ? (string)filemtime($builderCssPath) : '1';
+$builderJsVer = is_file($builderJsPath) ? (string)filemtime($builderJsPath) : '1';
+$nexusCssVer = is_file($nexusCssPath) ? (string)filemtime($nexusCssPath) : '1';
+$builderBodyClasses = [
+  'builder-site-' . preg_replace('/[^a-z0-9\-]+/i', '-', strtolower((string)($site['slug'] ?? 'site'))),
+  'builder-page-' . preg_replace('/[^a-z0-9\-]+/i', '-', strtolower((string)($page['slug'] ?? 'page'))),
+];
 ?>
 <!doctype html>
 <html>
@@ -106,13 +149,11 @@ $uiTheme = ui_theme_mode();
     }
     body{background:var(--bg);color:var(--text);transition:background .2s ease,color .2s ease;}
   </style>
-  <link rel="stylesheet" href="/assets/nexus-page.css">
-  <link rel="stylesheet" href="<?= $base ?>/public/assets/builder.css">
-  <link rel="stylesheet" href="<?= $base ?>/public/assets/builder.css">
-<link rel="stylesheet" href="<?= $base ?>/public/assets/nexus-page.css">
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/builder.css?v=<?= Security::e($builderCssVer) ?>">
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/nexus-page.css?v=<?= Security::e($nexusCssVer) ?>">
 
 </head>
-<body>
+<body class="<?= Security::e(implode(' ', array_filter($builderBodyClasses))) ?>">
 <div class="nx-shell"
   data-page-id="<?= (int)$pageId ?>"
   data-page-updated-at="<?= Security::e((string)($page['updated_at'] ?? '')) ?>"
@@ -121,6 +162,7 @@ $uiTheme = ui_theme_mode();
   data-site-slug="<?= Security::e($site['slug']) ?>"
   data-page-slug="<?= Security::e($page['slug']) ?>"
   data-collection-style="<?= Security::e($pageCollectionStyle) ?>"
+  data-page-category="<?= Security::e($pageCitationCategory) ?>"
   data-api-rev-preview-token="<?= $base ?>/api/revisions/preview-token"
 
   data-api-save="<?= $base ?>/api/pages/save"
@@ -133,7 +175,7 @@ $uiTheme = ui_theme_mode();
   data-api-rev-delete="<?= $base ?>/api/revisions/delete"
   data-api-rev-restore="<?= $base ?>/api/revisions/restore"
 
-  data-preview="<?= $base ?>/s/<?= Security::e($site['slug']) ?>/<?= Security::e($page['slug']) ?>"
+  data-preview="<?= Security::e(PagePath::publicUrl($base, (string)($site['slug'] ?? ''), (string)($page['slug'] ?? ''))) ?>"
   data-api-rev-preview-token="<?= $base ?>/api/revisions/preview-token"
 
   >
@@ -170,6 +212,12 @@ $uiTheme = ui_theme_mode();
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14M5 12h10M5 17h8"/></svg>
         </span>
         <span class="nx-item-label">Text</span>
+      </div>
+      <div class="nx-item" draggable="true" data-type="card" tabindex="0" title="Card">
+        <span class="nx-item-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/></svg>
+        </span>
+        <span class="nx-item-label">Card</span>
       </div>
       <div class="nx-item" draggable="true" data-type="heroCard" tabindex="0" title="Hero Card">
         <span class="nx-item-icon" aria-hidden="true">
@@ -314,27 +362,6 @@ $uiTheme = ui_theme_mode();
         <div class="nx-top-left">
           <div class="nx-page-heading">
             <div class="nx-strong"><?= Security::e($page['title']) ?></div>
-            <?php if ($isHomeVariantContext): ?>
-              <div class="nx-variant-switcher" aria-label="Home variants">
-                <span class="nx-variant-label">Variant</span>
-                <?php if ($homeVariantPublic): ?>
-                  <a
-                    class="nx-variant-chip <?= $pageSlug === 'home' ? 'active' : '' ?>"
-                    href="<?= $base ?>/admin/page_builder.php?id=<?= (int)$homeVariantPublic['id'] ?>"
-                  >Public</a>
-                <?php else: ?>
-                  <span class="nx-variant-chip disabled">Public</span>
-                <?php endif; ?>
-                <?php if ($homeVariantSignedIn): ?>
-                  <a
-                    class="nx-variant-chip <?= $pageSlug === 'home-signed-in' ? 'active' : '' ?>"
-                    href="<?= $base ?>/admin/page_builder.php?id=<?= (int)$homeVariantSignedIn['id'] ?>"
-                  >Signed-in users</a>
-                <?php else: ?>
-                  <span class="nx-variant-chip disabled">Signed-in users</span>
-                <?php endif; ?>
-              </div>
-            <?php endif; ?>
           </div>
           <span id="statusBadge" class="nx-status nx-status-<?= Security::e($page['status']) ?>"><?= ucfirst(Security::e($page['status'])) ?></span>
         </div>
@@ -399,6 +426,11 @@ $uiTheme = ui_theme_mode();
       </header>
 
 <div id="textToolbar" class="nx-toolbar nx-toolbar-top" style="display:none;">
+    <div class="nx-toolbar-collapsebar">
+      <div class="nx-toolbar-collapse-label">Formatting</div>
+      <button type="button" class="nx-toolbtn nx-toolbar-collapsebtn" id="textToolbarToggle" aria-expanded="true" aria-controls="textToolbar" title="Collapse formatting toolbar">▴</button>
+    </div>
+    <div class="nx-toolbar-content">
     <div class="nx-toolrow">
       <button type="button" class="nx-toolbtn" data-tcmd="bold" title="Bold"><b>B</b></button>
       <button type="button" class="nx-toolbtn" data-tcmd="italic" title="Italic"><i>I</i></button>
@@ -467,6 +499,7 @@ $uiTheme = ui_theme_mode();
     <div class="nx-toolrow" style="margin-top:8px">
       <button type="button" class="nx-btnwide" id="backToInspector" style="display:none;">Back to Inspector</button>
     </div>
+    </div>
   </div>
 
 <div class="nx-canvas">
@@ -515,6 +548,36 @@ $uiTheme = ui_theme_mode();
     </div>
   </div>
 </div>
+
+<div id="linkModal" class="nx-modal" style="display:none;">
+  <div class="nx-modal-dialog nx-link-modal-dialog">
+    <div class="nx-modal-head">
+      <div class="nx-modal-title">Insert page link</div>
+      <button type="button" class="nx-modal-close" id="linkModalClose">×</button>
+    </div>
+    <div class="nx-modal-body nx-link-modal-body">
+      <div id="linkModalCurrent" class="nx-link-current" style="display:none;"></div>
+      <label class="nx-muted" for="linkModalSearch">Search pages</label>
+      <input id="linkModalSearch" type="search" placeholder="Filter by page name, path, or id">
+      <div class="nx-link-table-wrap">
+        <table class="nx-link-table">
+          <thead>
+            <tr>
+              <th>Page name</th>
+              <th>Path</th>
+              <th>ID</th>
+            </tr>
+          </thead>
+          <tbody id="linkModalRows"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="nx-modal-footer">
+      <button type="button" class="nx-btnlink" id="linkModalCancel">Cancel</button>
+      <button type="button" class="nx-btn-green" id="linkModalApply" disabled>Use selected page</button>
+    </div>
+  </div>
+</div>
     </main>
 
   <aside class="nx-right nx-fixed">
@@ -538,7 +601,8 @@ $uiTheme = ui_theme_mode();
   </div>
 
   <script>window.NX_DOC = <?= json_encode($doc, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
-  <script src="<?= $base ?>/public/assets/builder.js"></script>
+  <script>window.NX_SITE_PAGES = <?= json_encode($sitePages, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
+  <script src="<?= $base ?>/public/assets/builder.js?v=<?= Security::e($builderJsVer) ?>"></script>
   <script>
     (function() {
       var root = document.documentElement;

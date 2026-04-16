@@ -1,6 +1,7 @@
 <?php
 use NexusCMS\Core\Security;
 use NexusCMS\Support\PartialsManager;
+use NexusCMS\Support\PagePath;
 use NexusCMS\Models\ShellPreset;
 
 $base = base_path();
@@ -135,8 +136,8 @@ if (!$usedPartialHeader) {
     <div style="display:grid;gap:12px">
       <?php foreach ($results as $row): ?>
         <article class="result">
-          <a class="result-title" href="<?= $base ?>/s/<?= Security::e($safeSlug) ?>/<?= Security::e($row['slug']) ?>"><?= Security::e($row['title']) ?></a>
-          <div class="result-url"><?= $base ?>/s/<?= Security::e($safeSlug) ?>/<?= Security::e($row['slug']) ?></div>
+          <a class="result-title" href="<?= Security::e(PagePath::publicUrl($base, $safeSlug, (string)($row['slug'] ?? ''))) ?>"><?= Security::e($row['title']) ?></a>
+          <div class="result-url"><?= Security::e(PagePath::publicUrl($base, $safeSlug, (string)($row['slug'] ?? ''))) ?></div>
           <p class="result-snippet"><?= Security::e(snippet($row['search_text'] ?? '', $query)) ?></p>
         </article>
       <?php endforeach; ?>

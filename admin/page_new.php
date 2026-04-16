@@ -5,11 +5,15 @@ require_admin();
 use NexusCMS\Models\Site;
 use NexusCMS\Models\Page;
 use NexusCMS\Core\Security;
+use NexusCMS\Support\PartialsManager;
+use NexusCMS\Support\PagePath;
 
 $siteId = (int)($_GET['site_id'] ?? 0);
 $site = Site::find($siteId);
 if (!$site) { http_response_code(404); echo "Site not found"; exit; }
 $themeIsLight = ui_theme_is_light();
+$styleOptions = ['Harvard','APA 7th','Chicago 18th','Chicago 17th','IEEE','MHRA 4th','MHRA 3rd','MLA 9th','OSCOLA','Vancouver'];
+$topicOptions = ['Books','Journals','Digital & Internet','Media & Art','Research','Legal','Governmental','Communications'];
 
 $templates = require __DIR__ . '/../app/templates/page_templates.php';
 
@@ -21,14 +25,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $slug  = trim((string)($_POST['slug'] ?? ''));
     $mode  = (string)($_POST['mode'] ?? 'template'); // template|blank
     $tpl   = (string)($_POST['template'] ?? 'home');
+    $style = trim((string)($_POST['path_style'] ?? ''));
+    $topic = trim((string)($_POST['path_topic'] ?? ''));
+    $pathParts = [];
+    $stylePart = PagePath::normalizeSegment($style);
+    $topicPart = PagePath::normalizeSegment($topic);
+    if ($stylePart !== '') $pathParts[] = $stylePart;
+    if ($topicPart !== '') $pathParts[] = $topicPart;
+    $leafSlug = PagePath::normalizeSegment($slug);
+    if ($leafSlug !== '') $pathParts[] = $leafSlug;
+    $fullSlug = PagePath::join($pathParts);
 
-    if ($title === '' || $slug === '') $error = "Title and slug are required.";
+    if ($title === '' || $stylePart === '' || $topicPart === '' || $leafSlug === '') $error = "Title, style, topic, and source type are required.";
+    elseif (Page::findBySlugAnyStatus($siteId, $fullSlug)) $error = "Page path already exists.";
     else {
       $doc = ['version'=>1,'rows'=>[]];
       if ($mode === 'template') $doc = $templates[$tpl] ?? $doc;
       else $doc = ['version'=>1,'rows'=>[ ['cols'=>[['span'=>12,'blocks'=>[]]]] ]];
 
-      $pageId = Page::create($siteId, $title, $slug, $doc);
+      $pageId = Page::create($siteId, $title, $fullSlug, $doc);
+      PartialsManager::ensurePageDirectory((string)($site['slug'] ?? ''), $fullSlug);
       redirect('/admin/page_builder.php?id=' . $pageId);
     }
   }
@@ -74,18 +90,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input name="title" id="title" required placeholder="e.g. Landing page">
       </div>
       <div class="fieldrow">
-        <label>Slug</label>
-        <input name="slug" id="slug" required placeholder="home">
+        <label>Source Type</label>
+        <input name="slug" id="slug" required placeholder="blogs">
+      </div>
+      <div class="fieldrow">
+        <label>File path</label>
+        <div class="path-builder">
+          <div class="path-prefix"><?= Security::e(strtolower((string)($site['slug'] ?? 'site'))) ?>/</div>
+          <div class="path-grid path-grid-fixed">
+            <div>
+              <label for="path_style">Style</label>
+              <select id="path_style" name="path_style" required>
+                <option value="">Select style</option>
+                <?php foreach ($styleOptions as $styleOption): ?>
+                  <option value="<?= Security::e($styleOption) ?>"><?= Security::e($styleOption) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div>
+              <label for="path_topic">Topic</label>
+              <select id="path_topic" name="path_topic" required>
+                <option value="">Select topic</option>
+                <?php foreach ($topicOptions as $topicOption): ?>
+                  <option value="<?= Security::e($topicOption) ?>"><?= Security::e($topicOption) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+          <div class="path-preview" id="pathPreview">/</div>
+        </div>
       </div>
 
       <div class="layout-grid">
         <?php
           $layoutMeta = [
-            'landing-lite' => ['name'=>'Landing (hero + cards)','desc'=>'Hero headline with CTA and feature cards.'],
-            'resource-library' => ['name'=>'Resource Library','desc'=>'Intro text plus a grid of resource cards and a divider.'],
-            'about-profile' => ['name'=>'About / Profile','desc'=>'Profile hero with body text and key facts.'],
             'home' => ['name'=>'Simple Home','desc'=>'Heading and two-column content starter.'],
             'title-page' => ['name'=>'Title page','desc'=>'Cite Them Right homepage structure with editable placeholder blocks.'],
+            'referencing-browse' => ['name'=>'Referencing Browse','desc'=>'Browse-by-category scaffold with quick links, accordions, and sidebar panels.'],
             'article' => ['name'=>'Article','desc'=>'Article body with related sidebar.'],
             'source-type' => ['name'=>'Source Type','desc'=>'Heading, intro text, citation order, and example block.'],
           ];
@@ -130,6 +171,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const modeInput = document.getElementById('mode');
     const titleInput = document.getElementById('title');
     const slugInput = document.getElementById('slug');
+    const styleInput = document.getElementById('path_style');
+    const topicInput = document.getElementById('path_topic');
+    const pathPreview = document.getElementById('pathPreview');
+
+    function slugify(val){return (val||'').toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,'');}
+    function updatePathPreview(){
+      const parts = [slugify(styleInput?.value || ''), slugify(topicInput?.value || '')].filter(Boolean);
+      const leaf = slugify(slugInput?.value || '');
+      const full = '<?= Security::e(strtolower((string)($site['slug'] ?? 'site'))) ?>/' + [...parts, leaf].filter(Boolean).join('/');
+      if (pathPreview) pathPreview.textContent = full === '/' ? '/' : full;
+    }
+    styleInput?.addEventListener('change', updatePathPreview);
+    topicInput?.addEventListener('change', updatePathPreview);
+    slugInput?.addEventListener('input', updatePathPreview);
+    updatePathPreview();
 
     document.querySelectorAll('.layout-card').forEach(card => {
       card.addEventListener('click', () => {

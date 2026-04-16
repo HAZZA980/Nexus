@@ -38,7 +38,7 @@ $titlePage = [
       'equalHeight' => true,
       'cols' => [
         [
-          'span' => 8,
+          'span' => 4,
           'blocks' => [
             [
               'id' => 'tp-feature-1',
@@ -54,6 +54,11 @@ $titlePage = [
               ],
               'styleText' => ['align' => 'center'],
             ],
+          ],
+        ],
+        [
+          'span' => 4,
+          'blocks' => [
             [
               'id' => 'tp-feature-2',
               'type' => 'card',
@@ -263,6 +268,191 @@ $titlePage = [
   ],
 ];
 
+$referencingBrowseQuickLinks = '<span class="ctr-quick-links-label">Quick links</span>'
+  . '<div class="ctr-quick-links">'
+  . '<a href="#">Category link 1</a><a href="#">Category link 2</a><a href="#">Category link 3</a><a href="#">Category link 4</a>'
+  . '<a href="#">Category link 5</a><a href="#">Category link 6</a><a href="#">Category link 7</a><a href="#">Category link 8</a>'
+  . '</div>'
+  . '<div class="ctr-collapse-all"><a href="#">Collapse all sections</a></div>';
+
+$makeReferencingBrowseAccordion = static function(string $id, int $subItemCount = 5): array {
+  $subItems = [];
+  for ($i = 0; $i < $subItemCount; $i++) {
+    $subItems[] = ['label' => 'Browse link ' . ($i + 1), 'url' => '#'];
+  }
+
+  return [
+    'id' => $id,
+    'type' => 'accordionTabs',
+    'props' => [
+      'mode' => 'accordion',
+      'accStyle' => 'grouped',
+      'allowMultiple' => true,
+      'allowCollapseAll' => true,
+      'defaultOpen' => 'none',
+      'defaultIndex' => 0,
+      'tabsDefault' => 'first',
+      'tabsIndex' => 0,
+      'tabsAlign' => 'left',
+      'tabsStyle' => 'underline',
+      'styleVariant' => 'minimal',
+      'showDividers' => true,
+      'showIndicator' => true,
+      'indicatorPosition' => 'right',
+      'spacing' => 'compact',
+      'headerImgPos' => 'left',
+      'headerImgSize' => 'medium',
+      'showBorder' => true,
+      'items' => [[
+        'id' => $id . '_item',
+        'title' => 'Browse section',
+        'body' => '',
+        'bodyHtml' => '',
+        'openDefault' => false,
+        'headerImg' => '',
+        'headerAlt' => '',
+        'showHeaderImg' => false,
+        'subItems' => $subItems,
+      ]],
+    ],
+    'style' => [
+      'marginBottom' => '10px',
+    ],
+  ];
+};
+
+$makeReferencingBrowsePanel = static function(string $id, string $label): array {
+  return [
+    'id' => $id,
+    'type' => 'panel',
+    'props' => [
+      'image' => '',
+      'alt' => '',
+      'layout' => 'img-top',
+      'splitRatio' => '50-50',
+      'bodyHtml' => $label,
+      'body' => $label,
+    ],
+    'style' => [
+      'marginBottom' => '6px',
+    ],
+    'styleText' => [
+      'fontSize' => 12,
+      'color' => '#1f2f55',
+    ],
+  ];
+};
+
+$referencingBrowse = [
+  'version' => 1,
+  'rows' => [
+    [
+      'cols' => [[
+        'span' => 12,
+        'blocks' => [[
+          'id' => 'rb_hero',
+          'type' => 'heroCard',
+          'props' => [
+            'title' => 'Browse page title',
+            'body' => 'Add a short introduction for this referencing browse page.',
+            'bgImage' => '',
+            'bgColor' => '#111827',
+            'overlayOpacity' => 0.3,
+          ],
+          'styleText' => [
+            'fontSize' => 16,
+            'color' => '#ffffff',
+          ],
+        ]],
+      ]],
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'collapsed' => false,
+      'equalHeight' => false,
+    ],
+    [
+      'cols' => [[
+        'span' => 12,
+        'blocks' => [[
+          'id' => 'rb_quick_links',
+          'type' => 'text',
+          'props' => [
+            'text' => 'Quick links',
+            'html' => $referencingBrowseQuickLinks,
+          ],
+          'styleText' => [
+            'fontSize' => 14,
+            'color' => '#1f2937',
+          ],
+        ]],
+      ]],
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'collapsed' => false,
+      'equalHeight' => false,
+    ],
+    [
+      'cols' => [
+        [
+          'span' => 8,
+          'blocks' => [
+            $makeReferencingBrowseAccordion('rb_acc_1', 7),
+            $makeReferencingBrowseAccordion('rb_acc_2', 4),
+            $makeReferencingBrowseAccordion('rb_acc_3', 6),
+            $makeReferencingBrowseAccordion('rb_acc_4', 5),
+            $makeReferencingBrowseAccordion('rb_acc_5', 4),
+            $makeReferencingBrowseAccordion('rb_acc_6', 7),
+            $makeReferencingBrowseAccordion('rb_acc_7', 4),
+            $makeReferencingBrowseAccordion('rb_acc_8', 5),
+          ],
+        ],
+        [
+          'span' => 4,
+          'blocks' => [
+            [
+              'id' => 'rb_sidebar_heading',
+              'type' => 'heading',
+              'props' => [
+                'level' => 3,
+                'text' => 'General guidance',
+              ],
+              'styleText' => [
+                'fontSize' => 18,
+                'color' => '#334155',
+              ],
+              'style' => [
+                'marginBottom' => '8px',
+              ],
+            ],
+            $makeReferencingBrowsePanel('rb_panel_1', 'Guidance panel 1'),
+            $makeReferencingBrowsePanel('rb_panel_2', 'Guidance panel 2'),
+            $makeReferencingBrowsePanel('rb_panel_3', 'Guidance panel 3'),
+            $makeReferencingBrowsePanel('rb_panel_4', 'Guidance panel 4'),
+            $makeReferencingBrowsePanel('rb_panel_5', 'Guidance panel 5'),
+            $makeReferencingBrowsePanel('rb_panel_6', 'Guidance panel 6'),
+            [
+              'id' => 'rb_view_more',
+              'type' => 'text',
+              'props' => [
+                'text' => 'View more articles',
+                'html' => '<a class="ctr-view-more" href="#">View more articles</a>',
+              ],
+              'style' => [
+                'marginTop' => '10px',
+              ],
+              'styleText' => [
+                'fontSize' => 14,
+                'color' => '#ffffff',
+              ],
+            ],
+          ],
+        ],
+      ],
+      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
+      'collapsed' => false,
+      'equalHeight' => false,
+    ],
+  ],
+];
+
 return [
   'home' => [
     'version' => 1,
@@ -382,22 +572,95 @@ return [
     'version' => 1,
     'rows' => [
       ['cols'=>[
-        ['span'=>12,'blocks'=>[
-          ['type'=>'heading','props'=>['level'=>1,'text'=>'Source type']],
-          ['type'=>'text','props'=>['text'=>"Use this page to document a specific source type.\nAdd guidance and examples below."]],
-          ['type'=>'citationOrder','props'=>[
-            'title'=>'Citation order',
-            'body'=>"1. Author / editor\n2. Year (round brackets)\n3. Title (italics)\n4. Publisher\n5. DOI or URL (Accessed: date)"
-          ]],
-          ['type'=>'exampleCard','props'=>[
-            'exampleId'=>'book_one_author',
-            'heading'=>'Example: book with one author',
-            'body'=>"In-text citations\n\n(Author, Year, p. 00)\n\nReference list\nAuthor, A. (Year) *Title of work.* Publisher.",
-            'youTry'=>'Surname, Initial. (Year) *Title.* Publisher.',
-            'showYouTry'=>true
-          ]],
+        ['span'=>12,'blocks'=>[[
+          'id'=>'st-breadcrumbs',
+          'type'=>'text',
+          'props'=>[
+            'html'=>'<div style="font-size:14px;color:#294a97;">Home &gt; Referencing Styles &gt; Harvard &gt; Digital and Internet &gt; Blogs</div>'
+          ],
+          'style'=>['marginBottom'=>'10px']
+        ]]]
+      ]],
+      ['cols'=>[
+        ['span'=>3,'blocks'=>[
+          [
+            'id'=>'st-sidebar-style',
+            'type'=>'panel',
+            'props'=>[
+              'image'=>'',
+              'alt'=>'',
+              'layout'=>'text-top',
+              'splitRatio'=>'50-50',
+              'bodyHtml'=>'<h3 style="margin:0 0 18px;font-size:20px;letter-spacing:.02em;">REFERENCING STYLES</h3><div style="border:1px solid rgba(17,24,39,.14);border-radius:999px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-size:16px;"><span>Harvard</span><span aria-hidden="true">⌄</span></div>',
+              'body'=>'Referencing styles'
+            ],
+            'style'=>[
+              'backgroundColor'=>'#ffffff',
+              'padding'=>'20px',
+              'border'=>'1px solid rgba(17,24,39,.12)',
+              'borderTop'=>'4px solid #294a97',
+              'boxShadow'=>'none',
+              'marginBottom'=>'18px'
+            ]
+          ],
+          [
+            'id'=>'st-sidebar-guidance',
+            'type'=>'panel',
+            'props'=>[
+              'image'=>'',
+              'alt'=>'',
+              'layout'=>'text-top',
+              'splitRatio'=>'50-50',
+              'bodyHtml'=>'<h3 style="margin:0 0 18px;font-size:20px;letter-spacing:.02em;">HARVARD GUIDANCE</h3><div style="display:grid;gap:0;"><div style="padding:0 0 16px;border-bottom:1px dashed rgba(17,24,39,.14);margin-bottom:16px;">Setting out citations</div><div style="padding:0 0 16px;border-bottom:1px dashed rgba(17,24,39,.14);margin-bottom:16px;">What to include in your reference list</div><div style="padding:0 0 16px;border-bottom:1px dashed rgba(17,24,39,.14);margin-bottom:16px;">Elements that you may need to include in your references</div><div style="padding:0 0 16px;border-bottom:1px dashed rgba(17,24,39,.14);margin-bottom:16px;">Sample text and reference list using the Harvard style</div><div>Setting out quotations (Harvard)<br><span style="display:inline-block;margin-top:10px;color:#294a97;">View More</span></div></div>',
+              'body'=>'Style guidance'
+            ],
+            'style'=>[
+              'backgroundColor'=>'#ffffff',
+              'padding'=>'20px',
+              'border'=>'1px solid rgba(17,24,39,.12)',
+              'borderTop'=>'4px solid #294a97',
+              'boxShadow'=>'none',
+              'marginBottom'=>'18px'
+            ]
+          ],
+        ]],
+        ['span'=>9,'blocks'=>[
+          [
+            'id'=>'st-hero',
+            'type'=>'heroCard',
+            'props'=>[
+              'title'=>'Blogs (Harvard)',
+              'body'=>'Blogs (weblogs) and vlogs (video logs) are produced by individuals and organisations to provide updates on issues of interest or concern. Be aware that because blogs/vlogs are someone\'s opinions, they may not provide objective, reasoned discussion of an issue. Use blogs/vlogs in conjunction with reputable sources. Note that due to the informality of the internet, many authors give first names or aliases. Use the name they have used in your reference.',
+              'bgImage'=>'',
+              'bgColor'=>'#d9d1c2',
+              'overlayOpacity'=>0
+            ],
+            'style'=>[
+              'marginBottom'=>'18px',
+              'boxShadow'=>'none',
+              'border'=>'0'
+            ],
+            'styleText'=>['color'=>'#111827','fontSize'=>16]
+          ],
+          [
+            'id'=>'st-citation-order',
+            'type'=>'citationOrder',
+            'props'=>[
+              'title'=>'Citation order:',
+              'body'=>"• Author of message\n• Year the site was last updated (in round brackets)\n• Title of blog post (in single quotation marks)\n• Title of internet site (in italics)\n• Day/month of posted message\n• Available at: URL (Accessed: date)"
+            ],
+            'style'=>[
+              'backgroundColor'=>'#ffffff',
+              'padding'=>'18px 20px',
+              'border'=>'1px solid rgba(17,24,39,.12)',
+              'borderRadius'=>'16px',
+              'boxShadow'=>'none',
+              'marginBottom'=>'18px'
+            ]
+          ],
         ]]
       ]],
     ],
   ],
+  'referencing-browse' => $referencingBrowse,
 ];

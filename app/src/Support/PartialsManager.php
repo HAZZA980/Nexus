@@ -21,6 +21,7 @@ final class PartialsManager {
     $siteDir = $root . '/sites/' . $slug;
     $partialsDir = $siteDir . '/partials';
     $assetsDir = $siteDir . '/assets';
+    $pagesDir = $siteDir . '/pages';
     return [
       'root' => $root,
       'siteDir' => $siteDir,
@@ -30,7 +31,28 @@ final class PartialsManager {
       'assetsDir' => $assetsDir,
       'css' => $assetsDir . '/site.css',
       'js' => $assetsDir . '/site.js',
+      'pagesDir' => $pagesDir,
     ];
+  }
+
+  public static function pageDirectory(string $siteSlug, string $pagePath): string {
+    $paths = self::paths($siteSlug);
+    $normalized = PagePath::normalizePath($pagePath);
+    if ($normalized === '') {
+      return $paths['pagesDir'];
+    }
+    return $paths['pagesDir'] . '/' . $normalized;
+  }
+
+  public static function ensurePageDirectory(string $siteSlug, string $pagePath): string {
+    $dir = self::pageDirectory($siteSlug, $pagePath);
+    $root = self::projectRoot();
+    try {
+      self::ensureFile($dir . '/.gitkeep', $root, "");
+    } catch (\Throwable $e) {
+      error_log('NexusCMS page directory warning: ' . $e->getMessage());
+    }
+    return $dir;
   }
 
   public static function ensureFile(string $path, string $root, string $content): string {

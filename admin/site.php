@@ -7,6 +7,7 @@ use NexusCMS\Models\Page;
 use NexusCMS\Core\Security;
 use NexusCMS\Core\DB;
 use NexusCMS\Support\PartialsManager;
+use NexusCMS\Support\PagePath;
 use NexusCMS\Models\CitationExample;
 use NexusCMS\Models\CitationRevision;
 use NexusCMS\Models\CitationRelease;
@@ -17,6 +18,8 @@ use NexusCMS\Models\CitationRelease;
 $siteId = (int)($_GET['id'] ?? 0);
 $site = Site::find($siteId);
 if (!$site) { http_response_code(404); echo "Site not found"; exit; }
+$styleOptions = ['Harvard','APA 7th','Chicago 18th','Chicago 17th','IEEE','MHRA 4th','MHRA 3rd','MLA 9th','OSCOLA','Vancouver'];
+$topicOptions = ['Books','Journals','Digital & Internet','Media & Art','Research','Legal','Governmental','Communications'];
 
 // -----------------------------
 // Small DB helper (no rewrites)
@@ -61,6 +64,31 @@ function nx_next_release_tag(array $tags): string {
   }
   if (!preg_match('/^(\d+)\.(\d+)\.(\d+)$/', $latest, $m)) return '1.0.0';
   return $m[1] . '.' . $m[2] . '.' . ((int)$m[3] + 1);
+}
+
+function nx_page_path_tree(array $pages): array {
+  $tree = [];
+  foreach ($pages as $page) {
+    $parts = PagePath::split((string)($page['slug'] ?? ''));
+    if (count($parts) < 2) continue;
+    $cursor = &$tree;
+    foreach (array_slice($parts, 0, -1) as $part) {
+      if (!isset($cursor[$part]) || !is_array($cursor[$part])) {
+        $cursor[$part] = [];
+      }
+      $cursor = &$cursor[$part];
+    }
+    unset($cursor);
+  }
+
+  $sortTree = static function(array &$node) use (&$sortTree): void {
+    ksort($node);
+    foreach ($node as &$child) {
+      if (is_array($child)) $sortTree($child);
+    }
+  };
+  $sortTree($tree);
+  return $tree;
 }
 
 // -----------------------------
@@ -615,13 +643,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = trim((string)($_POST['modal_title'] ?? ''));
     $slug  = trim((string)($_POST['modal_slug'] ?? ''));
     $layout = trim((string)($_POST['modal_layout'] ?? 'blank'));
-    $normalizedSlug = strtolower(preg_replace('/[^a-z0-9-]+/', '-', $slug));
-    $normalizedSlug = trim(preg_replace('/-+/', '-', $normalizedSlug), '-');
+    $style = trim((string)($_POST['modal_path_style'] ?? ''));
+    $topic = trim((string)($_POST['modal_path_topic'] ?? ''));
+    $pathParts = [];
+    $stylePart = PagePath::normalizeSegment($style);
+    $topicPart = PagePath::normalizeSegment($topic);
+    if ($stylePart !== '') $pathParts[] = $stylePart;
+    if ($topicPart !== '') $pathParts[] = $topicPart;
+    $leafSlug = PagePath::normalizeSegment($slug);
+    if ($leafSlug !== '') $pathParts[] = $leafSlug;
+    $normalizedSlug = PagePath::join($pathParts);
 
-    if ($title === '' || $normalizedSlug === '') {
-      $notice = 'Title and slug are required.';
+    if ($title === '' || $stylePart === '' || $topicPart === '' || $leafSlug === '') {
+      $notice = 'Title, style, topic, and source type are required.';
     } elseif (Page::findBySlugAnyStatus($siteId, $normalizedSlug)) {
-      $notice = 'Slug already exists. Choose another.';
+      $notice = 'Page path already exists. Choose another.';
     } else {
       $templates = require __DIR__ . '/../app/templates/page_templates.php';
       $doc = ['version'=>1,'rows'=>[ ['cols'=>[['span'=>12,'blocks'=>[]]]] ]];
@@ -629,6 +665,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $doc = $templates[$layout];
       }
       $pageId = Page::create($siteId, $title, $normalizedSlug, $doc, $layout ?: 'blank', null, null);
+      PartialsManager::ensurePageDirectory((string)($site['slug'] ?? ''), $normalizedSlug);
       $redirectBase = rtrim(base_path(), '/');
       if ($redirectBase === '') {
         $scriptDir = dirname($_SERVER['SCRIPT_NAME'] ?? '') ?: '';
@@ -1208,6 +1245,7 @@ $homeExisting = Page::findBySlugAnyStatus($siteId, 'home');
 if (!$homeExisting) {
   $homeDoc = ['version'=>1,'rows'=>[ ['cols'=>[['span'=>12,'blocks'=>[]]]] ]];
   $homeId = Page::create($siteId, 'Home', 'home', $homeDoc, 'blank', null);
+  PartialsManager::ensurePageDirectory((string)($site['slug'] ?? ''), 'home');
   Site::setHomepage($siteId, $homeId);
   $pages = Page::listBySite($siteId); // refresh
 }
@@ -1512,6 +1550,13 @@ if (isset($_SESSION['user_id'])) {
     .modal h3{margin:0;font-size:20px;}
     .modal .close-btn{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:18px;}
     .modal .layout-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));}
+    .page-path-builder{padding:12px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.03);}
+    .page-path-row{margin-bottom:10px;}
+    .page-path-row > div{display:grid;gap:6px;}
+    .page-path-fixed{grid-template-columns:1fr 1fr;}
+    .path-prefix{font-family:"SFMono-Regular","Menlo",monospace;font-size:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,.04);margin-bottom:10px;}
+    .path-preview-wrap{display:grid;gap:6px;}
+    .path-preview{font-family:"SFMono-Regular","Menlo",monospace;font-size:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,.04);word-break:break-all;}
     .modal.modal-danger{
       max-width:560px;
       width:min(560px, 100%);
@@ -2037,12 +2082,6 @@ if (isset($_SESSION['user_id'])) {
                 <?php
                   $slug = strtolower((string)($p['slug'] ?? ''));
                   if ($slug === 'home-signed-in') { continue; }
-                  $homeLabel = '';
-                  $homeLabelClass = '';
-                  if ($slug === 'home') {
-                    $homeLabel = $hasHomeSignedInVariant ? 'Variants: Public • Signed-in' : 'Homepage';
-                    $homeLabelClass = 'home-logged-out';
-                  }
                 ?>
                 <tr
                   data-title="<?= Security::e(strtolower($p['title'])) ?>"
@@ -2051,12 +2090,9 @@ if (isset($_SESSION['user_id'])) {
                 >
                   <td>
                     <div class="title-main">
-                      <a href="<?= $base ?>/s/<?= Security::e($site['slug']) ?>/<?= Security::e($p['slug']) ?>" target="_blank" style="color:inherit;text-decoration:none;">
+                      <a href="<?= Security::e(PagePath::publicUrl($base, (string)($site['slug'] ?? ''), (string)($p['slug'] ?? ''))) ?>" target="_blank" style="color:inherit;text-decoration:none;">
                         <?= Security::e($p['title']) ?>
                       </a>
-                      <?php if ($homeLabel !== ''): ?>
-                        <span class="page-kind-badge <?= Security::e($homeLabelClass) ?>"><?= Security::e($homeLabel) ?></span>
-                      <?php endif; ?>
                     </div>
                     <div class="title-path">/<?= Security::e($p['slug']) ?></div>
                   </td>
@@ -3133,6 +3169,8 @@ if (isset($_SESSION['user_id'])) {
     <input type="hidden" name="modal_title" id="modal_title_field">
     <input type="hidden" name="modal_slug" id="modal_slug_field">
     <input type="hidden" name="modal_layout" id="modal_layout_field">
+    <input type="hidden" name="modal_path_style" id="modal_path_style_field">
+    <input type="hidden" name="modal_path_topic" id="modal_path_topic_field">
   </form>
   <form id="deletePageForm" method="post" action="site.php?id=<?= (int)$site['id'] ?>" style="display:none">
     <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
@@ -4895,8 +4933,36 @@ if (isset($_SESSION['user_id'])) {
             <input id="modalTitleInput" placeholder="e.g. Landing page">
           </div>
           <div>
-            <label>Slug</label>
-            <input id="modalSlugInput" placeholder="landing-page">
+            <label>Source Type</label>
+            <input id="modalSlugInput" placeholder="blogs">
+          </div>
+        </div>
+        <div class="page-path-builder" style="margin-bottom:12px">
+          <div class="muted" style="margin-bottom:8px">File path</div>
+          <div class="path-prefix"><?= Security::e(strtolower((string)($site['slug'] ?? 'site'))) ?>/</div>
+          <div class="row page-path-row page-path-fixed">
+            <div>
+              <label>Style</label>
+              <select id="modalPathStyle">
+                <option value="">Select style</option>
+                <?php foreach ($styleOptions as $styleOption): ?>
+                  <option value="<?= Security::e($styleOption) ?>"><?= Security::e($styleOption) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div>
+              <label>Topic</label>
+              <select id="modalPathTopic">
+                <option value="">Select topic</option>
+                <?php foreach ($topicOptions as $topicOption): ?>
+                  <option value="<?= Security::e($topicOption) ?>"><?= Security::e($topicOption) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+          <div class="path-preview-wrap">
+            <div class="muted">Full page path</div>
+            <div class="path-preview" id="modalFullPathPreview"><?= Security::e(strtolower((string)($site['slug'] ?? 'site'))) ?>/</div>
           </div>
         </div>
         <div class="muted" style="margin-bottom:6px">Choose a layout</div>
@@ -4912,10 +4978,9 @@ if (isset($_SESSION['user_id'])) {
           </button>
           <?php
             $modalLayouts = [
-              ['id' => 'landing', 'name' => 'Landing', 'desc' => 'Hero + features starter.'],
-              ['id' => 'resource-library', 'name' => 'Resource', 'desc' => 'Resource grid with intro.'],
-              ['id' => 'about-profile', 'name' => 'About', 'desc' => 'Profile/overview with highlights.'],
               ['id' => 'title-page', 'name' => 'Title page', 'desc' => 'Cite Them Right homepage structure with editable placeholder blocks.'],
+              ['id' => 'referencing-browse', 'name' => 'Referencing Browse', 'desc' => 'Browse-by-category scaffold matching the Cite Them Right reference browse layout.'],
+              ['id' => 'source-type', 'name' => 'Source Type', 'desc' => 'Source guidance page with sidebar, hero, citation order, and example areas.'],
             ];
           ?>
           <?php foreach ($modalLayouts as $layout): ?>
@@ -4939,6 +5004,9 @@ if (isset($_SESSION['user_id'])) {
     document.body.appendChild(modalBackdrop);
 
     const openModalBtns = [document.getElementById('addPageBtn'), document.getElementById('addPageBtnEmpty')].filter(Boolean);
+    const modalStyleInput = document.getElementById('modalPathStyle');
+    const modalTopicInput = document.getElementById('modalPathTopic');
+    const modalPathPreview = document.getElementById('modalFullPathPreview');
     document.getElementById('addPageBtnTop')?.addEventListener('click', () => {
       modalBackdrop.style.display = 'flex';
       document.getElementById('modalTitleInput')?.focus();
@@ -4950,10 +5018,23 @@ if (isset($_SESSION['user_id'])) {
     modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) closeModal(); });
 
     function slugify(val){return (val||'').toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,'');}
+    function updatePathPreview(){
+      const parts = [slugify(modalStyleInput?.value || ''), slugify(modalTopicInput?.value || '')].filter(Boolean);
+      const leaf = slugify(document.getElementById('modalSlugInput')?.value || '');
+      const fullPath = '<?= Security::e(strtolower((string)($site['slug'] ?? 'site'))) ?>/' + [...parts, leaf].filter(Boolean).join('/');
+      if (modalPathPreview) modalPathPreview.textContent = fullPath;
+    }
     document.getElementById('modalTitleInput')?.addEventListener('blur', e => {
       const slug = document.getElementById('modalSlugInput');
-      if (slug && !slug.value.trim()) slug.value = slugify(e.target.value);
+      if (slug && !slug.value.trim()) {
+        slug.value = slugify(e.target.value);
+        updatePathPreview();
+      }
     });
+    modalStyleInput?.addEventListener('change', updatePathPreview);
+    modalTopicInput?.addEventListener('change', updatePathPreview);
+    document.getElementById('modalSlugInput')?.addEventListener('input', updatePathPreview);
+    updatePathPreview();
 
     let selectedLayout = 'blank';
     modalBackdrop.querySelectorAll('.layout-card').forEach(card => {
@@ -4970,10 +5051,14 @@ if (isset($_SESSION['user_id'])) {
     modalBackdrop.querySelector('#modalCreateBtn')?.addEventListener('click', () => {
       const title = (document.getElementById('modalTitleInput')?.value || '').trim();
       const slug = slugify(document.getElementById('modalSlugInput')?.value || '');
-      if (!title || !slug) { alert('Enter a title and slug'); return; }
+      const style = modalStyleInput?.value || '';
+      const topic = slugify(modalTopicInput?.value || '');
+      if (!title || !slug || !style || !topic) { alert('Enter a title, style, topic, and source type'); return; }
       document.getElementById('modal_title_field').value = title;
       document.getElementById('modal_slug_field').value = slug;
       document.getElementById('modal_layout_field').value = selectedLayout;
+      document.getElementById('modal_path_style_field').value = style;
+      document.getElementById('modal_path_topic_field').value = topic;
       document.getElementById('modalCreateForm').submit();
     });
 

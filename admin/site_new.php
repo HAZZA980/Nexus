@@ -6,6 +6,7 @@ use NexusCMS\Models\Site;
 use NexusCMS\Models\Page;
 use NexusCMS\Models\ShellPreset;
 use NexusCMS\Core\Security;
+use NexusCMS\Support\PartialsManager;
 
 $base = base_path();
 $activeNav = 'sites';
@@ -83,6 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           // Create default Home page (blank canvas, draft)
           $homeDoc = ['version'=>1,'rows'=>[ ['cols'=>[['span'=>12,'blocks'=>[]]]] ]];
           $homeId = Page::create($siteId, 'Home', 'home', $homeDoc, 'blank', null);
+          PartialsManager::ensurePageDirectory($values['slug'], 'home');
           Site::setHomepage($siteId, $homeId);
         }
 

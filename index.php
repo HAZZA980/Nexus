@@ -11,6 +11,7 @@ use NexusCMS\Models\CitationExample;
 use NexusCMS\Services\Renderer;
 use NexusCMS\Core\Security;
 use NexusCMS\Models\Analytics;
+use NexusCMS\Support\PagePath;
 
 /**
  * Helpers
@@ -19,6 +20,121 @@ function view(string $file, array $vars = []): void {
   extract($vars);
   require __DIR__ . '/public/views/' . $file;
   exit;
+}
+
+function breadcrumb_label_from_segment(string $segment, string $kind = 'generic'): string {
+  $segment = PagePath::normalizeSegment($segment);
+
+  $styleMap = [
+    'harvard' => 'Harvard',
+    'apa-7th' => 'APA 7th',
+    'chicago-18th' => 'Chicago 18th',
+    'chicago-17th' => 'Chicago 17th',
+    'ieee' => 'IEEE',
+    'mhra-4th' => 'MHRA 4th',
+    'mhra-3rd' => 'MHRA 3rd',
+    'mla-9th' => 'MLA 9th',
+    'oscola' => 'OSCOLA',
+    'vancouver' => 'Vancouver',
+  ];
+  $topicMap = [
+    'books' => 'Books',
+    'journals' => 'Journals',
+    'digital-and-internet' => 'Digital and Internet',
+    'media-and-art' => 'Media and Art',
+    'research' => 'Research',
+    'legal' => 'Legal',
+    'governmental' => 'Governmental',
+    'communications' => 'Communications',
+  ];
+
+  if ($kind === 'style' && isset($styleMap[$segment])) return $styleMap[$segment];
+  if ($kind === 'topic' && isset($topicMap[$segment])) return $topicMap[$segment];
+
+  $label = str_replace('-', ' ', $segment);
+  $label = ucwords($label);
+  return trim($label);
+}
+
+function apply_source_type_breadcrumbs(array $doc, array $page, string $base, string $siteSlug): array {
+  if (($page['template_key'] ?? '') !== 'source-type') return $doc;
+
+  $segments = PagePath::split((string)($page['slug'] ?? ''));
+  if (count($segments) < 3) return $doc;
+
+  $styleSeg = $segments[0];
+  $topicSeg = $segments[1];
+  $sourceSeg = $segments[count($segments) - 1];
+
+  $items = [
+    [
+      'label' => 'Home',
+      'href' => PagePath::publicUrl($base, $siteSlug, 'home'),
+    ],
+    [
+      'label' => 'Referencing Styles',
+      'href' => PagePath::publicUrl($base, $siteSlug, 'referencing-styles'),
+    ],
+    [
+      'label' => breadcrumb_label_from_segment($styleSeg, 'style'),
+      'href' => PagePath::publicUrl($base, $siteSlug, $styleSeg),
+    ],
+    [
+      'label' => breadcrumb_label_from_segment($topicSeg, 'topic'),
+      'href' => PagePath::publicUrl($base, $siteSlug, PagePath::join([$styleSeg, $topicSeg])),
+    ],
+    [
+      'label' => breadcrumb_label_from_segment($sourceSeg, 'generic'),
+      'href' => PagePath::publicUrl($base, $siteSlug, PagePath::join($segments)),
+    ],
+  ];
+
+  $parts = [];
+  foreach ($items as $idx => $item) {
+    if ($idx > 0) {
+      $parts[] = '<span style="color:#6b7280;"> &gt; </span>';
+    }
+    $parts[] = '<a href="' . Security::e($item['href']) . '" style="color:#294a97;text-decoration:none;">'
+      . Security::e($item['label'])
+      . '</a>';
+  }
+
+  $html = '<div class="nx-source-breadcrumbs" style="font-size:14px;line-height:1.5;">' . implode('', $parts) . '</div>';
+
+  $block = [
+    'id' => 'st-breadcrumbs',
+    'type' => 'text',
+    'props' => ['html' => $html],
+    'style' => ['marginBottom' => '10px'],
+  ];
+
+  $found = false;
+  $rows = is_array($doc['rows'] ?? null) ? $doc['rows'] : [];
+  foreach ($rows as &$row) {
+    $cols = is_array($row['cols'] ?? null) ? $row['cols'] : [];
+    foreach ($cols as &$col) {
+      $blocks = is_array($col['blocks'] ?? null) ? $col['blocks'] : [];
+      foreach ($blocks as &$blk) {
+        if (($blk['id'] ?? '') === 'st-breadcrumbs') {
+          $blk = $block;
+          $found = true;
+          break 3;
+        }
+      }
+    }
+  }
+  unset($row, $col, $blk);
+
+  if (!$found) {
+    array_unshift($rows, [
+      'cols' => [
+        ['span' => 12, 'blocks' => [$block]],
+      ],
+    ]);
+  }
+
+  $doc['rows'] = $rows;
+  return $doc;
 }
 
 /**
@@ -114,25 +230,14 @@ if ($method === 'GET' && preg_match('#^/s/([^/]+)/?$#', $uri, $m)) {
   exit;
 }
 
-// Public page: /s/{site}/{page}
-
-if ($method === 'GET' && preg_match('#^/s/([^/]+)/([^/]+)$#', $uri, $m)) {
+// Public page: /s/{site}/{page...}
+if ($method === 'GET' && preg_match('#^/s/([^/]+)/(.+)$#', $uri, $m)) {
   $siteSlug = $m[1];
-  $pageSlug = $m[2];
+  $pageSlug = PagePath::normalizePath(rawurldecode($m[2]));
   $token = $_GET['preview_token'] ?? null;
 
   $site = Site::findBySlug($siteSlug);
   if (!$site) { http_response_code(404); echo "Site not found"; exit; }
-
-  // Cite Them Right: signed-in users see the signed-in home variant.
-  // Do NOT rewrite during preview-token requests or page_id checks will fail.
-  if ($siteSlug === 'cite-them-right' && $pageSlug === 'home' && !(is_string($token) && $token !== '')) {
-    $isSignedIn = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
-    if ($isSignedIn) {
-      $signedHome = Page::findPublishedBySlug((int)$site['id'], 'home-signed-in');
-      if ($signedHome) $pageSlug = 'home-signed-in';
-    }
-  }
 
   // ✅ PREVIEW MODE: allow preview even if page is draft/unpublished
   if (is_string($token) && $token !== '' && isset($_SESSION['nx_preview'][$token])) {
@@ -144,6 +249,7 @@ if ($method === 'GET' && preg_match('#^/s/([^/]+)/([^/]+)$#', $uri, $m)) {
 
     if ((int)$payload['page_id'] === (int)$page['id']) {
       $doc = $payload['doc'];
+      $doc = apply_source_type_breadcrumbs($doc, $page, $base, $siteSlug);
       $content = Renderer::render($doc);
 
       view('site_page.php', [
@@ -172,6 +278,7 @@ if ($method === 'GET' && preg_match('#^/s/([^/]+)/([^/]+)$#', $uri, $m)) {
   }
 
   $doc = json_decode($page['builder_json'] ?? '{}', true) ?: ['version'=>1,'rows'=>[]];
+  $doc = apply_source_type_breadcrumbs($doc, $page, $base, $siteSlug);
   $content = Renderer::render($doc);
 
   view('site_page.php', [
@@ -194,8 +301,13 @@ if ($method === 'GET' && $uri === '/api/citation/examples') {
 
   $rows = [];
   $refStyle = trim((string)($_GET['referencing_style'] ?? ''));
+  $category = trim((string)($_GET['category'] ?? ''));
   try {
-    $rows = CitationExample::listForSiteSlug($siteSlug, $refStyle !== '' ? $refStyle : null);
+    $rows = CitationExample::listForSiteSlug(
+      $siteSlug,
+      $refStyle !== '' ? $refStyle : null,
+      $category !== '' ? $category : null
+    );
   } catch (\Throwable $e) {
     json_response(['ok' => false, 'error' => 'Unable to load citation examples'], 500);
   }

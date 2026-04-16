@@ -52,7 +52,13 @@ $widthMap = ['narrow'=>'1024px','standard'=>'1180px','wide'=>'1280px'];
 $pagePadding = $paddingMap[$paddingPreset] ?? $paddingMap['medium'];
 $maxWidth = $widthMap[$maxWidthPreset] ?? $widthMap['standard'];
 $sectionSpacing = (int)($layout['sectionSpacing'] ?? 20);
-$gridGap = (int)($layout['gridGap'] ?? 16);
+$gridGapRaw = (int)($layout['gridGap'] ?? 16);
+$gridGapMap = [
+  10 => 18, // Tight
+  16 => 30, // Regular
+  24 => 42, // Roomy
+];
+$gridGap = $gridGapMap[$gridGapRaw] ?? max(18, $gridGapRaw);
 $alignment = $layout['alignment'] ?? 'left';
 $breakpoint = (int)($layout['breakpoint'] ?? 1200);
 
@@ -258,11 +264,50 @@ function safe_include(string $path, string $root): bool {
       text-underline-offset:3px;
     }
     .nx-row{
+      display:grid;
+      grid-template-columns:repeat(12,minmax(0,1fr));
+      align-items:start;
       gap:var(--nexus-grid-gap,14px);
       row-gap:var(--nexus-grid-gap,14px);
       column-gap:var(--nexus-grid-gap,14px);
       margin:var(--nexus-section-spacing,14px) 0;
       justify-content:var(--nexus-align,flex-start);
+    }
+    .nx-col{
+      min-width:0;
+      grid-column:span 12;
+    }
+    .nx-col-1{grid-column:span 1;}
+    .nx-col-2{grid-column:span 2;}
+    .nx-col-3{grid-column:span 3;}
+    .nx-col-4{grid-column:span 4;}
+    .nx-col-5{grid-column:span 5;}
+    .nx-col-6{grid-column:span 6;}
+    .nx-col-7{grid-column:span 7;}
+    .nx-col-8{grid-column:span 8;}
+    .nx-col-9{grid-column:span 9;}
+    .nx-col-10{grid-column:span 10;}
+    .nx-col-11{grid-column:span 11;}
+    .nx-col-12{grid-column:span 12;}
+    @media (max-width: 768px){
+      .nx-row{
+        grid-template-columns:1fr;
+      }
+      .nx-col,
+      .nx-col-1,
+      .nx-col-2,
+      .nx-col-3,
+      .nx-col-4,
+      .nx-col-5,
+      .nx-col-6,
+      .nx-col-7,
+      .nx-col-8,
+      .nx-col-9,
+      .nx-col-10,
+      .nx-col-11,
+      .nx-col-12{
+        grid-column:span 1;
+      }
     }
     .nx-card{
       background:var(--nexus-surface, #ffffff);

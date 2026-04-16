@@ -10,8 +10,20 @@ public static function render(array $doc): string
 {
   $rows = $doc['rows'] ?? [];
   $html = '';
+  $isSignedIn = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
 
   foreach ($rows as $row) {
+if (is_array($row)) {
+  $visibility = '';
+  if (isset($row['visibility']) && is_string($row['visibility'])) {
+    $visibility = strtolower(trim($row['visibility']));
+  } elseif (array_key_exists('visibleForSignedIn', $row)) {
+    $visibility = $row['visibleForSignedIn'] ? 'signed_in' : 'signed_out';
+  }
+
+  if ($visibility === 'signed_in' && !$isSignedIn) continue;
+  if ($visibility === 'signed_out' && $isSignedIn) continue;
+}
 $cols = is_array($row['cols'] ?? null) ? $row['cols'] : [];
 $rowStyle = is_array($row['styleRow'] ?? null) ? $row['styleRow'] : [];
 $bgEnabled = array_key_exists('bgEnabled', $rowStyle) ? (bool)$rowStyle['bgEnabled'] : true;
