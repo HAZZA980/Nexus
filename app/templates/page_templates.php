@@ -268,25 +268,37 @@ $titlePage = [
   ],
 ];
 
-$referencingBrowseQuickLinks = '<span class="ctr-quick-links-label">Quick links</span>'
-  . '<div class="ctr-quick-links">'
-  . '<a href="#">Category link 1</a><a href="#">Category link 2</a><a href="#">Category link 3</a><a href="#">Category link 4</a>'
-  . '<a href="#">Category link 5</a><a href="#">Category link 6</a><a href="#">Category link 7</a><a href="#">Category link 8</a>'
-  . '</div>'
-  . '<div class="ctr-collapse-all"><a href="#">Collapse all sections</a></div>';
+$referencingBrowseSections = [
+  'rb_acc_books' => 'Books',
+  'rb_acc_journals' => 'Journals',
+  'rb_acc_digital_internet' => 'Digital and Internet',
+  'rb_acc_media_art' => 'Media and Art',
+  'rb_acc_research' => 'Research',
+  'rb_acc_legal' => 'Legal',
+  'rb_acc_governmental' => 'Governmental',
+  'rb_acc_communications' => 'Communications',
+];
 
-$makeReferencingBrowseAccordion = static function(string $id, int $subItemCount = 5): array {
-  $subItems = [];
-  for ($i = 0; $i < $subItemCount; $i++) {
-    $subItems[] = ['label' => 'Browse link ' . ($i + 1), 'url' => '#'];
-  }
+$quickLinkItems = [];
+foreach ($referencingBrowseSections as $sectionId => $label) {
+  $quickLinkItems[] = '<a href="#' . htmlspecialchars($sectionId, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</a>';
+}
+
+$referencingBrowseQuickLinks = '<div class="ctr-quick-links-shell" style="padding:6px 0 14px;">'
+  . '<div class="ctr-quick-links-label" style="font-weight:700;margin-bottom:10px;">Quick Links</div>'
+  . '<div class="ctr-quick-links" style="display:flex;flex-wrap:wrap;gap:0;">'
+  . implode('<span style="color:#c7ccd6;padding:0 10px;">|</span>', $quickLinkItems)
+  . '</div>'
+  . '</div>';
+
+$makeReferencingBrowseAccordion = static function(string $id, string $title): array {
 
   return [
     'id' => $id,
     'type' => 'accordionTabs',
     'props' => [
       'mode' => 'accordion',
-      'accStyle' => 'grouped',
+      'accStyle' => 'title',
       'allowMultiple' => true,
       'allowCollapseAll' => true,
       'defaultOpen' => 'none',
@@ -303,16 +315,17 @@ $makeReferencingBrowseAccordion = static function(string $id, int $subItemCount 
       'headerImgPos' => 'left',
       'headerImgSize' => 'medium',
       'showBorder' => true,
+      'headerBg' => '#f2f2f1',
       'items' => [[
         'id' => $id . '_item',
-        'title' => 'Browse section',
+        'title' => $title,
         'body' => '',
         'bodyHtml' => '',
         'openDefault' => false,
         'headerImg' => '',
         'headerAlt' => '',
         'showHeaderImg' => false,
-        'subItems' => $subItems,
+        'subItems' => [],
       ]],
     ],
     'style' => [
@@ -394,14 +407,14 @@ $referencingBrowse = [
         [
           'span' => 8,
           'blocks' => [
-            $makeReferencingBrowseAccordion('rb_acc_1', 7),
-            $makeReferencingBrowseAccordion('rb_acc_2', 4),
-            $makeReferencingBrowseAccordion('rb_acc_3', 6),
-            $makeReferencingBrowseAccordion('rb_acc_4', 5),
-            $makeReferencingBrowseAccordion('rb_acc_5', 4),
-            $makeReferencingBrowseAccordion('rb_acc_6', 7),
-            $makeReferencingBrowseAccordion('rb_acc_7', 4),
-            $makeReferencingBrowseAccordion('rb_acc_8', 5),
+            $makeReferencingBrowseAccordion('rb_acc_books', 'Books'),
+            $makeReferencingBrowseAccordion('rb_acc_journals', 'Journals'),
+            $makeReferencingBrowseAccordion('rb_acc_digital_internet', 'Digital and Internet'),
+            $makeReferencingBrowseAccordion('rb_acc_media_art', 'Media and Art'),
+            $makeReferencingBrowseAccordion('rb_acc_research', 'Research'),
+            $makeReferencingBrowseAccordion('rb_acc_legal', 'Legal'),
+            $makeReferencingBrowseAccordion('rb_acc_governmental', 'Governmental'),
+            $makeReferencingBrowseAccordion('rb_acc_communications', 'Communications'),
           ],
         ],
         [
@@ -572,53 +585,43 @@ return [
     'version' => 1,
     'rows' => [
       ['cols'=>[
-        ['span'=>12,'blocks'=>[[
-          'id'=>'st-breadcrumbs',
-          'type'=>'text',
-          'props'=>[
-            'html'=>'<div style="font-size:14px;color:#294a97;">Home &gt; Referencing Styles &gt; Harvard &gt; Digital and Internet &gt; Blogs</div>'
-          ],
-          'style'=>['marginBottom'=>'10px']
-        ]]]
-      ]],
-      ['cols'=>[
         ['span'=>3,'blocks'=>[
           [
-            'id'=>'st-sidebar-style',
-            'type'=>'panel',
+            'id'=>'st-links-primary',
+            'type'=>'linkList',
             'props'=>[
-              'image'=>'',
-              'alt'=>'',
-              'layout'=>'text-top',
-              'splitRatio'=>'50-50',
-              'bodyHtml'=>'<h3 style="margin:0 0 18px;font-size:20px;letter-spacing:.02em;">REFERENCING STYLES</h3><div style="border:1px solid rgba(17,24,39,.14);border-radius:999px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-size:16px;"><span>Harvard</span><span aria-hidden="true">⌄</span></div>',
-              'body'=>'Referencing styles'
+              'title'=>'Link list 1',
+              'items'=>[
+                ['title'=>'Link item 1','subtitle'=>'','url'=>'#'],
+                ['title'=>'Link item 2','subtitle'=>'','url'=>'#'],
+                ['title'=>'Link item 3','subtitle'=>'','url'=>'#'],
+              ],
+              'footerLabel'=>'',
+              'footerUrl'=>''
             ],
             'style'=>[
               'backgroundColor'=>'#ffffff',
-              'padding'=>'20px',
-              'border'=>'1px solid rgba(17,24,39,.12)',
-              'borderTop'=>'4px solid #294a97',
+              'padding'=>'0',
               'boxShadow'=>'none',
               'marginBottom'=>'18px'
             ]
           ],
           [
-            'id'=>'st-sidebar-guidance',
-            'type'=>'panel',
+            'id'=>'st-links-secondary',
+            'type'=>'linkList',
             'props'=>[
-              'image'=>'',
-              'alt'=>'',
-              'layout'=>'text-top',
-              'splitRatio'=>'50-50',
-              'bodyHtml'=>'<h3 style="margin:0 0 18px;font-size:20px;letter-spacing:.02em;">HARVARD GUIDANCE</h3><div style="display:grid;gap:0;"><div style="padding:0 0 16px;border-bottom:1px dashed rgba(17,24,39,.14);margin-bottom:16px;">Setting out citations</div><div style="padding:0 0 16px;border-bottom:1px dashed rgba(17,24,39,.14);margin-bottom:16px;">What to include in your reference list</div><div style="padding:0 0 16px;border-bottom:1px dashed rgba(17,24,39,.14);margin-bottom:16px;">Elements that you may need to include in your references</div><div style="padding:0 0 16px;border-bottom:1px dashed rgba(17,24,39,.14);margin-bottom:16px;">Sample text and reference list using the Harvard style</div><div>Setting out quotations (Harvard)<br><span style="display:inline-block;margin-top:10px;color:#294a97;">View More</span></div></div>',
-              'body'=>'Style guidance'
+              'title'=>'Link list 2',
+              'items'=>[
+                ['title'=>'Link item 1','subtitle'=>'','url'=>'#'],
+                ['title'=>'Link item 2','subtitle'=>'','url'=>'#'],
+                ['title'=>'Link item 3','subtitle'=>'','url'=>'#'],
+              ],
+              'footerLabel'=>'',
+              'footerUrl'=>''
             ],
             'style'=>[
               'backgroundColor'=>'#ffffff',
-              'padding'=>'20px',
-              'border'=>'1px solid rgba(17,24,39,.12)',
-              'borderTop'=>'4px solid #294a97',
+              'padding'=>'0',
               'boxShadow'=>'none',
               'marginBottom'=>'18px'
             ]
@@ -629,16 +632,17 @@ return [
             'id'=>'st-hero',
             'type'=>'heroCard',
             'props'=>[
-              'title'=>'Blogs (Harvard)',
-              'body'=>'Blogs (weblogs) and vlogs (video logs) are produced by individuals and organisations to provide updates on issues of interest or concern. Be aware that because blogs/vlogs are someone\'s opinions, they may not provide objective, reasoned discussion of an issue. Use blogs/vlogs in conjunction with reputable sources. Note that due to the informality of the internet, many authors give first names or aliases. Use the name they have used in your reference.',
+              'title'=>'Source type heading',
+              'body'=>'Add the source-type overview here.',
               'bgImage'=>'',
-              'bgColor'=>'#d9d1c2',
+              'bgColor'=>'#f4f0e7',
               'overlayOpacity'=>0
             ],
             'style'=>[
               'marginBottom'=>'18px',
               'boxShadow'=>'none',
-              'border'=>'0'
+              'border'=>'1px solid rgba(17,24,39,.08)',
+              'borderRadius'=>'18px'
             ],
             'styleText'=>['color'=>'#111827','fontSize'=>16]
           ],
@@ -647,13 +651,30 @@ return [
             'type'=>'citationOrder',
             'props'=>[
               'title'=>'Citation order:',
-              'body'=>"• Author of message\n• Year the site was last updated (in round brackets)\n• Title of blog post (in single quotation marks)\n• Title of internet site (in italics)\n• Day/month of posted message\n• Available at: URL (Accessed: date)"
+              'body'=>"• Author / organisation\n• Year of publication\n• Title\n• Source details\n• URL or DOI (if needed)\n• Accessed date (if needed)"
             ],
             'style'=>[
               'backgroundColor'=>'#ffffff',
               'padding'=>'18px 20px',
               'border'=>'1px solid rgba(17,24,39,.12)',
               'borderRadius'=>'16px',
+              'boxShadow'=>'none',
+              'marginBottom'=>'18px'
+            ]
+          ],
+          [
+            'id'=>'st-example',
+            'type'=>'exampleCard',
+            'props'=>[
+              'heading'=>'Examples',
+              'body'=>"**In-text citations**\n\nAdd worked in-text citation examples here.\n\n**Reference list**\n\nAdd matching reference list examples here.",
+              'youTry'=>"Author / organisation (Year) Title. Source details. URL or DOI (Accessed: date)."
+            ],
+            'style'=>[
+              'backgroundColor'=>'#ffffff',
+              'borderTop'=>'4px solid #c8b7e8',
+              'borderRadius'=>'16px',
+              'padding'=>'0',
               'boxShadow'=>'none',
               'marginBottom'=>'18px'
             ]

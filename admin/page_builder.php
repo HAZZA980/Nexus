@@ -351,6 +351,12 @@ $builderBodyClasses = [
         </span>
         <span class="nx-item-label">Example</span>
       </div>
+      <div class="nx-item" draggable="true" data-type="linkList" tabindex="0" title="Link List">
+        <span class="nx-item-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 7h10M8 12h10M8 17h10"/><circle cx="5" cy="7" r="1.2"/><circle cx="5" cy="12" r="1.2"/><circle cx="5" cy="17" r="1.2"/></svg>
+        </span>
+        <span class="nx-item-label">Link List</span>
+      </div>
     </div>
   </div>
 

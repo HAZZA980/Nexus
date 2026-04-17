@@ -194,6 +194,11 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
       }
     }
 
+    $blockLink = trim((string)(($blk['props']['blockLink'] ?? '')));
+    if ($blockLink !== '' && in_array((string)($blk['type'] ?? ''), ['heading', 'panel', 'image', 'testimonial'], true)) {
+      $html = '<a class="nx-block-link" href="' . Security::e($blockLink) . '">' . $html . '</a>';
+    }
+
     return $html;
   }
 
@@ -256,6 +261,16 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     return $html;
   }
 
+  private static function stripSimpleAnchorWrapper(string $html): string
+  {
+    $trimmed = trim($html);
+    if ($trimmed === '') return $html;
+    if (preg_match('#^<a\b[^>]*>(.*)</a>$#is', $trimmed, $m)) {
+      return trim((string)($m[1] ?? ''));
+    }
+    return $html;
+  }
+
   /**
    * Plain-text markup: escape, convert *italic* to <em>, preserve newlines.
    */
@@ -269,6 +284,37 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     return nl2br($withItalics);
   }
 
+  private static function htmlToPlainText(string $html): string
+  {
+    if ($html === '') return '';
+    $html = preg_replace('/<\s*\/?(?:div|p|li)\b[^>]*>/iu', "\n", $html) ?? $html;
+    $html = preg_replace('/<br\s*\/?>/iu', "\n", $html) ?? $html;
+    $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = str_replace("\xC2\xA0", ' ', $text);
+    $text = preg_replace("/[ \t]+\n/", "\n", $text) ?? $text;
+    $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
+    return trim($text);
+  }
+
+  private static function renderMarkedHtml(string $raw): string
+  {
+    if ($raw === '') return '';
+    if (!self::hasHtml($raw)) {
+      return self::formatMarkedText($raw);
+    }
+
+    if (preg_match('/<(?:strong|b|em|i)\b/i', $raw)) {
+      return self::safeInlineHtml($raw);
+    }
+
+    $plain = self::htmlToPlainText($raw);
+    if ($plain !== '' && preg_match('/\*{1,2}[^*]+\*{1,2}/', $plain)) {
+      return self::formatMarkedText($plain);
+    }
+
+    return self::safeInlineHtml($raw);
+  }
+
   /**
    * Normalize bullet-style text: remove duplicated markers and apply a single bullet symbol.
    */
@@ -279,12 +325,47 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     $normalized = array_map(function ($line) {
       $trim = trim($line);
       if ($trim === '') return '';
-      // Strip leading markers twice to cover already-bulleted input.
-      $trim = preg_replace('/^[•\-\*]\s*/', '', $trim);
-      $trim = preg_replace('/^[•\-\*]\s*/', '', $trim);
+      // Strip one leading bullet/numbering marker using Unicode-safe matching.
+      $trim = preg_replace('/^(?:[•\-\*]|\d+[.)])\s*/u', '', $trim);
       return '• ' . $trim;
     }, $lines);
     return implode("\n", array_filter($normalized, fn($l) => $l !== ''));
+  }
+
+  private static function compactExampleText(string $text): string
+  {
+    $text = trim($text);
+    if ($text === '') return '';
+    return preg_replace("/(?:\r?\n[ \t]*){2,}/", "\n", $text) ?? $text;
+  }
+
+  private static function compactExampleHtml(string $html): string
+  {
+    $html = trim($html);
+    if ($html === '') return '';
+    $html = preg_replace('/^(?:\s|<br\s*\/?>|<(?:div|p)>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:div|p)>)+/iu', '', $html) ?? $html;
+    $html = preg_replace('/(?:\s|<br\s*\/?>|<(?:div|p)>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:div|p)>)+$/iu', '', $html) ?? $html;
+    $html = preg_replace('/(?:(?:<(?:div|p)>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:div|p)>)\s*){2,}/iu', '<br>', $html) ?? $html;
+    $html = preg_replace('/(?:<br\s*\/?>\s*){3,}/iu', '<br>', $html) ?? $html;
+    return $html;
+  }
+
+  private static function flattenExampleHtml(string $html): string
+  {
+    $html = self::compactExampleHtml($html);
+    if ($html === '') return '';
+    $html = preg_replace('/<\s*\/?(?:div|p)\b[^>]*>/iu', "\n", $html) ?? $html;
+    $html = preg_replace('/<br\s*\/?>/iu', "\n", $html) ?? $html;
+    $parts = preg_split("/\n+/", $html) ?: [];
+    $parts = array_values(array_filter(array_map(static fn($part) => trim($part), $parts), static fn($part) => $part !== ''));
+    return implode("\n", $parts);
+  }
+
+  private static function trimAccordionBodyHtml(string $html): string
+  {
+    $html = preg_replace('/^(?:\s|<br\s*\/?>|<(?:div|p)>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:div|p)>)+/iu', '', $html) ?? $html;
+    $html = preg_replace('/(?:\s|<br\s*\/?>|<(?:div|p)>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:div|p)>)+$/iu', '', $html) ?? $html;
+    return $html;
   }
 
   private static function hasHtml(string $str): bool
@@ -359,6 +440,10 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         }
         $stacked = ($layout === 'img-top' || $layout === 'text-top');
         $split = (string)($p['splitRatio'] ?? '50-50');
+        $imageSizeLevel = (int)($p['imageSizeLevel'] ?? 3);
+        if ($imageSizeLevel < 1 || $imageSizeLevel > 5) $imageSizeLevel = 3;
+        $mediaSizeMap = [1 => '96px', 2 => '132px', 3 => '180px', 4 => '220px', 5 => '260px'];
+        $mediaHeightMap = [1 => '90px', 2 => '120px', 3 => '160px', 4 => '210px', 5 => '260px'];
         $colsMap = [
           '50-50' => '1fr 1fr',
           '60-40' => '3fr 2fr',
@@ -367,6 +452,9 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         $cols = $colsMap[$split] ?? '1fr 1fr';
 
         $bodyRaw = (string)($p['bodyHtml'] ?? ($p['html'] ?? ''));
+        if (trim((string)($p['blockLink'] ?? '')) !== '' && $bodyRaw !== '') {
+          $bodyRaw = self::stripSimpleAnchorWrapper($bodyRaw);
+        }
         if ($bodyRaw !== '') {
           $body = self::hasHtml($bodyRaw) ? self::safeInlineHtml($bodyRaw) : self::formatMarkedText($bodyRaw);
         } else {
@@ -387,8 +475,59 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         if ($layout === 'img-top')   { $first = $media; $second = $text; }
 
         $extra = $stacked ? ' nx-panel--stacked' : '';
-        $style = (!$stacked) ? "style=\"grid-template-columns:{$cols};\"" : '';
+        $styleParts = [];
+        if (!$stacked) {
+          $styleParts[] = "grid-template-columns:{$cols}";
+          $styleParts[] = "--panel-media-size:" . $mediaSizeMap[$imageSizeLevel];
+        } else {
+          $styleParts[] = "--panel-media-height:" . $mediaHeightMap[$imageSizeLevel];
+        }
+        $style = $styleParts ? 'style="' . implode(';', $styleParts) . '"' : '';
         $html = "<div class=\"nx-panel nx-panel--{$layout}{$extra}\" {$style}>{$first}{$second}</div>";
+
+        return self::wrapWithStyles($html, $blk, true);
+      }
+
+      case 'linkList': {
+        $title = Security::e((string)($p['title'] ?? 'Link List'));
+        $items = is_array($p['items'] ?? null) ? $p['items'] : [];
+        $footerLabel = trim((string)($p['footerLabel'] ?? ''));
+        $footerUrl = trim((string)($p['footerUrl'] ?? ''));
+        $docIcon = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3h6l4 4v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v5h5"/><path d="M9 12h6M9 16h6"/></svg>';
+        $itemsHtml = '';
+
+        foreach ($items as $item) {
+          if (!is_array($item)) continue;
+          $itemTitle = trim((string)($item['title'] ?? ''));
+          $itemSubtitle = trim((string)($item['subtitle'] ?? ''));
+          $itemUrl = trim((string)($item['url'] ?? ''));
+          if ($itemTitle === '' && $itemSubtitle === '') continue;
+
+          $titleHtml = '<div class="nx-linklist-item-title">' . Security::e($itemTitle === '' ? 'Untitled link' : $itemTitle) . '</div>';
+          $subtitleHtml = $itemSubtitle !== '' ? '<div class="nx-linklist-item-subtitle">' . Security::e($itemSubtitle) . '</div>' : '';
+          $inner = '<div class="nx-linklist-icon">' . $docIcon . '</div><div>' . $titleHtml . $subtitleHtml . '</div>';
+          $itemsHtml .= $itemUrl !== ''
+            ? '<a class="nx-linklist-item" href="' . Security::e($itemUrl) . '">' . $inner . '</a>'
+            : '<div class="nx-linklist-item">' . $inner . '</div>';
+        }
+
+        if ($itemsHtml === '') {
+          $itemsHtml = '<div class="nx-linklist-item"><div class="nx-linklist-icon">' . $docIcon . '</div><div><div class="nx-linklist-item-title">Add links</div></div></div>';
+        }
+
+        $footerHtml = '';
+        if ($footerLabel !== '') {
+          $footerText = Security::e($footerLabel);
+          $footerHtml = $footerUrl !== ''
+            ? '<div class="nx-linklist-footer"><a href="' . Security::e($footerUrl) . '">' . $footerText . '</a></div>'
+            : '<div class="nx-linklist-footer">' . $footerText . '</div>';
+        }
+
+        $html = '<div class="nx-linklist">'
+          . '<div class="nx-linklist-title">' . $title . '</div>'
+          . '<div class="nx-linklist-items">' . $itemsHtml . '</div>'
+          . $footerHtml
+          . '</div>';
 
         return self::wrapWithStyles($html, $blk, true);
       }
@@ -433,7 +572,7 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
         $bodyRaw = (string)($p['html'] ?? '');
         if ($bodyRaw !== '') {
-          $body = self::hasHtml($bodyRaw) ? self::safeInlineHtml($bodyRaw) : self::formatMarkedText($bodyRaw);
+          $body = self::renderMarkedHtml($bodyRaw);
         } else {
           $plain = (string)($p['body'] ?? '');
           $normalized = self::normalizeBulletText($plain);
@@ -453,13 +592,21 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
         $bodyRaw = (string)($p['bodyHtml'] ?? ($p['html'] ?? ''));
         if ($bodyRaw !== '') {
-          $body = self::hasHtml($bodyRaw) ? self::safeInlineHtml($bodyRaw) : self::formatMarkedText($bodyRaw);
+          $bodyRaw = self::flattenExampleHtml($bodyRaw);
+          $body = self::hasHtml($bodyRaw)
+            ? self::safeInlineHtml(str_replace("\n", '<br>', $bodyRaw))
+            : self::formatMarkedText(self::compactExampleText($bodyRaw));
         } else {
-          $body = self::formatMarkedText((string)($p['body'] ?? ''));
+          $body = self::formatMarkedText(self::compactExampleText((string)($p['body'] ?? '')));
         }
 
         $youTryRaw = (string)($p['youTry'] ?? '');
-        $youTry = self::hasHtml($youTryRaw) ? self::safeInlineHtml($youTryRaw) : self::formatMarkedText($youTryRaw);
+        if (self::hasHtml($youTryRaw)) {
+          $youTryRaw = self::flattenExampleHtml($youTryRaw);
+        }
+        $youTry = self::hasHtml($youTryRaw)
+          ? self::safeInlineHtml(str_replace("\n", '<br>', $youTryRaw))
+          : self::formatMarkedText(self::compactExampleText($youTryRaw));
         $showTry = !array_key_exists('showYouTry', $p) || (bool)$p['showYouTry'];
         $extraClass = $showTry ? '' : ' nx-examplecard--single';
 
@@ -472,13 +619,17 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         if ($showTry) {
           $uid = uniqid('yt_', false);
           $expected = (string)($p['youTry'] ?? '');
-          $expectedHtml = self::hasHtml($expected) ? self::safeInlineHtml($expected) : self::formatMarkedText($expected);
+          if (self::hasHtml($expected)) {
+            $expected = self::flattenExampleHtml($expected);
+          }
+          $expectedHtml = self::hasHtml($expected)
+            ? self::safeInlineHtml(str_replace("\n", '<br>', $expected))
+            : self::formatMarkedText(self::compactExampleText($expected));
 
           $html .= "<div class=\"nx-examplecard-right\">"
             . "<div class=\"nx-examplecard-try-title\">You try</div>"
             . "<div class=\"nx-trybox\">"
               . "<div id=\"{$uid}_input\" class=\"nx-try-input\" aria-label=\"Enter your citation\" contenteditable=\"true\">{$expectedHtml}</div>"
-            . "</div>"
             . "</div>"
             . "</div>";
         }
@@ -701,9 +852,10 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         }
 
         $mode = ($p['mode'] ?? 'accordion') === 'tabs' ? 'tabs' : 'accordion';
-        $accStyle = in_array($p['accStyle'] ?? 'standard', ['standard','grouped'], true) ? $p['accStyle'] : 'standard';
+        $accStyle = in_array($p['accStyle'] ?? 'standard', ['standard','title','grouped'], true) ? $p['accStyle'] : 'standard';
         if ($mode === 'tabs') $accStyle = 'standard';
         $isGrouped = $mode === 'accordion' && $accStyle === 'grouped';
+        $isTitle = $mode === 'accordion' && $accStyle === 'title';
 
         $allowMultiple = $isGrouped ? true : !empty($p['allowMultiple']);
         $allowCollapseAll = $isGrouped ? true : (!array_key_exists('allowCollapseAll', $p) || (bool)$p['allowCollapseAll']);
@@ -765,7 +917,8 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
           $tabsHtml = '';
           $panelsHtml = '';
           foreach ($items as $i => $it) {
-            $bodyRaw = $it['bodyHtml'] !== '' ? $it['bodyHtml'] : $it['body'];
+            $bodyHtmlRaw = self::trimAccordionBodyHtml((string)($it['bodyHtml'] ?? ''));
+            $bodyRaw = $bodyHtmlRaw !== '' ? $bodyHtmlRaw : $it['body'];
             // Preserve author-entered line breaks when plain text is used
             if ($it['bodyHtml'] === '' && is_string($bodyRaw)) {
               $bodyRaw = nl2br($bodyRaw);
@@ -890,13 +1043,71 @@ HTML;
             . "<div class=\"nx-accordion-body\">" . $parentList . "<div class=\"nx-accordion-childlist\">{$childHtml}</div></div>"
             . "</div>"
             . "</div>";
+        } elseif ($isTitle) {
+          $parent = $items[0] ?? ['title' => 'Section', 'body' => '', 'bodyHtml' => '', 'openDefault' => false];
+          $children = array_slice($items, 1);
+          $parentOpen = !empty($parent['openDefault']);
+          $childOpen = [];
+          if ($defaultOpen === 'first' && isset($items[1])) $childOpen[1] = true;
+          if ($defaultOpen === 'custom' && isset($items[$defaultIndex]) && $defaultIndex > 0) $childOpen[$defaultIndex] = true;
+          foreach ($items as $i => $it) {
+            if ($i > 0 && !empty($it['openDefault'])) $childOpen[$i] = true;
+          }
+          if (!$allowMultiple && count($childOpen) > 1) {
+            $firstKey = array_key_first($childOpen);
+            $childOpen = [$firstKey => true];
+          }
+
+          $headId = "acc-head-{$accId}-0";
+          $panelId = "acc-panel-{$accId}-0";
+          $parentBodyHtmlRaw = self::trimAccordionBodyHtml((string)($parent['bodyHtml'] ?? ''));
+          $parentBodyRaw = $parentBodyHtmlRaw !== '' ? $parentBodyHtmlRaw : $parent['body'];
+          $parentBody = $parentBodyRaw !== '' ? self::safeInlineHtml($parentBodyRaw) : '';
+          $childHtml = '';
+          foreach ($children as $offset => $it) {
+            $i = $offset + 1;
+            $isOpen = isset($childOpen[$i]);
+            $childHeadId = "acc-head-{$accId}-{$i}";
+            $childPanelId = "acc-panel-{$accId}-{$i}";
+            $bodyHtmlRaw = self::trimAccordionBodyHtml((string)($it['bodyHtml'] ?? ''));
+            $bodyRaw = $bodyHtmlRaw !== '' ? $bodyHtmlRaw : $it['body'];
+            $body = $bodyRaw !== '' ? self::safeInlineHtml($bodyRaw) : '';
+            $thumb = ($it['showHeaderImg'] && $it['headerImg'])
+              ? '<span class="nx-acc-thumb size-' . Security::e($headerImgSize) . '" style="background-image:url(\'' . Security::e($it['headerImg']) . '\')" aria-hidden="true"></span>'
+              : '';
+            $childHtml .= "<div class=\"nx-title-accordion-item" . ($isOpen ? " is-open" : "") . "\" data-idx=\"{$i}\">"
+              . "<button type=\"button\" class=\"nx-accordion-head\" id=\"{$childHeadId}\" aria-expanded=\"" . ($isOpen ? 'true' : 'false') . "\" aria-controls=\"{$childPanelId}\">"
+              . ($headerImgPos === 'left' ? $thumb : '')
+              . "<span class=\"nx-accordion-title\">" . Security::e($it['title']) . "</span>"
+              . ($headerImgPos === 'right' ? $thumb : '')
+              . "<span class=\"nx-accordion-plus\" aria-hidden=\"true\">" . ($isOpen ? '−' : '+') . "</span>"
+              . "</button>"
+              . "<div class=\"nx-accordion-panel\" id=\"{$childPanelId}\" role=\"region\" aria-labelledby=\"{$childHeadId}\"" . ($isOpen ? '' : ' hidden') . ">"
+              . "<div class=\"nx-accordion-body\">" . ($body !== '' ? $body : '<span class="nx-muted">Add content…</span>') . "</div>"
+              . "</div>"
+              . "</div>";
+          }
+
+          $itemsHtml = "<div class=\"nx-accordion-item nx-accordion-parent" . ($parentOpen ? " is-open" : "") . "\" data-idx=\"0\">"
+            . "<button type=\"button\" class=\"nx-accordion-head\" id=\"{$headId}\" aria-expanded=\"" . ($parentOpen ? 'true' : 'false') . "\" aria-controls=\"{$panelId}\">"
+            . "<span class=\"nx-accordion-title\">" . Security::e($parent['title'] ?? 'Section') . "</span>"
+            . "<span class=\"nx-accordion-plus\" aria-hidden=\"true\">" . ($parentOpen ? '−' : '+') . "</span>"
+            . "</button>"
+            . "<div class=\"nx-accordion-panel\" id=\"{$panelId}\" role=\"region\" aria-labelledby=\"{$headId}\"" . ($parentOpen ? '' : ' hidden') . ">"
+            . "<div class=\"nx-accordion-body\">"
+            . ($parentBody !== '' ? '<div class="nx-title-accordion-intro">' . $parentBody . '</div>' : '')
+            . "<div class=\"nx-title-accordion-children\">" . ($childHtml !== '' ? $childHtml : '<div class="nx-muted">Add child accordion items…</div>') . "</div>"
+            . "</div>"
+            . "</div>"
+            . "</div>";
         } else {
           foreach ($items as $i => $it) {
             $isOpen = isset($open[$i]);
             $headId = "acc-head-{$accId}-{$i}";
             $panelId = "acc-panel-{$accId}-{$i}";
 
-            $bodyRaw = $it['bodyHtml'] !== '' ? $it['bodyHtml'] : $it['body'];
+            $bodyHtmlRaw = self::trimAccordionBodyHtml((string)($it['bodyHtml'] ?? ''));
+            $bodyRaw = $bodyHtmlRaw !== '' ? $bodyHtmlRaw : $it['body'];
             $body = $bodyRaw !== '' ? self::safeInlineHtml($bodyRaw) : '';
             $thumb = ($it['showHeaderImg'] && $it['headerImg'])
               ? '<span class="nx-acc-thumb size-' . Security::e($headerImgSize) . '" style="background-image:url(\'' . Security::e($it['headerImg']) . '\')" aria-hidden="true"></span>'
@@ -918,6 +1129,8 @@ HTML;
 
         if ($isGrouped) {
           $accordion = "<div class=\"nx-accordion nx-accordion--grouped\" id=\"{$accId}\" data-grouped=\"1\" data-allow=\"multiple\" data-collapse=\"allow\" data-indicator=\"right\" data-spacing=\"compact\" data-style=\"minimal\" data-dividers=\"on\" data-border=\"" . ($showBorder ? 'on' : 'off') . "\"{$styleInline}>{$itemsHtml}</div>";
+        } elseif ($isTitle) {
+          $accordion = "<div class=\"nx-accordion nx-accordion--title\" id=\"{$accId}\" data-title-accordion=\"1\" data-allow=\"" . ($allowMultiple ? 'multiple' : 'single') . "\" data-collapse=\"" . ($allowCollapseAll ? 'allow' : 'force') . "\" data-border=\"" . ($showBorder ? 'on' : 'off') . "\"{$styleInline}>{$itemsHtml}</div>";
         } else {
           $accordion = "<div class=\"nx-accordion\" id=\"{$accId}\" data-allow=\"" . ($allowMultiple ? 'multiple' : 'single') . "\" data-collapse=\"" . ($allowCollapseAll ? 'allow' : 'force') . "\" data-indicator=\"" . ($showIndicator ? $indicatorPosition : 'none') . "\" data-spacing=\"{$spacing}\" data-style=\"{$styleVariant}\" data-dividers=\"" . ($showDividers ? 'on' : 'off') . "\" data-border=\"" . ($showBorder ? 'on' : 'off') . "\"{$styleInline}>{$itemsHtml}</div>";
         }
@@ -926,10 +1139,12 @@ HTML;
   const root=document.getElementById("{$accId}");
   if(!root)return;
   const isGrouped=root.dataset.grouped==="1";
+  const isTitle=root.dataset.titleAccordion==="1";
   const allowMultiple=root.dataset.allow==="multiple";
   const allowCollapse=root.dataset.collapse!=="force";
-  const items=[...root.querySelectorAll('.nx-accordion-item')];
+  const items=isTitle?[...root.querySelectorAll(':scope > .nx-accordion-item')]:[...root.querySelectorAll('.nx-accordion-item')];
   const childRows=isGrouped?[...root.querySelectorAll('.nx-accordion-childrow')]:[];
+  const titleChildren=isTitle?[...root.querySelectorAll('.nx-title-accordion-item')]:[];
   const closeAllChildren=()=>{
     childRows.forEach(row=>{
       const panel=row.querySelector('.nx-accordion-childpanel');
@@ -1003,6 +1218,23 @@ HTML;
     btn.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}});
     setOpen(item, item.classList.contains('is-open'));
   });
+  if(isTitle){
+    titleChildren.forEach((item)=>{
+      const btn=item.querySelector('.nx-accordion-head');
+      if(!btn)return;
+      const toggle=()=>{
+        const open=item.classList.contains('is-open');
+        if(open && !allowCollapse && !allowMultiple) return;
+        if(!open && !allowMultiple){
+          titleChildren.forEach(it=>{ if(it!==item) setOpen(it,false); });
+        }
+        setOpen(item,!open);
+      };
+      btn.addEventListener('click',e=>{e.preventDefault();toggle();});
+      btn.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}});
+      setOpen(item, item.classList.contains('is-open'));
+    });
+  }
   if(childRows.length){
     childRows.forEach(row=>{
       const head=row.querySelector('.nx-accordion-childhead');

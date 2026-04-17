@@ -36,7 +36,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($leafSlug !== '') $pathParts[] = $leafSlug;
     $fullSlug = PagePath::join($pathParts);
 
-    if ($title === '' || $stylePart === '' || $topicPart === '' || $leafSlug === '') $error = "Title, style, topic, and source type are required.";
+    $needsPathBuilder = ($mode === 'template' && $tpl === 'source-type');
+    if ($title === '' || $leafSlug === '' || ($needsPathBuilder && ($stylePart === '' || $topicPart === ''))) {
+      $error = $needsPathBuilder
+        ? "Title, style, topic, and source type are required."
+        : "Title and source type are required.";
+    }
     elseif (Page::findBySlugAnyStatus($siteId, $fullSlug)) $error = "Page path already exists.";
     else {
       $doc = ['version'=>1,'rows'=>[]];
@@ -93,14 +98,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <label>Source Type</label>
         <input name="slug" id="slug" required placeholder="blogs">
       </div>
-      <div class="fieldrow">
+      <div class="fieldrow" id="pathBuilderRow" hidden>
         <label>File path</label>
         <div class="path-builder">
           <div class="path-prefix"><?= Security::e(strtolower((string)($site['slug'] ?? 'site'))) ?>/</div>
           <div class="path-grid path-grid-fixed">
             <div>
               <label for="path_style">Style</label>
-              <select id="path_style" name="path_style" required>
+              <select id="path_style" name="path_style">
                 <option value="">Select style</option>
                 <?php foreach ($styleOptions as $styleOption): ?>
                   <option value="<?= Security::e($styleOption) ?>"><?= Security::e($styleOption) ?></option>
@@ -109,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <div>
               <label for="path_topic">Topic</label>
-              <select id="path_topic" name="path_topic" required>
+              <select id="path_topic" name="path_topic">
                 <option value="">Select topic</option>
                 <?php foreach ($topicOptions as $topicOption): ?>
                   <option value="<?= Security::e($topicOption) ?>"><?= Security::e($topicOption) ?></option>
@@ -127,8 +132,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'home' => ['name'=>'Simple Home','desc'=>'Heading and two-column content starter.'],
             'title-page' => ['name'=>'Title page','desc'=>'Cite Them Right homepage structure with editable placeholder blocks.'],
             'referencing-browse' => ['name'=>'Referencing Browse','desc'=>'Browse-by-category scaffold with quick links, accordions, and sidebar panels.'],
+            'source-type' => ['name'=>'Source Type','desc'=>'Two-column source page with stacked link lists and citation content blocks.'],
             'article' => ['name'=>'Article','desc'=>'Article body with related sidebar.'],
-            'source-type' => ['name'=>'Source Type','desc'=>'Heading, intro text, citation order, and example block.'],
           ];
         ?>
         <?php foreach ($layoutMeta as $id => $meta): ?>
@@ -174,8 +179,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const styleInput = document.getElementById('path_style');
     const topicInput = document.getElementById('path_topic');
     const pathPreview = document.getElementById('pathPreview');
+    const pathBuilderRow = document.getElementById('pathBuilderRow');
 
     function slugify(val){return (val||'').toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,'');}
+    function togglePathBuilder(){
+      const selectedTemplate = tplInput.value || '';
+      const show = modeInput.value === 'template' && selectedTemplate === 'source-type';
+      if (pathBuilderRow) pathBuilderRow.hidden = !show;
+      if (styleInput) styleInput.required = show;
+      if (topicInput) topicInput.required = show;
+    }
     function updatePathPreview(){
       const parts = [slugify(styleInput?.value || ''), slugify(topicInput?.value || '')].filter(Boolean);
       const leaf = slugify(slugInput?.value || '');
@@ -186,6 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     topicInput?.addEventListener('change', updatePathPreview);
     slugInput?.addEventListener('input', updatePathPreview);
     updatePathPreview();
+    togglePathBuilder();
 
     document.querySelectorAll('.layout-card').forEach(card => {
       card.addEventListener('click', () => {
@@ -199,11 +213,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           modeInput.value = 'template';
           tplInput.value = layout;
         }
+        togglePathBuilder();
+        const needsPathBuilder = modeInput.value === 'template' && layout === 'source-type';
+        const hasPathParts = !needsPathBuilder || (styleInput?.value.trim() && topicInput?.value.trim());
 
-        if (titleInput.value.trim() && slugInput.value.trim()) {
+        if (titleInput.value.trim() && slugInput.value.trim() && hasPathParts) {
           form.submit();
         } else {
-          (titleInput.value.trim() ? slugInput : titleInput).focus();
+          if (!titleInput.value.trim()) {
+            titleInput.focus();
+          } else if (!slugInput.value.trim()) {
+            slugInput.focus();
+          } else if (needsPathBuilder && !(styleInput?.value.trim())) {
+            styleInput?.focus();
+          } else if (needsPathBuilder && !(topicInput?.value.trim())) {
+            topicInput?.focus();
+          }
         }
       });
     });

@@ -458,6 +458,13 @@ html[data-theme="light"] .nx-mode-toggle .mode-current{
   height:180px;
   border-radius:0;
 }
+.nx-panel-preview.panel-horizontal .panel-img{
+  width:var(--panel-media-size, 180px);
+  height:var(--panel-media-size, 180px);
+}
+.nx-panel-preview.panel-stacked .panel-img{
+  height:var(--panel-media-height, 180px);
+}
 .nx-panel-preview.panel-horizontal .panel-body{
   padding:12px;
 }
@@ -594,6 +601,74 @@ body.builder-site-cite-them-right.builder-page-home-signed-in .rowbox:nth-of-typ
 }
 .nx-download-preview .icon{
   font-size:16px;
+}
+.nx-linklist-preview{
+  border:1px solid rgba(17,24,39,.14);
+  border-top:4px solid #294a97;
+  background:#fff;
+  padding:18px 18px 10px;
+}
+.nx-linklist-preview-title{
+  font-size:16px;
+  font-weight:900;
+  color:#2d2d2d;
+  letter-spacing:.01em;
+  margin-bottom:14px;
+  text-transform:uppercase;
+}
+.nx-linklist-preview-item{
+  display:grid;
+  grid-template-columns:34px 1fr;
+  gap:12px;
+  align-items:start;
+  padding:12px 0;
+  border-bottom:1px dashed rgba(17,24,39,.14);
+}
+.nx-linklist-preview-item:last-of-type{
+  border-bottom:0;
+}
+.nx-linklist-preview-icon{
+  width:28px;
+  height:28px;
+  border-radius:999px;
+  background:#1f3b82;
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.nx-linklist-preview-icon svg{
+  width:14px;
+  height:14px;
+}
+.nx-linklist-preview-main{
+  color:#1f3b82;
+  font-size:14px;
+  line-height:1.45;
+}
+.nx-linklist-preview-sub{
+  margin-top:4px;
+  color:#2d2d2d;
+  font-size:13px;
+  line-height:1.45;
+}
+.nx-linklist-preview-footer{
+  margin-top:6px;
+  text-align:right;
+  color:#1f3b82;
+  font-weight:600;
+  font-size:14px;
+}
+.nx-linklist-item{
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:10px;
+  padding:10px;
+  margin-bottom:10px;
+}
+.nx-linklist-item-actions{
+  display:flex;
+  justify-content:flex-end;
+  margin-top:8px;
 }
 .btn.small{
   padding:8px 10px;
@@ -797,6 +872,26 @@ body.builder-site-cite-them-right.builder-page-home-signed-in .rowbox:nth-of-typ
   margin:10px 0;
   color:#111827;
 }
+.nx-block-link-preview{
+  position:relative;
+  display:block;
+  cursor:default;
+}
+.nx-block-link-badge{
+  position:absolute;
+  top:8px;
+  right:8px;
+  z-index:2;
+  padding:4px 8px;
+  border-radius:999px;
+  background:rgba(37,99,235,.12);
+  border:1px solid rgba(37,99,235,.28);
+  color:#1d4ed8;
+  font-size:11px;
+  font-weight:700;
+  line-height:1;
+  pointer-events:none;
+}
 
 .block.selected{outline:3px solid rgba(37,99,235,.28)}
 .block.block-drop-before{box-shadow:0 -2px 0 0 #2563eb inset;}
@@ -955,10 +1050,10 @@ body.builder-site-cite-them-right.builder-page-home-signed-in .rowbox:nth-of-typ
 }
 
 .nexus-page .nx-citation{
-  border:1px solid rgba(17,24,39,.14);
+  border:0;
   border-radius:18px;
   padding:18px;
-  background:#f7f7f3;
+  background:#ffffff;
 }
 .nexus-page .nx-citation-title{
   font-weight:900;
@@ -972,6 +1067,7 @@ body.builder-site-cite-them-right.builder-page-home-signed-in .rowbox:nth-of-typ
   grid-template-columns:2fr 1fr;
   gap:14px;
   border:1px solid rgba(17,24,39,.14);
+  border-top:6px solid #a78bc8;
   border-radius:16px;
   overflow:hidden;
   background:#f9f9f7;
@@ -993,7 +1089,31 @@ body.builder-site-cite-them-right.builder-page-home-signed-in .rowbox:nth-of-typ
   margin-bottom:10px;
   font-size:17px;
 }
-.nexus-page .nx-examplecard-body{ line-height:1.6; color:#2d2d2d; white-space:pre-line; }
+.nexus-page .nx-examplecard-body{ line-height:1.35; color:#2d2d2d; }
+.nexus-page .nx-examplecard-body > *,
+.nexus-page .nx-examplecard-trybox > *{ margin-top:0; margin-bottom:0; }
+.nexus-page .nx-examplecard-body p,
+.nexus-page .nx-examplecard-body div,
+.nexus-page .nx-examplecard-body ul,
+.nexus-page .nx-examplecard-body ol,
+.nexus-page .nx-examplecard-trybox p,
+.nexus-page .nx-examplecard-trybox div,
+.nexus-page .nx-examplecard-trybox ul,
+.nexus-page .nx-examplecard-trybox ol{ margin:0 0 8px; line-height:1.35; }
+.nexus-page .nx-examplecard-body li,
+.nexus-page .nx-examplecard-trybox li{ margin:0 0 4px; line-height:1.35; }
+.nexus-page .nx-examplecard-body > :last-child,
+.nexus-page .nx-examplecard-body p:last-child,
+.nexus-page .nx-examplecard-body div:last-child,
+.nexus-page .nx-examplecard-body ul:last-child,
+.nexus-page .nx-examplecard-body ol:last-child,
+.nexus-page .nx-examplecard-trybox > :last-child,
+.nexus-page .nx-examplecard-trybox p:last-child,
+.nexus-page .nx-examplecard-trybox div:last-child,
+.nexus-page .nx-examplecard-trybox ul:last-child,
+.nexus-page .nx-examplecard-trybox ol:last-child{ margin-bottom:0; }
+.nexus-page .nx-examplecard-body br + br,
+.nexus-page .nx-examplecard-trybox br + br{ display:none; }
 .nexus-page .nx-examplecard-try-title{
   font-weight:900;
   margin-bottom:10px;
@@ -1027,10 +1147,11 @@ body.builder-site-cite-them-right.builder-page-home-signed-in .rowbox:nth-of-typ
 }
 .nexus-page .nx-hero-card{
   background:#fff;
+  border:2px solid #111111;
   border-radius:16px;
   padding:18px;
   max-width:70%;
-  box-shadow:0 14px 36px rgba(0,0,0,.18);
+  box-shadow:none;
 }
 .nexus-page .nx-hero-title{
   font-weight:900;
@@ -1142,6 +1263,11 @@ body.builder-site-cite-them-right.builder-page-home-signed-in .rowbox:nth-of-typ
   color:inherit;
   text-align:left;
   cursor:pointer;
+}
+.nx-itemchip-input{
+  min-width:0;
+  font:inherit;
+  cursor:text;
 }
 .nx-itemchip.active{outline:2px solid rgba(37,99,235,.45);}
 
@@ -1351,6 +1477,120 @@ body.builder-site-cite-them-right.builder-page-home-signed-in .rowbox:nth-of-typ
   padding:0 0 10px;
   background:#fff;
   border-top:0;
+}
+.nx-accordion--title{
+  border:1px solid #e3e5e8;
+  border-radius:0;
+  background:#fff;
+}
+.nx-accordion--title .nx-accordion-parent .nx-accordion-head{
+  background:#f2f2f1;
+  color:#2e3138;
+  padding:10px 14px;
+  font-size:15px;
+  font-weight:500;
+}
+.nx-accordion--title .nx-accordion-parent .nx-accordion-plus{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:28px;
+  height:28px;
+  border:2px solid currentColor;
+  border-radius:999px;
+  font-size:18px;
+  line-height:1;
+}
+.nx-accordion--title .nx-accordion-parent .nx-accordion-panel{
+  background:#fff;
+}
+.nx-accordion--title .nx-accordion-parent > .nx-accordion-panel > .nx-accordion-body{
+  padding:0;
+  white-space:normal;
+}
+.nx-title-accordion-intro{
+  padding:10px 14px 8px;
+  line-height:1.5;
+  color:#1f3b82;
+  font-size:13px;
+}
+.nx-title-accordion-intro > :first-child{
+  margin-top:0;
+}
+.nx-title-accordion-intro > :last-child{
+  margin-bottom:0;
+}
+.nx-title-accordion-intro > *{
+  margin-top:0;
+  margin-bottom:0;
+}
+.nx-title-accordion-children{
+  padding:0;
+}
+.nx-title-accordion-item + .nx-title-accordion-item{
+  border-top:1px solid #d2d5da;
+}
+.nx-title-accordion-item{
+  width:100%;
+}
+.nx-title-accordion-item .nx-accordion-head{
+  width:100%;
+  background:transparent;
+  color:#232833;
+  padding:8px 14px;
+  font-weight:700;
+  border-radius:0;
+  border-top:0;
+  font-size:13px;
+  box-shadow:none;
+}
+.nx-accordion--title .nx-title-accordion-item .nx-accordion-head,
+.nx-accordion--title .nx-title-accordion-item.is-open .nx-accordion-head,
+.nx-accordion--title .nx-title-accordion-item .nx-accordion-head:hover{
+  background:transparent !important;
+  color:#232833;
+  box-shadow:none;
+}
+.nx-title-accordion-item.is-open .nx-accordion-head{
+  background:transparent;
+  color:#232833;
+}
+.nx-title-accordion-item .nx-accordion-panel{
+  background:#fff;
+}
+.nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body{
+  padding:2px 14px 10px;
+  white-space:normal;
+  line-height:1.45;
+  color:#1f3b82;
+  font-size:13px;
+}
+.nx-title-accordion-item .nx-accordion-plus{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:auto !important;
+  height:auto !important;
+  border:0 !important;
+  border-radius:0 !important;
+  color:#233f86;
+  font-size:18px;
+  font-weight:700;
+  padding:0;
+  background:transparent !important;
+  outline:none;
+  box-shadow:none !important;
+}
+.nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body > *{
+  margin-top:0;
+  margin-bottom:0;
+}
+.nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body a{
+  color:#1f3b82;
+  text-decoration:none;
+}
+.nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body a:hover{
+  text-decoration:underline;
 }
 .nx-accordion[data-spacing="compact"] .nx-accordion-head,
 .nx-accordion[data-spacing="compact"] .nx-accordion-body{padding:10px 12px;}

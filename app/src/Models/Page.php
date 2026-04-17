@@ -141,6 +141,21 @@ public static function findBySlugAnyStatus(int $siteId, string $slug): ?array {
   return $row ?: null;
 }
 
+public static function updateTitleAndSlug(int $pageId, string $title, string $slug): void {
+  self::ensureSchema();
+  $row = self::find($pageId);
+  if (!$row) throw new \RuntimeException('Page not found');
+
+  $title = trim($title);
+  $slug = PagePath::normalizePath($slug);
+  $doc = json_decode((string)($row['builder_json'] ?? '{}'), true);
+  if (!is_array($doc)) $doc = ['version' => 1, 'rows' => []];
+  $search = self::computeSearchText($title, $slug, $doc);
+
+  $st = DB::pdo()->prepare("UPDATE pages SET title=?, slug=?, search_text=?, updated_at=NOW() WHERE id=? LIMIT 1");
+  $st->execute([$title, $slug, $search, $pageId]);
+}
+
   public static function searchPublished(int $siteId, string $query): array {
     self::ensureSchema();
     $q = '%' . $query . '%';

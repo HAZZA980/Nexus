@@ -342,8 +342,11 @@ function safe_include(string $path, string $root): bool {
   </style>
 </head>
 
-<?php $pageSlugClass = PartialsManager::safeSlug((string)($page['slug'] ?? '')); ?>
-<body class="<?= $motionReduced === 'reduce' ? 'motion-reduce ' : '' ?>page-<?= Security::e($pageSlugClass) ?>">
+<?php
+$pageSlugClass = PartialsManager::safeSlug((string)($page['slug'] ?? ''));
+$templateKeyClass = PartialsManager::safeSlug((string)($page['template_key'] ?? ''));
+?>
+<body class="<?= $motionReduced === 'reduce' ? 'motion-reduce ' : '' ?><?= $isPreview ? 'is-preview ' : '' ?>page-<?= Security::e($pageSlugClass) ?><?= $templateKeyClass !== '' ? ' template-' . Security::e($templateKeyClass) : '' ?>">
 
 <?php if ($isPreview): ?>
   <div class="nx-adminbar">

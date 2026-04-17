@@ -605,6 +605,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   }
 
+  if (isset($_POST['rename_page'])) {
+    $pageId = (int)($_POST['page_id'] ?? 0);
+    $newTitle = trim((string)($_POST['page_title'] ?? ''));
+    $newPath = trim((string)($_POST['page_slug'] ?? ''));
+    try {
+      $page = Page::find($pageId);
+      if ($page && (int)$page['site_id'] === $siteId) {
+        $normalizedSlug = PagePath::normalizePath($newPath);
+        if ($newTitle === '' || $normalizedSlug === '') {
+          $notice = 'Page name and file path are required.';
+        } else {
+          $existing = Page::findBySlugAnyStatus($siteId, $normalizedSlug);
+          if ($existing && (int)($existing['id'] ?? 0) !== $pageId) {
+            $notice = 'File path already exists. Choose another.';
+          } else {
+            Page::updateTitleAndSlug($pageId, $newTitle, $normalizedSlug);
+            PartialsManager::movePageDirectory((string)($site['slug'] ?? ''), (string)($page['slug'] ?? ''), $normalizedSlug);
+            header('Location: site.php?id=' . $siteId . '&saved=page');
+            exit;
+          }
+        }
+      } else {
+        $notice = 'Page not found for this site.';
+      }
+    } catch (\Throwable $e) {
+      $notice = 'Rename failed. Please try again.';
+    }
+  }
+
   // Duplicate page
   if (isset($_POST['duplicate_page'])) {
     $pageId = (int)($_POST['duplicate_page'] ?? 0);
@@ -654,8 +683,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($leafSlug !== '') $pathParts[] = $leafSlug;
     $normalizedSlug = PagePath::join($pathParts);
 
-    if ($title === '' || $stylePart === '' || $topicPart === '' || $leafSlug === '') {
-      $notice = 'Title, style, topic, and source type are required.';
+    $needsSourceTypePath = ($layout === 'source-type');
+    if ($title === '' || $leafSlug === '' || ($needsSourceTypePath && ($stylePart === '' || $topicPart === ''))) {
+      $notice = $needsSourceTypePath
+        ? 'Title, style, topic, and source type are required.'
+        : 'Title and source type are required.';
     } elseif (Page::findBySlugAnyStatus($siteId, $normalizedSlug)) {
       $notice = 'Page path already exists. Choose another.';
     } else {
@@ -2111,6 +2143,14 @@ if (isset($_SESSION['user_id'])) {
                       <button class="kebab-btn" type="button" aria-haspopup="true" aria-expanded="false">⋯</button>
                       <div class="kebab-menu" role="menu">
                         <button type="button" data-duplicate-page data-page-id="<?= (int)$p['id'] ?>" aria-label="Duplicate page">Duplicate</button>
+                        <button
+                          type="button"
+                          data-rename-page
+                          data-page-id="<?= (int)$p['id'] ?>"
+                          data-page-title="<?= Security::e($p['title']) ?>"
+                          data-page-slug="<?= Security::e($p['slug']) ?>"
+                          aria-label="Rename page"
+                        >Rename page</button>
                         <button type="button" class="danger" data-delete-page data-page-id="<?= (int)$p['id'] ?>" data-page-title="<?= Security::e($p['title']) ?>" aria-label="Delete page">Delete</button>
                       </div>
                     </div>
@@ -3176,6 +3216,13 @@ if (isset($_SESSION['user_id'])) {
     <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
     <input type="hidden" name="delete_page" value="1">
     <input type="hidden" name="page_id" id="delete_page_id">
+  </form>
+  <form id="renamePageForm" method="post" action="site.php?id=<?= (int)$site['id'] ?>" style="display:none">
+    <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+    <input type="hidden" name="rename_page" value="1">
+    <input type="hidden" name="page_id" id="rename_page_id">
+    <input type="hidden" name="page_title" id="rename_page_title">
+    <input type="hidden" name="page_slug" id="rename_page_slug">
   </form>
   <form id="duplicatePageForm" method="post" action="site.php?id=<?= (int)$site['id'] ?>" style="display:none">
     <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
@@ -4938,9 +4985,7 @@ if (isset($_SESSION['user_id'])) {
           </div>
         </div>
         <div class="page-path-builder" style="margin-bottom:12px">
-          <div class="muted" style="margin-bottom:8px">File path</div>
-          <div class="path-prefix"><?= Security::e(strtolower((string)($site['slug'] ?? 'site'))) ?>/</div>
-          <div class="row page-path-row page-path-fixed">
+          <div class="row page-path-row page-path-fixed" id="modalPathOptions" style="display:none;">
             <div>
               <label>Style</label>
               <select id="modalPathStyle">
@@ -4961,7 +5006,7 @@ if (isset($_SESSION['user_id'])) {
             </div>
           </div>
           <div class="path-preview-wrap">
-            <div class="muted">Full page path</div>
+            <div class="muted">File Path</div>
             <div class="path-preview" id="modalFullPathPreview"><?= Security::e(strtolower((string)($site['slug'] ?? 'site'))) ?>/</div>
           </div>
         </div>
@@ -4980,7 +5025,7 @@ if (isset($_SESSION['user_id'])) {
             $modalLayouts = [
               ['id' => 'title-page', 'name' => 'Title page', 'desc' => 'Cite Them Right homepage structure with editable placeholder blocks.'],
               ['id' => 'referencing-browse', 'name' => 'Referencing Browse', 'desc' => 'Browse-by-category scaffold matching the Cite Them Right reference browse layout.'],
-              ['id' => 'source-type', 'name' => 'Source Type', 'desc' => 'Source guidance page with sidebar, hero, citation order, and example areas.'],
+              ['id' => 'source-type', 'name' => 'Source Type', 'desc' => 'Two-column source page with stacked link lists and citation content blocks.'],
             ];
           ?>
           <?php foreach ($modalLayouts as $layout): ?>
@@ -5007,25 +5052,45 @@ if (isset($_SESSION['user_id'])) {
     const modalStyleInput = document.getElementById('modalPathStyle');
     const modalTopicInput = document.getElementById('modalPathTopic');
     const modalPathPreview = document.getElementById('modalFullPathPreview');
-    document.getElementById('addPageBtnTop')?.addEventListener('click', () => {
+    const modalPathOptions = document.getElementById('modalPathOptions');
+    const modalTitleInput = document.getElementById('modalTitleInput');
+    const modalSlugInput = document.getElementById('modalSlugInput');
+    const modalLayoutCards = modalBackdrop.querySelectorAll('.layout-card');
+    const resetModalState = () => {
+      selectedLayout = 'blank';
+      modalLayoutCards.forEach(card => card.classList.toggle('active', (card.dataset.layout || 'blank') === 'blank'));
+      if (modalStyleInput) modalStyleInput.value = '';
+      if (modalTopicInput) modalTopicInput.value = '';
+      if (modalTitleInput) modalTitleInput.value = '';
+      if (modalSlugInput) modalSlugInput.value = '';
+      toggleModalPathOptions();
+      updatePathPreview();
+    };
+    const openModal = () => {
+      resetModalState();
       modalBackdrop.style.display = 'flex';
-      document.getElementById('modalTitleInput')?.focus();
-    });
+      modalTitleInput?.focus();
+    };
+    document.getElementById('addPageBtnTop')?.addEventListener('click', openModal);
     const closeModal = () => { modalBackdrop.style.display = 'none'; };
-    openModalBtns.forEach(btn => btn.addEventListener('click', () => { modalBackdrop.style.display = 'flex'; document.getElementById('modalTitleInput').focus(); }));
+    openModalBtns.forEach(btn => btn.addEventListener('click', openModal));
     modalBackdrop.querySelector('.close-btn')?.addEventListener('click', closeModal);
     modalBackdrop.querySelector('#modalCancelBtn')?.addEventListener('click', closeModal);
     modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) closeModal(); });
 
     function slugify(val){return (val||'').toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,'');}
+    function toggleModalPathOptions() {
+      const show = selectedLayout === 'source-type';
+      if (modalPathOptions) modalPathOptions.style.display = show ? '' : 'none';
+    }
     function updatePathPreview(){
       const parts = [slugify(modalStyleInput?.value || ''), slugify(modalTopicInput?.value || '')].filter(Boolean);
       const leaf = slugify(document.getElementById('modalSlugInput')?.value || '');
       const fullPath = '<?= Security::e(strtolower((string)($site['slug'] ?? 'site'))) ?>/' + [...parts, leaf].filter(Boolean).join('/');
       if (modalPathPreview) modalPathPreview.textContent = fullPath;
     }
-    document.getElementById('modalTitleInput')?.addEventListener('blur', e => {
-      const slug = document.getElementById('modalSlugInput');
+    modalTitleInput?.addEventListener('blur', e => {
+      const slug = modalSlugInput;
       if (slug && !slug.value.trim()) {
         slug.value = slugify(e.target.value);
         updatePathPreview();
@@ -5033,34 +5098,70 @@ if (isset($_SESSION['user_id'])) {
     });
     modalStyleInput?.addEventListener('change', updatePathPreview);
     modalTopicInput?.addEventListener('change', updatePathPreview);
-    document.getElementById('modalSlugInput')?.addEventListener('input', updatePathPreview);
+    modalSlugInput?.addEventListener('input', updatePathPreview);
     updatePathPreview();
 
     let selectedLayout = 'blank';
-    modalBackdrop.querySelectorAll('.layout-card').forEach(card => {
+    modalLayoutCards.forEach(card => {
       card.addEventListener('click', () => {
-        modalBackdrop.querySelectorAll('.layout-card').forEach(c => c.classList.remove('active'));
+        modalLayoutCards.forEach(c => c.classList.remove('active'));
         card.classList.add('active');
         selectedLayout = card.dataset.layout || 'blank';
+        toggleModalPathOptions();
       });
     });
     // default selection on blank
     const firstCard = modalBackdrop.querySelector('.layout-card');
     if (firstCard) firstCard.classList.add('active');
+    toggleModalPathOptions();
 
     modalBackdrop.querySelector('#modalCreateBtn')?.addEventListener('click', () => {
-      const title = (document.getElementById('modalTitleInput')?.value || '').trim();
-      const slug = slugify(document.getElementById('modalSlugInput')?.value || '');
+      const title = (modalTitleInput?.value || '').trim();
+      const slug = slugify(modalSlugInput?.value || '');
       const style = modalStyleInput?.value || '';
       const topic = slugify(modalTopicInput?.value || '');
-      if (!title || !slug || !style || !topic) { alert('Enter a title, style, topic, and source type'); return; }
+      const needsSourceTypePath = selectedLayout === 'source-type';
+      if (!title || !slug || (needsSourceTypePath && (!style || !topic))) {
+        alert(needsSourceTypePath ? 'Enter a title, style, topic, and source type' : 'Enter a title and source type');
+        return;
+      }
       document.getElementById('modal_title_field').value = title;
       document.getElementById('modal_slug_field').value = slug;
       document.getElementById('modal_layout_field').value = selectedLayout;
-      document.getElementById('modal_path_style_field').value = style;
-      document.getElementById('modal_path_topic_field').value = topic;
+      document.getElementById('modal_path_style_field').value = needsSourceTypePath ? style : '';
+      document.getElementById('modal_path_topic_field').value = needsSourceTypePath ? topic : '';
       document.getElementById('modalCreateForm').submit();
     });
+
+    const renameBackdrop = document.createElement('div');
+    renameBackdrop.className = 'modal-backdrop';
+    renameBackdrop.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="renameTitle" style="max-width:620px;width:100%">
+        <header style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+          <div>
+            <h3 id="renameTitle" style="margin:0">Rename page</h3>
+            <div class="muted" style="font-size:13px">Update the page title and file path together.</div>
+          </div>
+          <button class="close-btn" type="button" aria-label="Close">×</button>
+        </header>
+        <div style="display:grid;gap:14px">
+          <label style="display:grid;gap:6px">
+            <span class="muted">Page name</span>
+            <input id="renamePageTitleInput" type="text" placeholder="Page title">
+          </label>
+          <label style="display:grid;gap:6px">
+            <span class="muted">File path</span>
+            <input id="renamePageSlugInput" type="text" placeholder="section/page-name">
+          </label>
+          <div class="muted" style="font-size:13px">Changing the file path updates the page URL and page folder path.</div>
+          <div class="actions" style="justify-content:flex-end">
+            <button class="btn text" type="button" id="cancelRenameBtn">Cancel</button>
+            <button class="btn primary" type="button" id="confirmRenameBtn">Save changes</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(renameBackdrop);
 
     // Delete page modal
     const deleteBackdrop = document.createElement('div');
@@ -5093,6 +5194,23 @@ if (isset($_SESSION['user_id'])) {
     `;
     document.body.appendChild(deleteBackdrop);
 
+    let renameTargetId = null;
+    const renamePageTitleInput = renameBackdrop.querySelector('#renamePageTitleInput');
+    const renamePageSlugInput = renameBackdrop.querySelector('#renamePageSlugInput');
+    const closeRename = () => { renameBackdrop.style.display = 'none'; renameTargetId = null; };
+
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('[data-rename-page]');
+      if (btn) {
+        renameTargetId = btn.dataset.pageId || null;
+        if (renamePageTitleInput) renamePageTitleInput.value = btn.dataset.pageTitle || '';
+        if (renamePageSlugInput) renamePageSlugInput.value = btn.dataset.pageSlug || '';
+        renameBackdrop.style.display = 'flex';
+        renamePageTitleInput?.focus();
+        renamePageTitleInput?.select();
+      }
+    });
+
     let deleteTargetId = null;
     const deletePageName = deleteBackdrop.querySelector('#deletePageName');
     const closeDelete = () => { deleteBackdrop.style.display = 'none'; deleteTargetId = null; };
@@ -5117,6 +5235,28 @@ if (isset($_SESSION['user_id'])) {
       });
     });
 
+    renameBackdrop.querySelector('#cancelRenameBtn')?.addEventListener('click', closeRename);
+    renameBackdrop.querySelector('.close-btn')?.addEventListener('click', closeRename);
+    renameBackdrop.addEventListener('click', (e) => { if (e.target === renameBackdrop) closeRename(); });
+    renameBackdrop.querySelector('#confirmRenameBtn')?.addEventListener('click', () => {
+      const title = (renamePageTitleInput?.value || '').trim();
+      const slug = (renamePageSlugInput?.value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9/.-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/\/+/g, '/')
+        .replace(/^\/+|\/+$/g, '');
+      if (!renameTargetId || !title || !slug) {
+        alert('Enter a page name and file path.');
+        return;
+      }
+      document.getElementById('rename_page_id').value = renameTargetId;
+      document.getElementById('rename_page_title').value = title;
+      document.getElementById('rename_page_slug').value = slug;
+      document.getElementById('renamePageForm').submit();
+    });
+
     deleteBackdrop.querySelector('#cancelDeleteBtn')?.addEventListener('click', closeDelete);
     deleteBackdrop.querySelector('.close-btn')?.addEventListener('click', closeDelete);
     deleteBackdrop.addEventListener('click', (e) => { if (e.target === deleteBackdrop) closeDelete(); });
@@ -5128,7 +5268,10 @@ if (isset($_SESSION['user_id'])) {
     });
 
     // Kebab menus
-    const closeAllKebabs = () => document.querySelectorAll('.kebab-menu').forEach(m => m.style.display = 'none');
+    const closeAllKebabs = () => {
+      document.querySelectorAll('.kebab-menu').forEach(m => m.style.display = 'none');
+      document.querySelectorAll('.kebab-btn[aria-expanded="true"]').forEach(btn => btn.setAttribute('aria-expanded','false'));
+    };
     document.addEventListener('click', (e) => {
       const btn = e.target.closest('.kebab-btn');
       if (btn) {

@@ -201,6 +201,10 @@
     }
   }
 
+  function blockSupportsElementLink(blk) {
+    return !!blk && ['heading', 'panel', 'image', 'testimonial'].includes(blk.type);
+  }
+
   function findSelectionAnchor(target, sel) {
     if (!target || !sel || sel.rangeCount === 0) return null;
     const range = sel.getRangeAt(0);
@@ -227,15 +231,34 @@
       || null;
 
     if (!target || !sel || sel.rangeCount === 0 || !target.contains(sel.anchorNode)) {
-      return { error: 'Highlight the text in the inspector, then click Link.' };
+      const blk = getSelectedBlock();
+      if (blockSupportsElementLink(blk)) {
+        return {
+          mode: 'block',
+          block: blk,
+          currentUrl: blk?.props?.blockLink || '',
+          selectionCollapsed: true
+        };
+      }
+      return { error: 'Highlight text in the inspector, or select a supported block, then click Link.' };
     }
 
     const currentAnchor = findSelectionAnchor(target, sel);
     if (sel.isCollapsed && !currentAnchor) {
-      return { error: 'Highlight the text in the inspector, then click Link.' };
+      const blk = getSelectedBlock();
+      if (blockSupportsElementLink(blk)) {
+        return {
+          mode: 'block',
+          block: blk,
+          currentUrl: blk?.props?.blockLink || '',
+          selectionCollapsed: true
+        };
+      }
+      return { error: 'Highlight text in the inspector, or select a supported block, then click Link.' };
     }
 
     return {
+      mode: 'text',
       target,
       selectionCollapsed: !!sel.isCollapsed,
       currentAnchor,
@@ -298,6 +321,8 @@
     const currentHref = normalizeLinkValue(context?.currentUrl || '');
     const selectedPage = sitePages.find((page) => normalizeLinkValue(page.path) === currentHref);
     linkModalState = {
+      mode: context?.mode || 'text',
+      block: context?.block || null,
       target: context?.target || null,
       currentAnchor: context?.currentAnchor || null,
       currentUrl: context?.currentUrl || '',
@@ -315,8 +340,19 @@
 
   function applySelectedPageLink() {
     const href = String(linkModalState?.selectedPath || '').trim();
+    if (!href) return;
+
+    if (linkModalState?.mode === 'block' && linkModalState?.block) {
+      linkModalState.block.props = linkModalState.block.props && typeof linkModalState.block.props === 'object' ? linkModalState.block.props : {};
+      linkModalState.block.props.blockLink = href;
+      persistUnsaved();
+      render();
+      closeLinkModal();
+      return;
+    }
+
     const target = linkModalState?.target;
-    if (!href || !target) return;
+    if (!target) return;
 
     restoreTextSelection();
     const sel = window.getSelection();
@@ -591,10 +627,11 @@
       case 'textbox': return withDefaultBlockStyle({ id: uuid(), type: 'textbox', props: { label: 'Textbox', placeholder: 'Type here…', lines: 3, bgColor: '' } });
       case 'citationOrder': return withDefaultBlockStyle({ id: uuid(), type: 'citationOrder', props: { title: 'Citation order', body: '• Author/editor\n• Year of publication (in round brackets)\n• Title (in italics)\n• Edition (edition number if not the first edn and/or rev. edn)\n• Publisher\n• Series and volume number (where relevant)' }, styleText:{} });
       case 'exampleCard': return withDefaultBlockStyle({ id: uuid(), type: 'exampleCard', props: { exampleId: 'book_one_author', heading: 'Example: book with one author', body: 'In-text citations\n\nThe overview by McCormick (2023) confirms Hill’s experience (2023, pp. 46–52).\n\nNB: No page number citation for McCormick because the reference is to the whole book.\n\nSpecific pages are being cited in Hill’s book.\n\nReference list\n\nHill, F. (2023) There’s nothing for you here: finding opportunity in the twenty-first century. Mariner Books.\n\nMcCormick, J.M. (2023) American foreign policy and process. 7th edn. Cambridge University Press.', youTry: 'Surname, Initial. (Year of publication) Title. Edition. Publisher.', showYouTry: true }, styleText:{} });
+      case 'linkList': return withDefaultBlockStyle({ id: uuid(), type: 'linkList', props: { title: 'Harvard guidance', items: [{ title: 'Setting out citations', subtitle: '', url: '#' }, { title: 'What to include in your reference list', subtitle: '', url: '#' }, { title: 'Elements that you may need to include in your references', subtitle: '', url: '#' }], footerLabel: 'View More', footerUrl: '#' }, styleText:{} });
       case 'panel': return withDefaultBlockStyle({
         id: uuid(),
         type: 'panel',
-        props: { image: '', alt: '', body: 'Panel text…', layout: 'img-top', splitRatio: '50-50' },
+        props: { image: '', alt: '', body: 'Panel text…', layout: 'img-top', splitRatio: '50-50', imageSizeLevel: 3 },
         styleText: { fontSize: 24, align: 'center' }
       });
       case 'testimonial': return withDefaultBlockStyle({ id: uuid(), type: 'testimonial', props: { body: 'I am meeting my deadlines consistently!' }, styleText:{} });
@@ -687,7 +724,7 @@
       case 'accordion':
       case 'accordionTabs': return withDefaultBlockStyle({ id: uuid(), type: 'accordionTabs', props: {
         mode: 'accordion', // accordion | tabs
-        accStyle: 'grouped', // standard | grouped
+        accStyle: 'standard', // standard | title | grouped (legacy)
         allowMultiple: true,
         allowCollapseAll: true,
         defaultOpen: 'first', // none | first | custom
@@ -790,6 +827,34 @@
   const ACCORDION_TABS_MAX = 4;
   const accordionInspectorState = {};
   const accordionPreviewState = {};
+  const trimAccordionBodyHtml = (raw) => String(raw || '')
+    .replace(/^(?:\s|<br\s*\/?>|<(?:div|p)>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:div|p)>)+/gi, '')
+    .replace(/(?:\s|<br\s*\/?>|<(?:div|p)>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:div|p)>)+$/gi, '');
+  const compactExampleText = (raw) => String(raw || '')
+    .trim()
+    .replace(/(?:\r?\n[ \t]*){2,}/g, '\n');
+  const compactExampleHtml = (raw) => String(raw || '')
+    .trim()
+    .replace(/^(?:\s|<br\s*\/?>|<(?:div|p)>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:div|p)>)+/gi, '')
+    .replace(/(?:\s|<br\s*\/?>|<(?:div|p)>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:div|p)>)+$/gi, '')
+    .replace(/(?:(?:<(?:div|p)>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:div|p)>)\s*){2,}/gi, '<br>')
+    .replace(/(?:<br\s*\/?>\s*){3,}/gi, '<br>');
+  const flattenExampleHtml = (raw) => compactExampleHtml(raw)
+    .replace(/<\s*\/?(?:div|p)\b[^>]*>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .split(/\n+/)
+    .map(part => part.trim())
+    .filter(Boolean)
+    .join('\n');
+  const stripSimpleAnchorWrapper = (raw) => {
+    const src = String(raw || '').trim();
+    const m = src.match(/^<a\b[^>]*>([\s\S]*)<\/a>$/i);
+    return m ? (m[1] || '').trim() : raw;
+  };
+  const normalizePanelImageSizeLevel = (raw) => {
+    const n = parseInt(String(raw || '3'), 10);
+    return Number.isFinite(n) ? Math.max(1, Math.min(5, n)) : 3;
+  };
 
   function ensureAccordionTabsProps(blk) {
     blk.props = blk.props || {};
@@ -829,7 +894,7 @@
     if (p.mode === 'tabs') p.tabsIndex = Math.min(p.tabsIndex, ACCORDION_TABS_MAX - 1);
     p.accStyle = p.mode === 'tabs'
       ? 'standard'
-      : (['standard','grouped'].includes(p.accStyle) ? p.accStyle : 'standard');
+      : (['standard','title','grouped'].includes(p.accStyle) ? p.accStyle : 'standard');
     p.tabsAlign = ['left','center','right'].includes(p.tabsAlign) ? p.tabsAlign : 'left';
     p.tabsStyle = ['underline','pills','segmented'].includes(p.tabsStyle) ? p.tabsStyle : 'underline';
     p.styleVariant = ['default','minimal','bordered'].includes(p.styleVariant) ? p.styleVariant : 'default';
@@ -1237,6 +1302,28 @@
     return p;
   }
 
+  function ensureLinkListProps(blk) {
+    blk.props = blk.props || {};
+    const p = blk.props;
+    p.title = p.title || 'Link List';
+    p.items = Array.isArray(p.items) ? p.items : [];
+    p.items = p.items.map(item => ({
+      title: item?.title || '',
+      subtitle: item?.subtitle || '',
+      url: item?.url || ''
+    }));
+    if (!p.items.length) {
+      p.items = [
+        { title: 'Setting out citations', subtitle: '', url: '#' },
+        { title: 'What to include in your reference list', subtitle: '', url: '#' },
+        { title: 'Elements that you may need to include in your references', subtitle: '', url: '#' }
+      ];
+    }
+    p.footerLabel = p.footerLabel || '';
+    p.footerUrl = p.footerUrl || '';
+    return p;
+  }
+
   function styleObjToCss(s) {
     const css = [];
     for (const [k,v] of Object.entries(s || {})) {
@@ -1265,10 +1352,14 @@
   function blockPreviewHTML(blk) {
   const p = blk.props || {};
   const style = inlineTextCSS(blk);
+  const blockLink = String(p.blockLink || '').trim();
 
   const wrap = (innerHtml) => style
     ? `<div style="${style}">${innerHtml}</div>`
     : `<div>${innerHtml}</div>`;
+  const wrapBlockLink = (innerHtml) => blockLink
+    ? `<div class="nx-block-link-preview" data-link="${esc(blockLink)}"><div class="nx-block-link-badge">Link attached</div>${innerHtml}</div>`
+    : innerHtml;
 
   const hasHtml = (v) => typeof v === 'string' && /<[^>]+>/.test(v);
   const formatMarked = (str) => {
@@ -1285,13 +1376,35 @@
     const withItalics = withBold.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g,'<em>$1</em>');
     return withItalics.replace(/\r?\n/g,'<br>');
   };
+  const htmlToPlainText = (html) => {
+    if (!html) return '';
+    return String(html)
+      .replace(/<\s*\/?(?:div|p|li)\b[^>]*>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\r/g, '')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+  const renderMarkedHtml = (raw) => {
+    if (!raw) return '';
+    if (!hasHtml(raw)) return formatMarked(raw);
+    if (/<(?:strong|b|em|i)\b/i.test(raw)) return raw;
+    const plain = htmlToPlainText(raw);
+    if (plain && /\*{1,2}[^*]+\*{1,2}/.test(plain)) {
+      return formatMarked(plain);
+    }
+    return raw;
+  };
 
   if (blk.type === 'heading') {
     const inner = hasHtml(p.html)
       ? p.html
       : formatMarked(p.text || 'Heading');
     const level = Math.min(6, Math.max(1, parseInt(p.level || 2, 10)));
-    return wrap(`<h${level} style="margin:0">${inner}</h${level}>`);
+    return wrapBlockLink(wrap(`<h${level} style="margin:0">${inner}</h${level}>`));
   }
 
   if (blk.type === 'text') {
@@ -1319,13 +1432,17 @@
   }
 
   if (blk.type === 'panel') {
-    const body = hasHtml(p.bodyHtml)
-      ? p.bodyHtml
+    const panelBodyHtml = p.blockLink ? stripSimpleAnchorWrapper(p.bodyHtml) : p.bodyHtml;
+    const body = hasHtml(panelBodyHtml)
+      ? panelBodyHtml
       : formatMarked((p.body || '').slice(0, 260));
     const img = p.image ? `<div class="panel-img" style="background:url('${esc(p.image)}') center/cover no-repeat;"></div>` : `<div class="panel-img panel-img--placeholder">Add image</div>`;
     const layout = p.layout || 'img-top';
     const horizontal = layout === 'img-left' || layout === 'img-right';
     const split = p.splitRatio || '50-50';
+    const imageSizeLevel = normalizePanelImageSizeLevel(p.imageSizeLevel);
+    const horizontalSizeMap = { 1: '96px', 2: '132px', 3: '180px', 4: '220px', 5: '260px' };
+    const stackedSizeMap = { 1: '90px', 2: '120px', 3: '160px', 4: '210px', 5: '260px' };
     const colsMap = {
       '50-50': '1fr 1fr',
       '60-40': '3fr 2fr',
@@ -1338,10 +1455,38 @@
       if (horizontal) return wantFirst ? (layout === 'img-left' ? img : body) : (layout === 'img-left' ? body : img);
       return wantFirst ? img : body; // stacked
     };
-    return `
-      <div class="nx-panel-preview ${horizontal ? 'panel-horizontal' : 'panel-stacked'}" data-layout="${layout}" style="${horizontal ? `grid-template-columns:${cols}` : ''}">
+    const styleVars = horizontal
+      ? `--panel-media-size:${horizontalSizeMap[imageSizeLevel]};`
+      : `--panel-media-height:${stackedSizeMap[imageSizeLevel]};`;
+    return wrapBlockLink(`
+      <div class="nx-panel-preview ${horizontal ? 'panel-horizontal' : 'panel-stacked'}" data-layout="${layout}" style="${styleVars}${horizontal ? `grid-template-columns:${cols}` : ''}">
         ${order(true)}
         ${horizontal ? order(false) : `<div class="panel-body" style="text-align:center">${body}</div>`}
+      </div>
+    `);
+  }
+
+  if (blk.type === 'linkList') {
+    ensureLinkListProps(blk);
+    const title = esc(p.title || 'Link List');
+    const items = (p.items || []).slice(0, 5).map(item => {
+      const main = esc(item.title || 'Link item');
+      const sub = item.subtitle ? `<div class="nx-linklist-preview-sub">${esc(item.subtitle)}</div>` : '';
+      return `
+        <div class="nx-linklist-preview-item">
+          <div class="nx-linklist-preview-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3h6l4 4v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v5h5"/><path d="M9 12h6M9 16h6"/></svg>
+          </div>
+          <div><div class="nx-linklist-preview-main">${main}</div>${sub}</div>
+        </div>
+      `;
+    }).join('');
+    const footer = p.footerLabel ? `<div class="nx-linklist-preview-footer">${esc(p.footerLabel)}</div>` : '';
+    return `
+      <div class="nx-linklist-preview">
+        <div class="nx-linklist-preview-title">${title}</div>
+        ${items}
+        ${footer}
       </div>
     `;
   }
@@ -1350,13 +1495,13 @@
     const body = hasHtml(p.bodyHtml)
       ? p.bodyHtml
       : formatMarked((p.body || 'I am meeting my deadlines consistently!').slice(0, 200));
-    return `
+    return wrapBlockLink(`
       <div class="nx-testimonial-preview">
         <span class="qt">“</span>
         <span class="copy">${body}</span>
         <span class="qt">”</span>
       </div>
-    `;
+    `);
   }
 
   if (blk.type === 'download') {
@@ -1381,11 +1526,11 @@
   if (blk.type === 'citationOrder') {
     const title = esc(p.title || 'Citation order');
     const normalized = formatCitationOrder(p.body || '');
-    const body = hasHtml(p.html)
-      ? p.html
+    const body = p.html
+      ? renderMarkedHtml(p.html)
       : formatMarked(normalized.slice(0, 320));
     return wrap(`
-      <div style="border:1px solid rgba(17,24,39,.18);border-radius:14px;padding:14px;background:#f7f7f5">
+      <div style="border:0;border-radius:14px;padding:14px;background:#fff">
         <div style="font-weight:900;margin-bottom:8px">${title}</div>
         <div>${body}</div>
       </div>
@@ -1394,24 +1539,26 @@
 
   if (blk.type === 'exampleCard') {
     const heading = esc(p.heading || 'Example');
-    const body = hasHtml(p.bodyHtml)
-      ? p.bodyHtml
-      : formatMarked((p.body || '').slice(0, 420));
-    const youTry = hasHtml(p.youTry)
-      ? (p.youTry || '')
-      : formatMarked((p.youTry || 'Your turn…').slice(0, 180));
+    const exampleBodyHtml = hasHtml(p.bodyHtml) ? flattenExampleHtml(p.bodyHtml) : p.bodyHtml;
+    const exampleTryHtml = hasHtml(p.youTry) ? flattenExampleHtml(p.youTry) : p.youTry;
+    const body = hasHtml(exampleBodyHtml)
+      ? exampleBodyHtml.replace(/\n/g, '<br>')
+      : formatMarked(compactExampleText((p.body || '').slice(0, 420)));
+    const youTry = hasHtml(exampleTryHtml)
+      ? (exampleTryHtml || '').replace(/\n/g, '<br>')
+      : formatMarked(compactExampleText((p.youTry || 'Your turn…').slice(0, 180)));
     const showTry = p.showYouTry !== false;
     const extraClass = showTry ? '' : ' nx-examplecard--single';
     const rightCol = showTry ? `
           <div style="padding:12px 14px">
             <div style="font-weight:900;margin-bottom:8px">You try</div>
-            <div style="border:1px solid rgba(17,24,39,.35);border-radius:12px;padding:10px 12px;color:rgba(17,24,39,.82)">${youTry}</div>
+            <div class="nx-examplecard-trybox" style="border:1px solid rgba(17,24,39,.35);border-radius:12px;padding:10px 12px;color:rgba(17,24,39,.82)">${youTry}</div>
           </div>` : '';
     return `
       <div class="nx-examplecard${extraClass}" style="display:grid;grid-template-columns:${showTry ? '1fr 1fr' : '1fr'};gap:10px;align-items:start;border:1px solid rgba(17,24,39,.18);border-radius:14px;overflow:hidden;background:#f9f9f7">
         <div style="background:#e2e3e6;padding:12px 14px">
           <div style="font-weight:900;margin-bottom:8px">${heading}</div>
-          <div style="white-space:pre-line">${body}</div>
+          <div class="nx-examplecard-body">${body}</div>
         </div>
         ${rightCol}
       </div>
@@ -1518,7 +1665,7 @@
     `;
   }
 
-  if (blk.type === 'image') return esc(p.src ? `Image: ${trunc(p.src, 10)}` : 'Image: set URL in inspector');
+  if (blk.type === 'image') return wrapBlockLink(esc(p.src ? `Image: ${trunc(p.src, 10)}` : 'Image: set URL in inspector'));
   if (blk.type === 'video') return esc(p.url ? `Video: ${trunc(p.url, 10)}` : 'Video: set embed URL');
   if (blk.type === 'carousel') {
     const slides = Array.isArray(p.slides) ? p.slides : [];
@@ -1680,7 +1827,8 @@
           </div>
           <div class="nx-tabs-panels">
             ${renderItems.map((it, idx) => {
-              const bodyHtml = (it.bodyHtml && it.bodyHtml.trim()) ? it.bodyHtml : esc((it.body || '').slice(0, 320)).replace(/\n/g,'<br>');
+              const bodySource = trimAccordionBodyHtml(it.bodyHtml || '');
+              const bodyHtml = bodySource ? bodySource : esc((it.body || '').slice(0, 320)).replace(/\n/g,'<br>');
               return `
                 <div role="tabpanel" class="nx-tab-panel ${idx===active?'active':''}" id="tab-panel-${blk.id}-${idx}" aria-labelledby="tab-${blk.id}-${idx}" ${idx===active?'':'hidden'} style="${idx===active?'':'display:none'}">
                   <div class="nx-accordion-body">${bodyHtml || '<span class="nx-muted">Add content…</span>'}</div>
@@ -1706,6 +1854,7 @@
     }
     const indPos = acc.showIndicator ? acc.indicatorPosition : 'none';
     const isGrouped = acc.mode === 'accordion' && acc.accStyle === 'grouped';
+    const isTitle = acc.mode === 'accordion' && acc.accStyle === 'title';
     const renderSubItems = (subItems) => {
       if (!Array.isArray(subItems) || !subItems.length) return '';
       return `
@@ -1766,6 +1915,75 @@
       `;
     }
 
+    if (isTitle) {
+      const parent = items[0] || { title: 'Section', body: '', bodyHtml: '', openDefault: false };
+      const children = items.slice(1);
+      const parentSource = trimAccordionBodyHtml(parent.bodyHtml || '');
+      const parentBody = parentSource
+        ? parentSource
+        : esc((parent.body || '').slice(0, 320)).replace(/\n/g,'<br>');
+      const parentOpen = !!parent.openDefault || focusIdx === 0;
+      const childOpenSet = new Set();
+      if (acc.defaultOpen === 'first' && children[0]) childOpenSet.add(1);
+      if (acc.defaultOpen === 'custom' && items[acc.defaultIndex] && acc.defaultIndex > 0) childOpenSet.add(acc.defaultIndex);
+      items.forEach((it, idx) => {
+        if (idx > 0 && it.openDefault) childOpenSet.add(idx);
+      });
+      if (Number.isInteger(focusIdx) && focusIdx > 0) childOpenSet.add(focusIdx);
+      if (!allowMultiple && childOpenSet.size > 1) {
+        const first = [...childOpenSet][0];
+        childOpenSet.clear();
+        childOpenSet.add(first);
+      }
+      const headId = `acc-head-${blk.id}-0`;
+      const panelId = `acc-panel-${blk.id}-0`;
+      return `
+        <div class="nx-accordion nx-accordion--title"
+          data-title-accordion="1"
+          data-allow="${allowMultiple ? 'multiple' : 'single'}"
+          data-collapse="${acc.allowCollapseAll !== false ? 'allow' : 'force'}"
+          data-border="${acc.showBorder ? 'on' : 'off'}"
+          data-bid="${blk.id}"
+          style="${vars.join(';')}">
+          <div class="nx-accordion-item nx-accordion-parent ${parentOpen ? 'is-open' : ''}" data-idx="0">
+            <button type="button" class="nx-accordion-head" id="${headId}" aria-expanded="${parentOpen ? 'true' : 'false'}" aria-controls="${panelId}">
+              <span class="nx-accordion-title">${esc(parent.title || 'Section')}</span>
+              <span class="nx-accordion-plus" aria-hidden="true">${parentOpen ? '−' : '+'}</span>
+            </button>
+            <div class="nx-accordion-panel" id="${panelId}" role="region" aria-labelledby="${headId}" ${parentOpen ? '' : 'hidden'}>
+              <div class="nx-accordion-body">
+                ${parentBody ? `<div class="nx-title-accordion-intro">${parentBody}</div>` : ''}
+                <div class="nx-title-accordion-children">
+                  ${children.map((it, idx) => {
+                    const itemIndex = idx + 1;
+                    const isOpen = childOpenSet.has(itemIndex);
+                    const childHeadId = `acc-head-${blk.id}-${itemIndex}`;
+                    const childPanelId = `acc-panel-${blk.id}-${itemIndex}`;
+                    const bodySource = trimAccordionBodyHtml(it.bodyHtml || '');
+                    const bodyHtml = bodySource ? bodySource : esc((it.body || '').slice(0, 320)).replace(/\n/g,'<br>');
+                    const thumb = renderHeaderImg(it);
+                    return `
+                      <div class="nx-title-accordion-item ${isOpen ? 'is-open' : ''}" data-idx="${itemIndex}">
+                        <button type="button" class="nx-accordion-head" id="${childHeadId}" aria-expanded="${isOpen ? 'true' : 'false'}" aria-controls="${childPanelId}">
+                          ${imgPos === 'left' ? thumb : ''}
+                          <span class="nx-accordion-title">${esc(it.title || `Item ${itemIndex + 1}`)}</span>
+                          ${imgPos === 'right' ? thumb : ''}
+                          <span class="nx-accordion-plus" aria-hidden="true">${isOpen ? '−' : '+'}</span>
+                        </button>
+                        <div class="nx-accordion-panel" id="${childPanelId}" role="region" aria-labelledby="${childHeadId}" ${isOpen ? '' : 'hidden'}>
+                          <div class="nx-accordion-body">${bodyHtml || '<span class="nx-muted">Add content…</span>'}</div>
+                        </div>
+                      </div>
+                    `;
+                  }).join('') || '<div class="nx-muted">Add child accordion items…</div>'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div class="nx-accordion"
         data-allow="${allowMultiple ? 'multiple' : 'single'}"
@@ -1781,7 +1999,8 @@
           const isOpen = openSet.has(idx);
           const headId = `acc-head-${blk.id}-${idx}`;
           const panelId = `acc-panel-${blk.id}-${idx}`;
-          const bodyHtml = (it.bodyHtml && it.bodyHtml.trim()) ? it.bodyHtml : esc((it.body || '').slice(0, 320)).replace(/\n/g,'<br>');
+          const bodySource = trimAccordionBodyHtml(it.bodyHtml || '');
+          const bodyHtml = bodySource ? bodySource : esc((it.body || '').slice(0, 320)).replace(/\n/g,'<br>');
           const thumb = renderHeaderImg(it);
           return `
             <div class="nx-accordion-item ${isOpen ? 'is-open' : ''}" data-idx="${idx}">
@@ -1821,17 +2040,30 @@
     el.dataset.accInit = '1';
     const allowMultiple = el.dataset.allow === 'multiple';
     const allowCollapse = el.dataset.collapse !== 'force';
-  const isGrouped = el.dataset.grouped === '1';
-  const items = el.querySelectorAll('.nx-accordion-item');
-  const childRows = isGrouped ? el.querySelectorAll('.nx-accordion-childrow') : [];
+    const isGrouped = el.dataset.grouped === '1';
+    const isTitle = el.dataset.titleAccordion === '1';
+    const items = isTitle
+      ? el.querySelectorAll(':scope > .nx-accordion-item')
+      : el.querySelectorAll('.nx-accordion-item');
+    const childRows = isGrouped ? el.querySelectorAll('.nx-accordion-childrow') : [];
+    const titleChildren = isTitle ? el.querySelectorAll('.nx-title-accordion-item') : [];
 
-  const savePreviewState = () => {
-    const opens = [];
-    items.forEach((it, i) => { if (it.classList.contains('is-open')) opens.push(i); });
-    if (el.dataset.bid) {
-      accordionPreviewState[el.dataset.bid] = { mode: 'accordion', opens };
-    }
-  };
+    const savePreviewState = () => {
+      const opens = [];
+      if (isTitle) {
+        const parent = el.querySelector(':scope > .nx-accordion-item');
+        if (parent?.classList.contains('is-open')) opens.push(0);
+        titleChildren.forEach((it) => {
+          const idx = parseInt(it.dataset.idx || '-1', 10);
+          if (it.classList.contains('is-open') && Number.isInteger(idx) && idx >= 0) opens.push(idx);
+        });
+      } else {
+        items.forEach((it, i) => { if (it.classList.contains('is-open')) opens.push(i); });
+      }
+      if (el.dataset.bid) {
+        accordionPreviewState[el.dataset.bid] = { mode: 'accordion', opens };
+      }
+    };
 
   const setOpen = (item, open, instant = false) => {
     const btn = item.querySelector('.nx-accordion-head');
@@ -1945,8 +2177,40 @@
       });
     });
 
+    if (isTitle) {
+      titleChildren.forEach((item) => {
+        const btn = item.querySelector('.nx-accordion-head');
+        if (!btn) return;
+        const idx = parseInt(item.dataset.idx || '-1', 10);
+        const toggle = () => {
+          const isOpen = item.classList.contains('is-open');
+          if (Number.isInteger(idx)) {
+            setAccordionFocus(el.dataset.bid, idx);
+            if (selected && getSelectedBlock()?.id === el.dataset.bid) renderInspector();
+          }
+          if (isOpen && !allowCollapse && !allowMultiple) return;
+          if (!isOpen && !allowMultiple) {
+            titleChildren.forEach(it => { if (it !== item) setOpen(it, false); });
+          }
+          setOpen(item, !isOpen);
+          savePreviewState();
+        };
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          toggle();
+        });
+        btn.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle();
+          }
+        });
+      });
+    }
+
   // Initialize heights
   items.forEach(item => setOpen(item, item.classList.contains('is-open'), true));
+  if (isTitle) titleChildren.forEach(item => setOpen(item, item.classList.contains('is-open'), true));
   childRows.forEach((row) => {
     const head = row.querySelector('.nx-accordion-childhead');
     if (!head) return;
@@ -2679,12 +2943,18 @@
     const rich = (sel?.anchorNode && sel.anchorNode.parentElement?.closest('.nx-rich'))
       || document.activeElement?.closest?.('.nx-rich')
       || document.getElementById('p_html');
-    if (!rich || !rich.isContentEditable) return;
+    if (rich && rich.isContentEditable && sel && sel.rangeCount > 0) {
+      document.execCommand('unlink', false, null);
+      rich.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
 
-    if (!sel || sel.rangeCount === 0) return;
-
-    document.execCommand('unlink', false, null);
-    rich.dispatchEvent(new Event('input', { bubbles: true }));
+    const blk = getSelectedBlock();
+    if (blockSupportsElementLink(blk) && blk?.props?.blockLink) {
+      delete blk.props.blockLink;
+      persistUnsaved();
+      render();
+    }
   });
 
   linkModalSearch?.addEventListener('input', () => {
@@ -3212,6 +3482,10 @@
           <option value="text-top" ${p.layout === 'text-top' ? 'selected' : ''}>Text top / Image bottom</option>
         </select>
         <br><br>
+        <label class="nx-muted">Image size</label><br>
+        <input id="p_image_size_level" type="range" min="1" max="5" step="1" value="${normalizePanelImageSizeLevel(p.imageSizeLevel)}" style="width:100%">
+        <div class="nx-muted" id="p_image_size_level_label" style="margin-top:6px">Level ${normalizePanelImageSizeLevel(p.imageSizeLevel)} of 5</div>
+        <br><br>
         <div id="panel_split_wrap" style="${(p.layout === 'img-left' || p.layout === 'img-right') ? '' : 'opacity:.4;pointer-events:none'}">
           <label class="nx-muted">Split ratio</label><br>
           <select id="p_split_ratio" style="${inputStyle}">
@@ -3222,6 +3496,40 @@
             <option value="70-30" ${p.splitRatio === '70-30' ? 'selected' : ''}>70 / 30</option>
           </select>
         </div>
+      `;
+    } else if (blk.type === 'linkList') {
+      ensureLinkListProps(blk);
+      html += `
+        <label class="nx-muted">Heading</label><br>
+        <input id="p_linklist_title" value="${esc(p.title || '')}" style="${inputStyle}">
+        <br><br>
+        <div class="nx-strong" style="margin-bottom:8px">Links</div>
+        <div id="p_linklist_items">
+          ${(p.items || []).map((item, idx) => `
+            <div class="nx-linklist-item" data-idx="${idx}">
+              <label class="nx-muted">Title</label><br>
+              <input data-role="title" value="${esc(item.title || '')}" style="${inputStyle}">
+              <br><br>
+              <label class="nx-muted">Subtitle</label><br>
+              <input data-role="subtitle" value="${esc(item.subtitle || '')}" style="${inputStyle}">
+              <br><br>
+              <label class="nx-muted">URL</label><br>
+              <input data-role="url" value="${esc(item.url || '')}" style="${inputStyle}">
+              <div class="nx-linklist-item-actions">
+                <button class="smallbtn" type="button" data-act="remove-link-item" data-idx="${idx}" ${(p.items || []).length <= 1 ? 'disabled' : ''}>Remove item</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="smallbtn" id="p_linklist_add" type="button">Add item</button>
+        </div>
+        <div class="nx-sep"></div>
+        <label class="nx-muted">Footer label</label><br>
+        <input id="p_linklist_footer_label" value="${esc(p.footerLabel || '')}" style="${inputStyle}">
+        <br><br>
+        <label class="nx-muted">Footer URL</label><br>
+        <input id="p_linklist_footer_url" value="${esc(p.footerUrl || '')}" style="${inputStyle}">
       `;
     } else if (blk.type === 'testimonial') {
       html += `
@@ -3554,7 +3862,10 @@
       const activeIdx = getAccordionFocus(blk.id, renderLen);
       const activeItem = items[activeIdx] || items[0];
       const isGrouped = acc.mode === 'accordion' && acc.accStyle === 'grouped';
-      const itemOptions = items.map((it,i) => `<option value="${i}" ${acc.defaultIndex===i ? 'selected' : ''}>Item ${i + 1}</option>`).join('');
+      const isTitle = acc.mode === 'accordion' && acc.accStyle === 'title';
+      const itemOptions = (isTitle ? items.slice(1).map((it, i) => ({ index: i + 1, label: `Item ${i + 2}` })) : items.map((it, i) => ({ index: i, label: `Item ${i + 1}` })))
+        .map(({ index, label }) => `<option value="${index}" ${acc.defaultIndex===index ? 'selected' : ''}>${label}</option>`)
+        .join('');
       const tabOptions = items.slice(0, maxTabs).map((it,i) => `<option value="${i}" ${acc.tabsIndex===i ? 'selected' : ''}>Item ${i + 1}</option>`).join('');
       const titleForBtn = (t, i) => esc(t || `Item ${i + 1}`);
       const atTabLimit = acc.mode === 'tabs' && items.length >= maxTabs;
@@ -3569,9 +3880,12 @@
           ${items.map((it, idx) => `
             <div class="nx-acc-itemrow" data-idx="${idx}" draggable="true">
               <span class="nx-drag-handle" aria-hidden="true">⋮⋮</span>
-              <button type="button" class="nx-itemchip ${idx === activeIdx ? 'active' : ''}" data-idx="${idx}" aria-label="Edit item ${idx + 1}">
-                ${titleForBtn(it.title, idx)}
-              </button>
+              <input
+                type="text"
+                class="nx-itemchip nx-itemchip-input ${idx === activeIdx ? 'active' : ''}"
+                data-idx="${idx}"
+                value="${titleForBtn(it.title, idx)}"
+                aria-label="Edit item ${idx + 1} title">
               <button class="smallbtn" type="button" data-act="del" data-idx="${idx}" ${items.length === 1 ? 'disabled' : ''}>Remove</button>
             </div>
           `).join('')}
@@ -3596,17 +3910,16 @@
         <div id="acc_layout_wrap" style="${acc.mode === 'accordion' ? 'margin-top:12px' : 'display:none'}">
           <label class="nx-muted">Accordion layout</label>
           <select id="acc_layout_style" class="nx-toolsel" style="width:100%;margin-top:6px">
-            <option value="standard" ${acc.accStyle === 'standard' ? 'selected' : ''}>Standard</option>
-            <option value="grouped" ${acc.accStyle === 'grouped' ? 'selected' : ''}>Cite Them Right grouped</option>
+            <option value="standard" ${acc.accStyle === 'standard' ? 'selected' : ''}>Standard accordion</option>
+            <option value="title" ${acc.accStyle === 'title' ? 'selected' : ''}>Title accordion</option>
+            ${acc.accStyle === 'grouped' ? '<option value="grouped" selected>Legacy grouped accordion</option>' : ''}
           </select>
-          ${isGrouped ? '<div class="nx-muted" style="margin-top:6px">In grouped mode, item 1 is the main section and later items become nested expandable groups with link lists.</div>' : ''}
+          ${isTitle ? '<div class="nx-muted" style="margin-top:6px">Item 1 becomes the main dropdown title. Later items become nested standard accordions inside it.</div>' : ''}
+          ${isGrouped ? '<div class="nx-muted" style="margin-top:6px">Legacy grouped accordions are still supported for existing content. Switch layouts to convert this block.</div>' : ''}
         </div>
 
         <div class="nx-strong" style="margin-bottom:8px">Item content</div>
-        <label class="nx-muted">Title</label><br>
-        <input id="acc_item_title" value="${esc(activeItem?.title || '')}" style="${inputStyle}">
         <div id="acc_standard_item_fields" style="${isGrouped ? 'display:none' : ''}">
-        <br><br>
         <label class="nx-toggle" style="display:inline-flex;align-items:center;gap:8px;margin-bottom:8px">
           <input id="acc_item_showimg" type="checkbox" ${activeItem?.showHeaderImg ? 'checked' : ''}>
           <span class="nx-toggle-ui"></span>
@@ -3626,12 +3939,12 @@
         <label class="nx-toggle" style="display:inline-flex;align-items:center;gap:8px">
           <input id="acc_item_open" type="checkbox" ${activeItem?.openDefault ? 'checked' : ''}>
           <span class="nx-toggle-ui"></span>
-          <span class="nx-toggle-label">Open by default (overrides global)</span>
+          <span class="nx-toggle-label">${isTitle && activeIdx === 0 ? 'Open title accordion by default' : 'Open by default (overrides global)'}</span>
         </label>
         </div>
 
-        <div style="margin-top:${isGrouped ? '14px' : '18px'}">
-          <div class="nx-strong" style="margin-bottom:8px">${isGrouped ? 'Links' : 'Link list (optional)'}</div>
+        <div style="margin-top:14px;${isGrouped ? '' : 'display:none'}">
+          <div class="nx-strong" style="margin-bottom:8px">Links</div>
           <div id="acc_subitems_list">
             ${subItems.map((sub, idx) => `
               <div class="nx-subitem-row" data-idx="${idx}">
@@ -3662,12 +3975,12 @@
           <label class="nx-muted">Default open item</label>
           <select id="acc_default_open" class="nx-toolsel" style="width:100%;margin-top:6px">
             <option value="none" ${acc.defaultOpen === 'none' ? 'selected' : ''}>None</option>
-            <option value="first" ${acc.defaultOpen === 'first' ? 'selected' : ''}>First item</option>
-            <option value="custom" ${acc.defaultOpen === 'custom' ? 'selected' : ''}>Custom item</option>
+            <option value="first" ${acc.defaultOpen === 'first' ? 'selected' : ''}>${isTitle ? 'First child item' : 'First item'}</option>
+            <option value="custom" ${acc.defaultOpen === 'custom' ? 'selected' : ''}>${isTitle ? 'Custom child item' : 'Custom item'}</option>
           </select>
           <div id="acc_default_custom" style="margin-top:8px;${acc.defaultOpen === 'custom' ? '' : 'display:none'}">
             <select id="acc_default_index" class="nx-toolsel" style="width:100%">
-              ${itemOptions}
+              ${itemOptions || '<option value="0">No child items</option>'}
             </select>
           </div>
         </div>
@@ -3711,6 +4024,7 @@
           <span class="nx-toggle-ui"></span>
           <span class="nx-toggle-label">Show dividers</span>
         </label>
+        <div style="${isTitle ? 'display:none' : ''}">
         <label class="nx-muted">Chevron / indicator (accordion)</label>
         <select id="acc_indicator" class="nx-toolsel" style="width:100%;margin-top:6px">
           <option value="right" ${acc.showIndicator && acc.indicatorPosition === 'right' ? 'selected' : ''}>Show (right)</option>
@@ -3746,6 +4060,7 @@
           <input id="acc_active_color" value="${esc(acc.activeHeaderColor)}" placeholder="Active header text color" style="${inputStyle}">
           <input id="acc_body_bg" value="${esc(acc.contentBg)}" placeholder="Content background" style="${inputStyle}">
           <input id="acc_border_color" value="${esc(acc.borderColor)}" placeholder="Border / divider color" style="${inputStyle}">
+        </div>
         </div>
       `;
     } else if (blk.type === 'card') {
@@ -4057,6 +4372,7 @@
       if (blk.type === 'youTry') return (p.html ?? '') || (p.body ?? '');
       if (blk.type === 'citationOrder') return (p.html ?? '') || (p.body ?? '');
       if (blk.type === 'exampleCard') return (p.bodyHtml ?? '') || (p.body ?? '');
+      if (blk.type === 'linkList') return '';
       if (blk.type === 'panel') return (p.bodyHtml ?? '') || (p.body ?? '');
       if (blk.type === 'testimonial') return (p.bodyHtml ?? '') || (p.body ?? '');
       if (blk.type === 'download') return (p.bodyHtml ?? '') || (p.body ?? '');
@@ -4104,6 +4420,19 @@
       bind('p_image', 'image');
       bind('p_alt', 'alt');
       bind('p_layout', 'layout');
+      const imageSize = document.getElementById('p_image_size_level');
+      const imageSizeLabel = document.getElementById('p_image_size_level_label');
+      if (imageSize) {
+        imageSize.addEventListener('input', (e) => {
+          startEditSession();
+          blk.props = blk.props || {};
+          blk.props.imageSizeLevel = normalizePanelImageSizeLevel(e.target.value);
+          if (imageSizeLabel) imageSizeLabel.textContent = `Level ${blk.props.imageSizeLevel} of 5`;
+          persistUnsaved();
+          render();
+        });
+        imageSize.addEventListener('blur', endEditSession);
+      }
       const splitWrap = document.getElementById('panel_split_wrap');
       const splitSelect = document.getElementById('p_split_ratio');
       const toggleSplit = () => {
@@ -4124,6 +4453,46 @@
       const layoutSel = document.getElementById('p_layout');
       layoutSel?.addEventListener('change', toggleSplit);
       toggleSplit();
+    }
+    if (blk.type === 'linkList') {
+      ensureLinkListProps(blk);
+      bind('p_linklist_title', 'title');
+      bind('p_linklist_footer_label', 'footerLabel');
+      bind('p_linklist_footer_url', 'footerUrl');
+
+      document.getElementById('p_linklist_add')?.addEventListener('click', () => {
+        startEditSession();
+        ensureLinkListProps(blk);
+        blk.props.items.push({ title: 'New link item', subtitle: '', url: '#' });
+        persistUnsaved();
+        render();
+      });
+
+      document.querySelectorAll('#p_linklist_items .nx-linklist-item').forEach((row) => {
+        const idx = parseInt(row.dataset.idx || '-1', 10);
+        if (!Number.isInteger(idx) || idx < 0) return;
+        const item = blk.props.items[idx];
+        if (!item) return;
+
+        row.querySelectorAll('input[data-role]').forEach((input) => {
+          input.addEventListener('focus', startEditSession);
+          input.addEventListener('input', (e) => {
+            const role = e.target.dataset.role;
+            item[role] = e.target.value || '';
+            persistUnsaved();
+            updateBlockCard(blk);
+          });
+          input.addEventListener('blur', endEditSession);
+        });
+
+        row.querySelector('[data-act="remove-link-item"]')?.addEventListener('click', () => {
+          if (blk.props.items.length <= 1) return;
+          startEditSession();
+          blk.props.items.splice(idx, 1);
+          persistUnsaved();
+          render();
+        });
+      });
     }
     if (blk.type === 'download')  { bind('p_dl_label', 'label'); bind('p_dl_url', 'url'); }
     if (blk.type === 'heroBanner')  {
@@ -4591,24 +4960,41 @@
         });
       });
 
-      document.querySelectorAll('#acc_items_list .nx-itemchip').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const idx = parseInt(btn.dataset.idx, 10);
+      document.querySelectorAll('#acc_items_list .nx-itemchip-input').forEach(input => {
+        const selectItem = () => {
+          const idx = parseInt(input.dataset.idx, 10);
           if (!Number.isInteger(idx)) return;
           if (acc.mode === 'tabs' && idx >= maxTabs) {
             alert(`Tabs are limited to ${maxTabs} items. Reorder items to choose which appear.`);
             return;
           }
+          const wasActive = idx === getAccordionFocus(blk.id, renderLen);
           setAccordionFocus(blk.id, idx);
           updateBlockCard(blk);
-          renderInspector();
+          if (!wasActive) renderInspector();
+        };
+        input.addEventListener('focus', selectItem);
+        input.addEventListener('click', selectItem);
+        input.addEventListener('input', (e) => {
+          const idx = parseInt(input.dataset.idx, 10);
+          if (!Number.isInteger(idx) || !items[idx]) return;
+          items[idx].title = e.target.value || '';
+          if (idx === activeIdx) {
+            activeItem.title = e.target.value || '';
+          }
+          refreshPreview();
         });
+        input.addEventListener('blur', endEditSession);
+      });
+
+      document.querySelectorAll('#acc_items_list .nx-itemchip-input').forEach(input => {
+        input.addEventListener('focus', startEditSession);
       });
 
       document.getElementById('acc_mode_acc')?.addEventListener('click', () => {
         pushHistory();
         acc.mode = 'accordion';
-        if (!['standard','grouped'].includes(acc.accStyle)) acc.accStyle = 'standard';
+        if (!['standard','title','grouped'].includes(acc.accStyle)) acc.accStyle = 'standard';
         setAccordionFocus(blk.id, Math.min(getAccordionFocus(blk.id, items.length), items.length - 1));
         persistUnsaved();
         renderInspector();
@@ -4656,18 +5042,6 @@
         activeItem.body = textVal;
         refreshPreview();
       });
-
-      const titleInput = document.getElementById('acc_item_title');
-      if (titleInput) {
-        titleInput.addEventListener('focus', startEditSession);
-        titleInput.addEventListener('input', (e) => {
-          activeItem.title = e.target.value || '';
-          const chip = document.querySelector(`#acc_items_list .nx-itemchip[data-idx="${activeIdx}"]`);
-          if (chip) chip.textContent = activeItem.title || `Item ${activeIdx + 1}`;
-          refreshPreview();
-        });
-        titleInput.addEventListener('blur', endEditSession);
-      }
 
       const openChk = document.getElementById('acc_item_open');
       if (openChk) {
@@ -4779,7 +5153,8 @@
       if (layoutStyle) {
         layoutStyle.addEventListener('change', (e) => {
           startEditSession();
-          acc.accStyle = e.target.value === 'grouped' ? 'grouped' : 'standard';
+          const next = e.target.value;
+          acc.accStyle = ['standard','title','grouped'].includes(next) ? next : 'standard';
           persistUnsaved();
           renderInspector();
           updateBlockCard(blk);

@@ -55,6 +55,34 @@ final class PartialsManager {
     return $dir;
   }
 
+  public static function movePageDirectory(string $siteSlug, string $fromPagePath, string $toPagePath): void {
+    $fromDir = self::pageDirectory($siteSlug, $fromPagePath);
+    $toDir = self::pageDirectory($siteSlug, $toPagePath);
+
+    if ($fromDir === $toDir) {
+      self::ensurePageDirectory($siteSlug, $toPagePath);
+      return;
+    }
+
+    $root = self::projectRoot();
+    if (!is_dir($fromDir)) {
+      self::ensurePageDirectory($siteSlug, $toPagePath);
+      return;
+    }
+
+    self::ensureFile($toDir . '/.gitkeep', $root, "");
+    @unlink($toDir . '/.gitkeep');
+
+    $parent = dirname($toDir);
+    if (!is_dir($parent) && !mkdir($parent, 0775, true) && !is_dir($parent)) {
+      throw new \RuntimeException('Failed to create page directory parent: ' . $parent);
+    }
+
+    if (!@rename($fromDir, $toDir)) {
+      throw new \RuntimeException('Failed to move page directory.');
+    }
+  }
+
   public static function ensureFile(string $path, string $root, string $content): string {
     $path = str_replace('\\', '/', $path);
     $root = rtrim(str_replace('\\', '/', $root), '/');

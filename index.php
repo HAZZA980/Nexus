@@ -84,7 +84,7 @@ function apply_source_type_breadcrumbs(array $doc, array $page, string $base, st
       'href' => PagePath::publicUrl($base, $siteSlug, PagePath::join([$styleSeg, $topicSeg])),
     ],
     [
-      'label' => breadcrumb_label_from_segment($sourceSeg, 'generic'),
+      'label' => trim((string)($page['title'] ?? '')) !== '' ? (string)$page['title'] : breadcrumb_label_from_segment($sourceSeg, 'generic'),
       'href' => PagePath::publicUrl($base, $siteSlug, PagePath::join($segments)),
     ],
   ];
