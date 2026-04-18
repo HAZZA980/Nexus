@@ -26,6 +26,19 @@ function view(string $file, array $vars = []): void {
   exit;
 }
 
+function current_admin_role(): string {
+  return strtolower(trim((string)($_SESSION['user_role'] ?? '')));
+}
+
+function require_page_edit_permission(int $pageId): array {
+  $page = Page::find($pageId);
+  if (!$page) json_response(['ok' => false, 'error' => 'Page not found'], 404);
+  if (!Page::canEdit($page, current_admin_role())) {
+    json_response(['ok' => false, 'error' => 'This page is locked. Only super admins can edit it.'], 403);
+  }
+  return $page;
+}
+
 function breadcrumb_label_from_segment(string $segment, string $kind = 'generic'): string {
   $segment = PagePath::normalizeSegment($segment);
 
@@ -583,7 +596,7 @@ if ($method === 'GET' && preg_match('#^/s/([^/]+)/(.+)$#', $uri, $m)) {
     if ((int)$payload['page_id'] === (int)$page['id']) {
       $doc = $payload['doc'];
       $doc = apply_source_type_breadcrumbs($doc, $page, $base, $siteSlug);
-      $content = Renderer::render($doc);
+      $content = Renderer::render($doc, ['site' => $site, 'page' => $page]);
 
       view('site_page.php', [
         'site' => $site,
@@ -612,7 +625,7 @@ if ($method === 'GET' && preg_match('#^/s/([^/]+)/(.+)$#', $uri, $m)) {
 
   $doc = json_decode($page['builder_json'] ?? '{}', true) ?: ['version'=>1,'rows'=>[]];
   $doc = apply_source_type_breadcrumbs($doc, $page, $base, $siteSlug);
-  $content = Renderer::render($doc);
+  $content = Renderer::render($doc, ['site' => $site, 'page' => $page]);
 
   view('site_page.php', [
     'site' => $site,
@@ -675,6 +688,7 @@ if ($method === 'POST' && $uri === '/api/pages/save') {
   $pageId = (int)($data['page_id'] ?? 0);
   $doc = $data['doc'] ?? null;
   if ($pageId <= 0 || !is_array($doc)) json_response(['ok'=>false,'error'=>'Missing page/doc'], 400);
+  require_page_edit_permission($pageId);
 
   Page::saveDoc($pageId, $doc);
   json_response(['ok'=>true]);
@@ -691,6 +705,7 @@ if ($method === 'POST' && $uri === '/api/pages/publish') {
   $pageId = (int)($data['page_id'] ?? 0);
   $doc = $data['doc'] ?? null;
   if ($pageId <= 0 || !is_array($doc)) json_response(['ok'=>false,'error'=>'Missing page/doc'], 400);
+  require_page_edit_permission($pageId);
 
   Page::publish($pageId, $doc);
   json_response(['ok'=>true]);
@@ -706,6 +721,7 @@ if ($method === 'POST' && $uri === '/api/pages/unpublish') {
 
   $pageId = (int)($data['page_id'] ?? 0);
   if ($pageId <= 0) json_response(['ok'=>false,'error'=>'Missing page_id'], 400);
+  require_page_edit_permission($pageId);
 
   \NexusCMS\Models\Page::unpublish($pageId);
   json_response(['ok'=>true]);
@@ -722,6 +738,7 @@ if ($method === 'POST' && $uri === '/api/pages/preview-token') {
   $pageId = (int)($data['page_id'] ?? 0);
   $doc = $data['doc'] ?? null;
   if ($pageId <= 0 || !is_array($doc)) json_response(['ok'=>false,'error'=>'Missing page/doc'], 400);
+  require_page_edit_permission($pageId);
 
   $token = bin2hex(random_bytes(16));
   $_SESSION['nx_preview'] = $_SESSION['nx_preview'] ?? [];
@@ -745,6 +762,7 @@ if ($method === 'POST' && $uri === '/api/revisions/create') {
   $pageId = (int)($data['page_id'] ?? 0);
   $doc = $data['doc'] ?? null;
   if ($pageId <= 0 || !is_array($doc)) json_response(['ok'=>false,'error'=>'Missing page/doc'], 400);
+  require_page_edit_permission($pageId);
 
   $name = isset($data['name']) ? trim((string)$data['name']) : null;
   if ($name === '') $name = null;
@@ -769,6 +787,7 @@ if ($method === 'GET' && $uri === '/api/revisions/list') {
 
   $pageId = (int)($_GET['page_id'] ?? 0);
   if ($pageId <= 0) json_response(['ok'=>false,'error'=>'Missing page_id'], 400);
+  require_page_edit_permission($pageId);
 
   $items = \NexusCMS\Models\Revision::listByPage($pageId, 5);
   json_response(['ok'=>true,'items'=>$items]);
@@ -787,6 +806,7 @@ if ($method === 'POST' && $uri === '/api/revisions/preview-token') {
 
   $rev = \NexusCMS\Models\Revision::get($revisionId);
   if (!$rev) json_response(['ok'=>false,'error'=>'Revision not found'], 404);
+  require_page_edit_permission((int)($rev['page_id'] ?? 0));
 
   $doc = json_decode($rev['doc_json'], true);
   if (!is_array($doc)) $doc = ['version'=>1,'rows'=>[]];
@@ -812,6 +832,9 @@ if ($method === 'POST' && $uri === '/api/revisions/delete') {
 
   $id = (int)($data['revision_id'] ?? 0);
   if ($id <= 0) json_response(['ok'=>false,'error'=>'Missing revision_id'], 400);
+  $rev = \NexusCMS\Models\Revision::get($id);
+  if (!$rev) json_response(['ok'=>false,'error'=>'Revision not found'], 404);
+  require_page_edit_permission((int)($rev['page_id'] ?? 0));
 
   \NexusCMS\Models\Revision::delete($id);
   json_response(['ok'=>true]);
@@ -831,6 +854,7 @@ if ($method === 'POST' && $uri === '/api/revisions/restore') {
 
   $rev = \NexusCMS\Models\Revision::get($revisionId);
   if (!$rev) json_response(['ok'=>false,'error'=>'Revision not found'], 404);
+  require_page_edit_permission((int)($rev['page_id'] ?? 0));
 
   $doc = json_decode($rev['doc_json'], true);
   if (!is_array($doc)) $doc = ['version'=>1,'rows'=>[]];
@@ -868,6 +892,9 @@ if ($method === 'POST' && $uri === '/api/revisions/milestone') {
   $id = (int)($data['revision_id'] ?? 0);
   $flag = !empty($data['flag']);
   if ($id <= 0) json_response(['ok'=>false,'error'=>'Missing revision_id'], 400);
+  $rev = \NexusCMS\Models\Revision::get($id);
+  if (!$rev) json_response(['ok'=>false,'error'=>'Revision not found'], 404);
+  require_page_edit_permission((int)($rev['page_id'] ?? 0));
 
   \NexusCMS\Models\Revision::setMilestone($id, $flag);
   json_response(['ok'=>true]);

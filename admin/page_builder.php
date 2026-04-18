@@ -11,6 +11,13 @@ use NexusCMS\Support\PagePath;
 $pageId = (int)($_GET['id'] ?? 0);
 $page = Page::find($pageId);
 if (!$page) { http_response_code(404); echo "Page not found"; exit; }
+$sessionRole = strtolower((string)($_SESSION['user_role'] ?? ''));
+$isSuperAdmin = $sessionRole === 'super_admin';
+if (Page::isLocked($page) && !$isSuperAdmin) {
+  http_response_code(403);
+  echo "This page is locked and can only be edited by super admins.";
+  exit;
+}
 
 $site = Site::find((int)$page['site_id']);
 if (!$site) { http_response_code(404); echo "Site not found"; exit; }
@@ -126,6 +133,7 @@ $nexusCssVer = is_file($nexusCssPath) ? (string)filemtime($nexusCssPath) : '1';
 $builderBodyClasses = [
   'builder-site-' . preg_replace('/[^a-z0-9\-]+/i', '-', strtolower((string)($site['slug'] ?? 'site'))),
   'builder-page-' . preg_replace('/[^a-z0-9\-]+/i', '-', strtolower((string)($page['slug'] ?? 'page'))),
+  'builder-template-' . preg_replace('/[^a-z0-9\-]+/i', '-', strtolower((string)($page['template_key'] ?? 'landing'))),
 ];
 ?>
 <!doctype html>
@@ -140,6 +148,9 @@ $builderBodyClasses = [
     })();
   </script>
   <title>Builder — <?= Security::e($page['title']) ?></title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root{
       --bg:#0f172a;--panel:#111827;--card:#111827;--border:#1f2937;--muted:#9ca3af;--text:#e5e7eb;
@@ -190,6 +201,17 @@ $builderBodyClasses = [
 
   <a class="nx-link" href="<?= $base ?>/admin/site.php?id=<?= (int)$site['id'] ?>">← Back to Site</a>
 
+  <div class="nx-sep"></div>
+  <div class="nx-page-id left">
+    <div class="nx-strong">
+      <?= Security::e($page['title']) ?>
+      <?php if (Page::isLocked($page)): ?>
+        <span title="Locked page" aria-label="Locked page" style="display:inline-flex;align-items:center;color:#b45309;vertical-align:middle;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 1 1 8 0v3"/></svg>
+        </span>
+      <?php endif; ?>
+    </div>
+  </div>
   <div class="nx-sep"></div>
   <div class="nx-left-title">Structure</div>
 
@@ -381,6 +403,10 @@ $builderBodyClasses = [
         </div>
 
         <div class="nx-top-actions">
+          <div class="nx-view-toggle" role="group" aria-label="Canvas view">
+            <button id="viewContent" type="button" class="nx-view-btn active" aria-pressed="true">Content</button>
+            <button id="viewBlueprint" type="button" class="nx-view-btn" aria-pressed="false">Blueprint</button>
+          </div>
           <button id="preview" type="button">Preview</button>
 
           <div class="nx-dd" id="saveDD">

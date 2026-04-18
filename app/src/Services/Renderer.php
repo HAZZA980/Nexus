@@ -3,11 +3,23 @@
 namespace NexusCMS\Services;
 
 use NexusCMS\Core\Security;
+use NexusCMS\Models\CitationExample;
 
 final class Renderer
 {
-public static function render(array $doc): string
+  private static string $currentSiteSlug = '';
+  private static string $currentPageCitationExampleId = '';
+  private static string $currentPageSlug = '';
+  private static array $citationCache = [];
+  private static array $citationListCache = [];
+
+public static function render(array $doc, array $context = []): string
 {
+  self::$currentSiteSlug = trim((string)($context['site']['slug'] ?? ''));
+  self::$currentPageCitationExampleId = trim((string)($doc['page']['citationExampleId'] ?? ''));
+  self::$currentPageSlug = trim((string)($context['page']['slug'] ?? ''));
+  self::$citationCache = [];
+  self::$citationListCache = [];
   $rows = $doc['rows'] ?? [];
   $html = '';
   $isSignedIn = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
@@ -82,6 +94,77 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
   return '<div class="nexus-page"' . $styleAttr . '>' . $html . '</div>';
 }
+
+  private static function resolveCitationRecord(array $blk): ?array
+  {
+    $props = is_array($blk['props'] ?? null) ? $blk['props'] : [];
+    $exampleId = trim((string)($props['exampleId'] ?? self::$currentPageCitationExampleId));
+    if (self::$currentSiteSlug === '') return null;
+
+    $cacheKey = self::$currentSiteSlug . '|' . ($exampleId !== '' ? $exampleId : '__fallback__') . '|' . self::$currentPageSlug;
+    if (array_key_exists($cacheKey, self::$citationCache)) {
+      return self::$citationCache[$cacheKey];
+    }
+
+    $citation = null;
+    if ($exampleId !== '') {
+      if (ctype_digit($exampleId)) {
+        $candidate = CitationExample::findById((int)$exampleId);
+        if ($candidate && (string)($candidate['site_slug'] ?? '') === self::$currentSiteSlug) {
+          $citation = $candidate;
+        }
+      } else {
+        $citation = CitationExample::find(self::$currentSiteSlug, $exampleId);
+      }
+    }
+
+    if (!$citation) {
+      $citation = self::resolveCitationFallbackFromPage();
+    }
+
+    self::$citationCache[$cacheKey] = $citation ?: null;
+    return self::$citationCache[$cacheKey];
+  }
+
+  private static function resolveCitationFallbackFromPage(): ?array
+  {
+    if (self::$currentSiteSlug === '') return null;
+
+    $segments = array_values(array_filter(explode('/', trim(self::$currentPageSlug, '/')), static fn($seg) => $seg !== ''));
+    $styleMap = [
+      'harvard' => 'Harvard',
+      'apa-7th' => 'APA 7th',
+      'chicago-18th' => 'Chicago 18th',
+      'chicago-17th' => 'Chicago 17th',
+      'ieee' => 'IEEE',
+      'mhra-4th' => 'MHRA 4th',
+      'mhra-3rd' => 'MHRA 3rd',
+      'mla-9th' => 'MLA 9th',
+      'oscola' => 'OSCOLA',
+      'vancouver' => 'Vancouver',
+    ];
+    $categoryMap = [
+      'books' => 'Books',
+      'journals' => 'Journals',
+      'digital-and-internet' => 'Digital & Internet',
+      'media-and-art' => 'Media & Art',
+      'research' => 'Research',
+      'legal' => 'Legal',
+      'governmental' => 'Governmental',
+      'communications' => 'Communications',
+    ];
+
+    $style = $styleMap[$segments[0] ?? ''] ?? null;
+    $category = $categoryMap[$segments[1] ?? ''] ?? null;
+    $listKey = self::$currentSiteSlug . '|' . ($style ?? '') . '|' . ($category ?? '');
+    if (!array_key_exists($listKey, self::$citationListCache)) {
+      self::$citationListCache[$listKey] = CitationExample::listForSiteSlug(self::$currentSiteSlug, $style, $category);
+    }
+
+    $matches = self::$citationListCache[$listKey];
+    if (!$matches) return null;
+    return $matches[0];
+  }
 
   /**
    * ---- Block wrapper style (blk.style) ----
@@ -255,6 +338,10 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
       if (str_starts_with($href, '#')) {
         return '<a href="' . $hrefEsc . '">';
       }
+      $opensInSameTab = preg_match('#^(?:/|\?|\.{1,2}/)#', $href) === 1;
+      if ($opensInSameTab || str_starts_with(strtolower($href), 'mailto:')) {
+        return '<a href="' . $hrefEsc . '">';
+      }
       return '<a href="' . $hrefEsc . '" target="_blank" rel="noopener noreferrer">';
     }, $html);
 
@@ -359,6 +446,20 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     $parts = preg_split("/\n+/", $html) ?: [];
     $parts = array_values(array_filter(array_map(static fn($part) => trim($part), $parts), static fn($part) => $part !== ''));
     return implode("\n", $parts);
+  }
+
+  private static function normalizeInlineBreakHtml(string $html): string
+  {
+    $html = self::safeInlineHtml($html);
+    if ($html === '') return '';
+    $html = preg_replace('/<\s*\/?(?:div|p|section|article)\b[^>]*>/iu', "\n", $html) ?? $html;
+    $html = preg_replace('/<\s*li\b[^>]*>/iu', "\n• ", $html) ?? $html;
+    $html = preg_replace('/<\s*\/li\s*>/iu', "\n", $html) ?? $html;
+    $html = preg_replace('/<\s*\/?(?:ul|ol)\b[^>]*>/iu', "\n", $html) ?? $html;
+    $html = preg_replace('/<br\s*\/?>/iu', "\n", $html) ?? $html;
+    $html = preg_replace("/\n{3,}/", "\n\n", $html) ?? $html;
+    $html = trim($html, "\n");
+    return str_replace("\n", '<br>', $html);
   }
 
   private static function trimAccordionBodyHtml(string $html): string
@@ -545,13 +646,14 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
       }
 
       case 'youTry': {
+        $liveCitation = self::resolveCitationRecord($blk);
         $title = Security::e((string)($p['title'] ?? 'You try'));
 
-        $bodyRaw = (string)($p['html'] ?? '');
+        $bodyRaw = $liveCitation ? (string)($liveCitation['you_try'] ?? '') : (string)($p['html'] ?? '');
         if ($bodyRaw !== '') {
           $body = self::safeInlineHtml($bodyRaw);
         } else {
-          $body = nl2br(Security::e((string)($p['body'] ?? '')));
+          $body = nl2br(Security::e((string)($liveCitation['you_try'] ?? ($p['body'] ?? ''))));
         }
 
         $html = "<div class=\"nx-youtry\">"
@@ -580,13 +682,14 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
       }
 
       case 'citationOrder': {
+        $liveCitation = self::resolveCitationRecord($blk);
         $title = Security::e((string)($p['title'] ?? 'Citation order'));
 
-        $bodyRaw = (string)($p['html'] ?? '');
+        $bodyRaw = $liveCitation ? (string)($liveCitation['citation_order'] ?? '') : (string)($p['html'] ?? '');
         if ($bodyRaw !== '') {
           $body = self::renderMarkedHtml($bodyRaw);
         } else {
-          $plain = (string)($p['body'] ?? '');
+          $plain = $liveCitation ? (string)($liveCitation['citation_order'] ?? '') : (string)($p['body'] ?? '');
           $normalized = self::normalizeBulletText($plain);
           $body = self::formatMarkedText($normalized);
         }
@@ -600,24 +703,25 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
       }
 
       case 'exampleCard': {
-        $heading = Security::e((string)($p['heading'] ?? 'Example'));
+        $liveCitation = self::resolveCitationRecord($blk);
+        $heading = Security::e((string)($liveCitation['example_heading'] ?? ($p['heading'] ?? 'Example')));
 
-        $bodyRaw = (string)($p['bodyHtml'] ?? ($p['html'] ?? ''));
+        $bodyRaw = $liveCitation
+          ? (string)($liveCitation['example_body'] ?? '')
+          : (string)($p['bodyHtml'] ?? ($p['html'] ?? ''));
         if ($bodyRaw !== '') {
-          $bodyRaw = self::flattenExampleHtml($bodyRaw);
-          $body = self::hasHtml($bodyRaw)
-            ? self::safeInlineHtml(str_replace("\n", '<br>', $bodyRaw))
-            : self::formatMarkedText(self::compactExampleText($bodyRaw));
+          if (self::hasHtml($bodyRaw)) {
+            $body = self::normalizeInlineBreakHtml($bodyRaw);
+          } else {
+            $body = self::formatMarkedText(self::compactExampleText($bodyRaw));
+          }
         } else {
           $body = self::formatMarkedText(self::compactExampleText((string)($p['body'] ?? '')));
         }
 
-        $youTryRaw = (string)($p['youTry'] ?? '');
-        if (self::hasHtml($youTryRaw)) {
-          $youTryRaw = self::flattenExampleHtml($youTryRaw);
-        }
+        $youTryRaw = $liveCitation ? (string)($liveCitation['you_try'] ?? '') : (string)($p['youTry'] ?? '');
         $youTry = self::hasHtml($youTryRaw)
-          ? self::safeInlineHtml(str_replace("\n", '<br>', $youTryRaw))
+          ? self::normalizeInlineBreakHtml($youTryRaw)
           : self::formatMarkedText(self::compactExampleText($youTryRaw));
         $showTry = !array_key_exists('showYouTry', $p) || (bool)$p['showYouTry'];
         $extraClass = $showTry ? '' : ' nx-examplecard--single';
@@ -630,12 +734,9 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
         if ($showTry) {
           $uid = uniqid('yt_', false);
-          $expected = (string)($p['youTry'] ?? '');
-          if (self::hasHtml($expected)) {
-            $expected = self::flattenExampleHtml($expected);
-          }
+          $expected = $liveCitation ? (string)($liveCitation['you_try'] ?? '') : (string)($p['youTry'] ?? '');
           $expectedHtml = self::hasHtml($expected)
-            ? self::safeInlineHtml(str_replace("\n", '<br>', $expected))
+            ? self::normalizeInlineBreakHtml($expected)
             : self::formatMarkedText(self::compactExampleText($expected));
 
           $html .= "<div class=\"nx-examplecard-right\">"

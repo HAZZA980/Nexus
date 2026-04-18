@@ -63,6 +63,13 @@ function nx_safe_rollback($pdo): void {
   }
 }
 
+function nx_page_editable_or_notice(?array $page, bool $isSuperAdmin, ?string &$notice, string $action = 'edit'): bool {
+  if (!$page) return false;
+  if (Page::canEdit($page, $isSuperAdmin ? 'super_admin' : '')) return true;
+  $notice = 'This page is locked. Only super admins can ' . $action . ' it.';
+  return false;
+}
+
 // Simple semantic tag bump: returns next patch version (e.g., 1.0.0 -> 1.0.1)
 function nx_next_release_tag(array $tags): string {
   $latest = '1.0.0';
@@ -605,6 +612,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
       $page = Page::find($pageId);
       if ($page && (int)$page['site_id'] === $siteId) {
+        if (!nx_page_editable_or_notice($page, $isSuperAdmin, $notice, 'delete')) {
+          // fall through with notice
+        } else {
         DeletedPage::softDelete($page, [
           'user_id' => (int)($_SESSION['user_id'] ?? 0),
           'email' => (string)($me['email'] ?? ''),
@@ -613,6 +623,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
         header('Location: site.php?id=' . $siteId . '&saved=deleted');
         exit;
+        }
       } else {
         $notice = 'Page not found for this site.';
       }
@@ -645,6 +656,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
       $page = Page::find($pageId);
       if ($page && (int)$page['site_id'] === $siteId) {
+        if (!nx_page_editable_or_notice($page, $isSuperAdmin, $notice, 'edit')) {
+          // fall through with notice
+        } else {
         $normalizedSlug = PagePath::normalizePath($newPath);
         if ($newTitle === '' || $normalizedSlug === '') {
           $notice = 'Page name and file path are required.';
@@ -658,6 +672,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: site.php?id=' . $siteId . '&saved=page');
             exit;
           }
+        }
         }
       } else {
         $notice = 'Page not found for this site.';
@@ -673,6 +688,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
       $page = Page::find($pageId);
       if ($page && (int)$page['site_id'] === $siteId) {
+        if (!nx_page_editable_or_notice($page, $isSuperAdmin, $notice, 'duplicate')) {
+          // fall through with notice
+        } else {
         $slugBase = $page['slug'] . '-copy';
         $slugCandidate = $slugBase;
         $n = 1;
@@ -692,11 +710,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         header('Location: site.php?id=' . $siteId . '&saved=page');
         exit;
+        }
       } else {
         $notice = 'Page not found for this site.';
       }
     } catch (\Throwable $e) {
       $notice = 'Duplicate failed. Please try again.';
+    }
+  }
+
+  if (isset($_POST['toggle_page_lock']) && $isSuperAdmin) {
+    $pageId = (int)($_POST['page_id'] ?? 0);
+    $shouldLock = !empty($_POST['lock_page']);
+    try {
+      $page = Page::find($pageId);
+      if ($page && (int)$page['site_id'] === $siteId) {
+        Page::setLocked($pageId, $shouldLock);
+        header('Location: site.php?id=' . $siteId . '&saved=page');
+        exit;
+      }
+      $notice = 'Page not found for this site.';
+    } catch (\Throwable $e) {
+      $notice = 'Lock update failed. Please try again.';
     }
   }
 
@@ -1614,7 +1649,41 @@ if (isset($_SESSION['user_id'])) {
       height:120px;
       background:linear-gradient(135deg,rgba(255,255,255,.08),rgba(255,255,255,.02));
       border-bottom:1px solid var(--border);
+      position:relative;
+      overflow:hidden;
+      padding:12px;
+      display:flex;
+      align-items:flex-end;
     }
+    .thumb-title{position:relative;z-index:2;font-weight:900;font-size:36px;line-height:1;color:rgba(255,255,255,.92);text-shadow:0 2px 12px rgba(0,0,0,.35);}
+    .thumb-blueprint{position:absolute;inset:12px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.16);}
+    .thumb-blueprint::before,.thumb-blueprint::after{content:"";position:absolute;inset:auto;}
+    .layout-thumb--blank .thumb-blueprint{border-style:dashed;background:linear-gradient(135deg,rgba(255,255,255,.02),rgba(255,255,255,.01));}
+    .layout-thumb--blank .thumb-blueprint::before{left:16px;right:16px;top:50%;height:1px;background:rgba(148,163,184,.28);}
+    .layout-thumb--blank .thumb-blueprint::after{top:16px;bottom:16px;left:50%;width:1px;background:rgba(148,163,184,.28);}
+    .layout-thumb--title-page .thumb-blueprint{background:
+      linear-gradient(rgba(148,163,184,.25),rgba(148,163,184,.25)) 10px 10px/calc(100% - 20px) 18px no-repeat,
+      linear-gradient(rgba(148,163,184,.18),rgba(148,163,184,.18)) 10px 36px/31% 20px no-repeat,
+      linear-gradient(rgba(148,163,184,.18),rgba(148,163,184,.18)) calc(34% + 4px) 36px/31% 20px no-repeat,
+      linear-gradient(rgba(148,163,184,.18),rgba(148,163,184,.18)) calc(68% - 2px) 36px/22% 20px no-repeat,
+      linear-gradient(rgba(148,163,184,.2),rgba(148,163,184,.2)) 10px 64px/calc(100% - 20px) 1px no-repeat,
+      linear-gradient(rgba(148,163,184,.16),rgba(148,163,184,.16)) 10px 74px/48% 26px no-repeat,
+      linear-gradient(rgba(148,163,184,.12),rgba(148,163,184,.12)) calc(48% + 18px) 74px/calc(52% - 28px) 26px no-repeat;
+    }
+    .layout-thumb--referencing-browse .thumb-blueprint{background:
+      linear-gradient(rgba(148,163,184,.22),rgba(148,163,184,.22)) 10px 10px/calc(100% - 20px) 16px no-repeat,
+      linear-gradient(rgba(148,163,184,.18),rgba(148,163,184,.18)) 10px 34px/calc(100% - 20px) 10px no-repeat,
+      linear-gradient(rgba(148,163,184,.18),rgba(148,163,184,.18)) 10px 52px/60% 48px no-repeat,
+      linear-gradient(rgba(148,163,184,.12),rgba(148,163,184,.12)) calc(60% + 18px) 52px/calc(40% - 28px) 48px no-repeat;
+    }
+    .layout-thumb--referencing-browse .thumb-blueprint::before{left:20px;top:60px;width:44%;height:1px;background:rgba(226,232,240,.36);box-shadow:0 10px 0 rgba(226,232,240,.36),0 20px 0 rgba(226,232,240,.36);}
+    .layout-thumb--referencing-browse .thumb-blueprint::after{right:14px;top:60px;width:calc(40% - 18px);height:1px;background:rgba(226,232,240,.28);box-shadow:0 12px 0 rgba(226,232,240,.28),0 24px 0 rgba(226,232,240,.28);}
+    .layout-thumb--source-type .thumb-blueprint{background:
+      linear-gradient(rgba(148,163,184,.22),rgba(148,163,184,.22)) 10px 10px/64% 14px no-repeat,
+      linear-gradient(rgba(148,163,184,.18),rgba(148,163,184,.18)) 10px 32px/64% 68px no-repeat,
+      linear-gradient(rgba(148,163,184,.12),rgba(148,163,184,.12)) calc(64% + 18px) 10px/calc(36% - 28px) 90px no-repeat;
+    }
+    .layout-thumb--source-type .thumb-blueprint::before{right:18px;top:18px;width:calc(36% - 36px);height:1px;background:rgba(226,232,240,.32);box-shadow:0 18px 0 rgba(226,232,240,.32),0 36px 0 rgba(226,232,240,.32),0 54px 0 rgba(226,232,240,.32);}
     .layout-body{padding:12px;display:flex;flex-direction:column;gap:8px;flex:1;}
     .layout-title{font-weight:800;font-size:15px;}
     .btn.fill{justify-content:center;width:100%;background:rgba(37,99,235,.22);border-color:rgba(37,99,235,.4);}
@@ -1822,6 +1891,25 @@ if (isset($_SESSION['user_id'])) {
       outline:none;
       white-space:pre-wrap;
     }
+    #citationHeadingField,
+    #editHeadingField{
+      font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      font-size:17px;
+      line-height:1.2;
+      font-weight:800;
+    }
+    .rich-editor[data-bind="citationOrderField"],
+    .rich-editor[data-bind="citationBodyField"],
+    .rich-editor[data-bind="citationYouTryField"],
+    .rich-editor[data-bind="editOrderField"],
+    .rich-editor[data-bind="editBodyField"],
+    .rich-editor[data-bind="editYouTryField"]{
+      font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      font-size:16px;
+      line-height:1.45;
+      font-weight:500;
+      color:#1f2937;
+    }
     .rich-editor:focus{box-shadow:0 0 0 2px rgba(37,99,235,0.25);border-color:rgba(37,99,235,0.45);}
     html.theme-light #citationModalBackdrop input,
     html.theme-light #citationModalBackdrop textarea,
@@ -1840,6 +1928,10 @@ if (isset($_SESSION['user_id'])) {
     html.theme-light .rich-editor{
       background:#fff;
       border:1px solid var(--border);
+    }
+    html.theme-light #citationHeadingField,
+    html.theme-light #editHeadingField{
+      color:#111827;
     }
     html.theme-light .example-panel .rich-editor{
       background:#fff;
@@ -1866,6 +1958,10 @@ if (isset($_SESSION['user_id'])) {
     table.page-table tbody tr:hover{background:color-mix(in srgb, var(--primary) 8%, transparent);}
     table.page-table td, table.page-table th{padding:10px 8px;vertical-align:middle;}
     .title-main{font-weight:800;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+    .page-lock-icon{display:inline-flex;align-items:center;justify-content:center;color:#b45309;flex:0 0 auto;}
+    .page-lock-icon svg{width:14px;height:14px;display:block;}
+    .btn.disabled{opacity:.55;pointer-events:none;cursor:not-allowed;}
+    .locked-note{font-size:12px;color:var(--muted);}
     .title-path{font-family:"SFMono-Regular","Menlo",monospace;font-size:12px;color:var(--muted);}
     .page-kind-badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.2;border:1px solid transparent;}
     .page-kind-badge.home-logged-out{background:rgba(59,130,246,.12);color:#1d4ed8;border-color:rgba(59,130,246,.35);}
@@ -2172,6 +2268,8 @@ if (isset($_SESSION['user_id'])) {
               <?php foreach ($pages as $p): ?>
                 <?php
                   $slug = strtolower((string)($p['slug'] ?? ''));
+                  $pageLocked = (int)($p['is_locked'] ?? 0) === 1;
+                  $pageCanEdit = Page::canEdit($p, $myRole);
                   if ($slug === 'home-signed-in') { continue; }
                 ?>
                 <tr
@@ -2181,6 +2279,11 @@ if (isset($_SESSION['user_id'])) {
                 >
                   <td>
                     <div class="title-main">
+                      <?php if ($pageLocked): ?>
+                        <span class="page-lock-icon" title="Locked page" aria-label="Locked page">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 1 1 8 0v3"/></svg>
+                        </span>
+                      <?php endif; ?>
                       <a href="<?= Security::e(PagePath::publicUrl($base, (string)($site['slug'] ?? ''), (string)($p['slug'] ?? ''))) ?>" target="_blank" style="color:inherit;text-decoration:none;">
                         <?= Security::e($p['title']) ?>
                       </a>
@@ -2197,22 +2300,41 @@ if (isset($_SESSION['user_id'])) {
                   </td>
                   <td class="muted updated-cell" data-updated="<?= Security::e($p['updated_at'] ?? '') ?>"><?= Security::e($p['updated_at'] ?? '') ?></td>
                   <td style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                    <a class="btn small" style="background:linear-gradient(135deg,var(--primary),var(--primary));color:#fff;border-color:rgba(255,255,255,.12)" href="<?= $base ?>/admin/page_builder.php?id=<?= (int)$p['id'] ?>">Edit</a>
-                    <div class="kebab">
-                      <button class="kebab-btn" type="button" aria-haspopup="true" aria-expanded="false">⋯</button>
-                      <div class="kebab-menu" role="menu">
-                        <button type="button" data-duplicate-page data-page-id="<?= (int)$p['id'] ?>" aria-label="Duplicate page">Duplicate</button>
-                        <button
-                          type="button"
-                          data-rename-page
-                          data-page-id="<?= (int)$p['id'] ?>"
-                          data-page-title="<?= Security::e($p['title']) ?>"
-                          data-page-slug="<?= Security::e($p['slug']) ?>"
-                          aria-label="Rename page"
-                        >Rename page</button>
-                        <button type="button" class="danger" data-delete-page data-page-id="<?= (int)$p['id'] ?>" data-page-title="<?= Security::e($p['title']) ?>" aria-label="Delete page">Delete</button>
+                    <?php if ($pageCanEdit): ?>
+                      <a class="btn small" style="background:linear-gradient(135deg,var(--primary),var(--primary));color:#fff;border-color:rgba(255,255,255,.12)" href="<?= $base ?>/admin/page_builder.php?id=<?= (int)$p['id'] ?>">Edit</a>
+                    <?php else: ?>
+                      <span class="btn small disabled" aria-disabled="true">Locked</span>
+                    <?php endif; ?>
+                    <?php if ($pageCanEdit || $isSuperAdmin): ?>
+                      <div class="kebab">
+                        <button class="kebab-btn" type="button" aria-haspopup="true" aria-expanded="false">⋯</button>
+                        <div class="kebab-menu" role="menu">
+                          <?php if ($pageCanEdit): ?>
+                            <button type="button" data-duplicate-page data-page-id="<?= (int)$p['id'] ?>" aria-label="Duplicate page">Duplicate</button>
+                            <button
+                              type="button"
+                              data-rename-page
+                              data-page-id="<?= (int)$p['id'] ?>"
+                              data-page-title="<?= Security::e($p['title']) ?>"
+                              data-page-slug="<?= Security::e($p['slug']) ?>"
+                              aria-label="Rename page"
+                            >Rename page</button>
+                            <button type="button" class="danger" data-delete-page data-page-id="<?= (int)$p['id'] ?>" data-page-title="<?= Security::e($p['title']) ?>" aria-label="Delete page">Delete</button>
+                          <?php endif; ?>
+                          <?php if ($isSuperAdmin): ?>
+                            <button
+                              type="button"
+                              data-lock-page
+                              data-page-id="<?= (int)$p['id'] ?>"
+                              data-lock-state="<?= $pageLocked ? '0' : '1' ?>"
+                              aria-label="<?= $pageLocked ? 'Unlock page' : 'Lock page' ?>"
+                            ><?= $pageLocked ? 'Unlock page' : 'Lock page' ?></button>
+                          <?php endif; ?>
+                        </div>
                       </div>
-                    </div>
+                    <?php elseif ($pageLocked): ?>
+                      <span class="locked-note">Only super admins can edit</span>
+                    <?php endif; ?>
                   </td>
                 </tr>
               <?php endforeach; ?>
@@ -3349,6 +3471,12 @@ if (isset($_SESSION['user_id'])) {
     <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
     <input type="hidden" name="duplicate_page" id="duplicate_page_id" value="0">
   </form>
+  <form id="togglePageLockForm" method="post" action="site.php?id=<?= (int)$site['id'] ?>" style="display:none">
+    <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+    <input type="hidden" name="toggle_page_lock" value="1">
+    <input type="hidden" name="page_id" id="toggle_page_lock_id" value="0">
+    <input type="hidden" name="lock_page" id="toggle_page_lock_state" value="0">
+  </form>
   <form id="deleteSiteForm" method="post" action="site.php?id=<?= (int)$site['id'] ?>" style="display:none">
     <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
     <input type="hidden" name="delete_site" value="1">
@@ -3920,7 +4048,7 @@ if (isset($_SESSION['user_id'])) {
       return html;
     };
 
-    const htmlToMd = (html) => {
+    const htmlToMd = (html, collapseToSingleBreak = false) => {
       const walk = (node) => {
         if (node.nodeType === Node.TEXT_NODE) return node.textContent;
         if (node.nodeType !== Node.ELEMENT_NODE) return '';
@@ -3942,7 +4070,11 @@ if (isset($_SESSION['user_id'])) {
       const container = document.createElement('div');
       container.innerHTML = html;
       // Preserve user-entered structure: keep original newlines and spacing.
-      return walk(container);
+      return walk(container)
+        .replace(/\r/g, '')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(collapseToSingleBreak ? /\n{2,}/g : /\n{3,}/g, collapseToSingleBreak ? '\n' : '\n\n')
+        .trim();
     };
 
     const richTargets = [
@@ -3987,6 +4119,14 @@ if (isset($_SESSION['user_id'])) {
       wrapper.style.display = 'flex';
       wrapper.style.flexDirection = 'column';
       wrapper.style.gap = '4px';
+      const useSoftBreaks = [
+        'citationOrderField',
+        'citationBodyField',
+        'citationYouTryField',
+        'editOrderField',
+        'editBodyField',
+        'editYouTryField'
+      ].includes(textarea.id);
 
       const editor = document.createElement('div');
       editor.className = 'rich-editor';
@@ -3998,10 +4138,22 @@ if (isset($_SESSION['user_id'])) {
       wrapper.appendChild(editor);
       if (withToolbar) wrapper.insertBefore(createToolbar(editor), editor);
 
-      const syncToTextarea = () => { textarea.value = htmlToMd(editor.innerHTML); };
+      const syncToTextarea = () => { textarea.value = htmlToMd(editor.innerHTML, useSoftBreaks); };
       editor.addEventListener('input', syncToTextarea);
       editor.addEventListener('focus', () => { activeEditor = editor; });
       editor.addEventListener('blur', syncToTextarea);
+      if (useSoftBreaks) {
+        editor.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          if (document.queryCommandSupported && document.queryCommandSupported('insertLineBreak')) {
+            document.execCommand('insertLineBreak');
+          } else if (document.queryCommandSupported && document.queryCommandSupported('insertHTML')) {
+            document.execCommand('insertHTML', false, '<br>');
+          }
+          syncToTextarea();
+        });
+      }
       return editor;
     };
 
@@ -5133,9 +5285,19 @@ if (isset($_SESSION['user_id'])) {
         </div>
         <div class="muted" style="margin-bottom:6px">Choose a layout</div>
         <div class="grid layout-grid" id="modalLayoutGrid">
+          <?php
+            $renderLayoutThumb = static function(string $id, string $label = ''): string {
+              $safeId = Security::e($id);
+              $safeLabel = Security::e($label);
+              return '<div class="layout-thumb layout-thumb--' . $safeId . '">' .
+                '<div class="thumb-blueprint thumb-blueprint--' . $safeId . '" aria-hidden="true"></div>' .
+                ($safeLabel !== '' ? '<div class="thumb-title">' . $safeLabel . '</div>' : '') .
+              '</div>';
+            };
+          ?>
           <button class="layout-card blank" type="button" data-layout="blank">
             <div class="checkmark">✓</div>
-            <div class="layout-thumb"></div>
+            <?= $renderLayoutThumb('blank', 'B') ?>
             <div class="layout-body">
               <div class="layout-title">Blank page</div>
               <div class="muted">Start from scratch with an empty row.</div>
@@ -5144,7 +5306,7 @@ if (isset($_SESSION['user_id'])) {
           </button>
           <?php
             $modalLayouts = [
-              ['id' => 'title-page', 'name' => 'Title page', 'desc' => 'Cite Them Right homepage structure with editable placeholder blocks.'],
+              ['id' => 'title-page', 'name' => 'Title page', 'desc' => 'Cite Them Right home-inspired default with placeholder-only blocks.'],
               ['id' => 'referencing-browse', 'name' => 'Referencing Browse', 'desc' => 'Browse-by-category scaffold matching the Cite Them Right reference browse layout.'],
               ['id' => 'source-type', 'name' => 'Source Type', 'desc' => 'Two-column source page with stacked link lists and citation content blocks.'],
             ];
@@ -5152,7 +5314,7 @@ if (isset($_SESSION['user_id'])) {
           <?php foreach ($modalLayouts as $layout): ?>
             <button class="layout-card" type="button" data-layout="<?= Security::e($layout['id']) ?>">
               <div class="checkmark">✓</div>
-              <div class="layout-thumb"></div>
+              <?= $renderLayoutThumb($layout['id'], strtoupper(substr((string)$layout['name'], 0, 1))) ?>
               <div class="layout-body">
                 <div class="layout-title"><?= Security::e($layout['name']) ?></div>
                 <div class="muted" style="min-height:44px"><?= Security::e($layout['desc']) ?></div>
@@ -5354,6 +5516,17 @@ if (isset($_SESSION['user_id'])) {
         document.getElementById('duplicate_page_id').value = pid;
         document.getElementById('duplicatePageForm').submit();
       });
+    });
+
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('[data-lock-page]');
+      if (!btn) return;
+      const pid = btn.dataset.pageId || '';
+      const state = btn.dataset.lockState || '0';
+      if (!pid) return;
+      document.getElementById('toggle_page_lock_id').value = pid;
+      document.getElementById('toggle_page_lock_state').value = state;
+      document.getElementById('togglePageLockForm').submit();
     });
 
     renameBackdrop.querySelector('#cancelRenameBtn')?.addEventListener('click', closeRename);

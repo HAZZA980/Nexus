@@ -128,9 +128,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <div class="layout-grid">
         <?php
+          $renderLayoutThumb = static function(string $id, string $label = ''): string {
+            $safeId = Security::e($id);
+            $safeLabel = Security::e($label);
+            return '<div class="layout-thumb layout-thumb--' . $safeId . '">' .
+              '<div class="thumb-blueprint thumb-blueprint--' . $safeId . '" aria-hidden="true"></div>' .
+              ($safeLabel !== '' ? '<div class="thumb-title">' . $safeLabel . '</div>' : '') .
+            '</div>';
+          };
           $layoutMeta = [
             'home' => ['name'=>'Simple Home','desc'=>'Heading and two-column content starter.'],
-            'title-page' => ['name'=>'Title page','desc'=>'Cite Them Right homepage structure with editable placeholder blocks.'],
+            'title-page' => ['name'=>'Title page','desc'=>'Cite Them Right home-inspired default with placeholder-only blocks.'],
             'referencing-browse' => ['name'=>'Referencing Browse','desc'=>'Browse-by-category scaffold with quick links, accordions, and sidebar panels.'],
             'source-type' => ['name'=>'Source Type','desc'=>'Two-column source page with stacked link lists and citation content blocks.'],
             'article' => ['name'=>'Article','desc'=>'Article body with related sidebar.'],
@@ -139,10 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php foreach ($layoutMeta as $id => $meta): ?>
           <?php if (!isset($templates[$id])) continue; ?>
           <button class="layout-card" type="button" data-layout="<?= Security::e($id) ?>">
-            <div class="layout-thumb">
-              <div class="thumb-dot"></div>
-              <div class="thumb-title"><?= Security::e(strtoupper(substr($meta['name'],0,1))) ?></div>
-            </div>
+            <?= $renderLayoutThumb($id, strtoupper(substr($meta['name'],0,1))) ?>
             <div class="layout-body">
               <div class="layout-title"><?= Security::e($meta['name']) ?></div>
               <div class="muted"><?= Security::e($meta['desc']) ?></div>
@@ -152,10 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endforeach; ?>
 
         <button class="layout-card blank" type="button" data-layout="blank">
-          <div class="layout-thumb">
-            <div class="thumb-dot"></div>
-            <div class="thumb-title">B</div>
-          </div>
+          <?= $renderLayoutThumb('blank', 'B') ?>
           <div class="layout-body">
             <div class="layout-title">Blank page</div>
             <div class="muted">Start from scratch with an empty row.</div>

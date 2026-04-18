@@ -123,6 +123,8 @@ $isAdmin = $sessionUserId > 0
   && (in_array('*', $sessionSiteAccess, true) || in_array($safeSlug, $sessionSiteAccess, true));
 $adminUserLabel = trim((string)($_SESSION['user_name'] ?? $_SESSION['display_name'] ?? $_SESSION['username'] ?? 'Administrator'));
 $adminEditUrl = $base . '/admin/page_builder.php?id=' . (int)($page['id'] ?? 0);
+$pageIsLocked = \NexusCMS\Models\Page::isLocked($page);
+$adminCanEditPage = $isAdmin && \NexusCMS\Models\Page::canEdit($page, $sessionRole);
 $flagSubmitUrl = $base . '/report/page-flag';
 $flagCsrfToken = Security::csrfToken();
 $flagFlash = $_SESSION['page_flag_flash'] ?? null;
@@ -168,6 +170,10 @@ function safe_include(string $path, string $root): bool {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title><?= Security::e($site['name']) ?> — <?= Security::e($page['title']) ?></title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="<?= $base ?>/public/assets/site.css">
   <link rel="stylesheet" href="<?= $base ?>/public/assets/nexus-page.css">
@@ -294,6 +300,30 @@ function safe_include(string $path, string $root): bool {
       background:rgba(255,255,255,.06);
       font-size:13px;
       line-height:1;
+    }
+    .nx-adminbar-page{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      font-weight:800;
+    }
+    .nx-adminbar-lock{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:5px 10px;
+      border:1px solid rgba(245,158,11,.3);
+      border-radius:999px;
+      background:rgba(245,158,11,.12);
+      color:#fde68a;
+      font-size:13px;
+      line-height:1;
+    }
+    .nx-adminbar-lock svg{
+      width:14px;
+      height:14px;
+      display:block;
+      flex:0 0 auto;
     }
     .nx-adminbar-actions{
       display:flex;
@@ -490,15 +520,24 @@ $templateKeyClass = PartialsManager::safeSlug((string)($page['template_key'] ?? 
     <div class="nx-adminbar-inner">
       <div class="nx-adminbar-meta">
         <div style="font-weight:900"><?= Security::e($site['name']) ?></div>
+        <span class="nx-adminbar-page">
+          <span><?= Security::e((string)($page['title'] ?? 'Untitled page')) ?></span>
+        </span>
         <?php if ($isPreview): ?>
           <span class="nx-adminbar-badge">Preview</span>
+        <?php endif; ?>
+        <?php if ($pageIsLocked): ?>
+          <span class="nx-adminbar-lock" title="Locked page">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 1 1 8 0v3"/></svg>
+            <span>Locked</span>
+          </span>
         <?php endif; ?>
         <?php if ($canFlagUser): ?>
           <span class="nx-adminbar-badge"><?= Security::e($adminUserLabel) ?></span>
         <?php endif; ?>
       </div>
       <div class="nx-adminbar-actions">
-        <?php if ($isAdmin): ?>
+        <?php if ($adminCanEditPage): ?>
           <a class="nx-adminbar-action" href="<?= $adminEditUrl ?>">
             <svg class="nx-adminbar-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>
             <span>Edit</span>

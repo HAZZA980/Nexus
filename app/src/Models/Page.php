@@ -20,6 +20,7 @@ final class Page {
       if (!isset($have['shell_override_json'])) $alter[] = "ADD COLUMN shell_override_json JSON NULL";
       if (!isset($have['search_text'])) $alter[] = "ADD COLUMN search_text TEXT NULL";
       if (!isset($have['collection_id'])) $alter[] = "ADD COLUMN collection_id INT NULL";
+      if (!isset($have['is_locked'])) $alter[] = "ADD COLUMN is_locked TINYINT(1) NOT NULL DEFAULT 0";
       if ($alter) $pdo->exec("ALTER TABLE pages " . implode(',', $alter));
     } catch (\Throwable $e) {
       // best effort to align schema; do not block runtime
@@ -154,6 +155,22 @@ public static function updateTitleAndSlug(int $pageId, string $title, string $sl
 
   $st = DB::pdo()->prepare("UPDATE pages SET title=?, slug=?, search_text=?, updated_at=NOW() WHERE id=? LIMIT 1");
   $st->execute([$title, $slug, $search, $pageId]);
+}
+
+public static function setLocked(int $pageId, bool $locked): void {
+  self::ensureSchema();
+  $st = DB::pdo()->prepare("UPDATE pages SET is_locked=?, updated_at=NOW() WHERE id=? LIMIT 1");
+  $st->execute([$locked ? 1 : 0, $pageId]);
+}
+
+public static function isLocked(?array $page): bool {
+  return (int)($page['is_locked'] ?? 0) === 1;
+}
+
+public static function canEdit(?array $page, string $role): bool {
+  if (!$page) return false;
+  if (!self::isLocked($page)) return true;
+  return strtolower(trim($role)) === 'super_admin';
 }
 
   public static function searchPublished(int $siteId, string $query): array {

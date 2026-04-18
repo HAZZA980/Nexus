@@ -944,7 +944,7 @@ body {
 .page-source-type .nexus-page,
 .template-source-type .nexus-page {
   margin: 0 auto;
-  font-family: var(--nexus-font, Georgia, "Times New Roman", serif) !important;
+  font-family: "Nunito", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif !important;
 }
 
 .page-source-type .nexus-page *,
@@ -1028,6 +1028,37 @@ body {
 .page-source-type .nx-citation-body,
 .template-source-type .nx-citation-body {
   line-height: 1.7;
+}
+
+.page-source-type .nx-examplecard,
+.template-source-type .nx-examplecard,
+.page-source-type .nx-examplecard *,
+.template-source-type .nx-examplecard * {
+  font-family: "Nunito", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif !important;
+}
+
+.page-source-type .nx-examplecard-heading,
+.template-source-type .nx-examplecard-heading,
+.page-source-type .nx-examplecard-try-title,
+.template-source-type .nx-examplecard-try-title {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.page-source-type .nx-examplecard-body,
+.template-source-type .nx-examplecard-body,
+.page-source-type .nx-examplecard-trybox,
+.template-source-type .nx-examplecard-trybox {
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.page-source-type .nx-examplecard-body br + br,
+.template-source-type .nx-examplecard-body br + br,
+.page-source-type .nx-examplecard-trybox br + br,
+.template-source-type .nx-examplecard-trybox br + br {
+  display: inline;
 }
 
 /* Preview-only source type layout should mirror the CMS editor composition */

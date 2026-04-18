@@ -1,14 +1,22 @@
 (() => {
+  const NUNITO_FONT_STACK = '"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif';
   const shell = document.querySelector('.nx-shell');
   const canvas = document.getElementById('canvas');
   const insp = document.getElementById('insp');
   const inspHint = document.getElementById('inspHint');
+  const leftSidebar = document.querySelector('.nx-left');
+  const viewContentBtn = document.getElementById('viewContent');
+  const viewBlueprintBtn = document.getElementById('viewBlueprint');
 
   const inspectorView = document.getElementById('inspectorView');
   const revisionsView = document.getElementById('revisionsView');
   const revList = document.getElementById('revList');
   const currentRevLine = document.getElementById('currentRevLine');
   const rightTitle = document.getElementById('rightTitle');
+  const blueprintShell = document.createElement('div');
+  blueprintShell.className = 'nx-blueprint-shell';
+  blueprintShell.setAttribute('aria-hidden', 'true');
+  if (leftSidebar) leftSidebar.appendChild(blueprintShell);
 
   const tUnlink = document.getElementById('t_unlink');
 
@@ -489,6 +497,15 @@
     return CITATION_FALLBACK;
   }
 
+  const getLiveCitationForBlock = (blk) => {
+    const examples = Array.isArray(citationExamplesCache) ? citationExamplesCache : null;
+    if (!examples || !examples.length || !blk || typeof blk !== 'object') return null;
+    const props = blk.props || {};
+    const targetId = String(props.exampleId || getPageCitationExample() || '').trim();
+    if (!targetId) return examples[0] || null;
+    return examples.find(ex => String(ex.id) === targetId) || null;
+  };
+
   const uuid = () => 'b_' + Math.random().toString(16).slice(2) + Date.now().toString(16);
   const esc = (s) => String(s).replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
@@ -625,9 +642,9 @@
       case 'card':    return withDefaultBlockStyle({ id: uuid(), type: 'card', props: { title: 'Card title', body: 'Card body…' }, styleText:{} });
       case 'youTry':  return withDefaultBlockStyle({ id: uuid(), type: 'youTry', props: { title: 'You try', body: 'Try it yourself…' }, styleText:{} });
       case 'textbox': return withDefaultBlockStyle({ id: uuid(), type: 'textbox', props: { label: 'Textbox', placeholder: 'Type here…', lines: 3, bgColor: '' } });
-      case 'citationOrder': return withDefaultBlockStyle({ id: uuid(), type: 'citationOrder', props: { title: 'Citation order', body: '• Author/editor\n• Year of publication (in round brackets)\n• Title (in italics)\n• Edition (edition number if not the first edn and/or rev. edn)\n• Publisher\n• Series and volume number (where relevant)' }, styleText:{} });
-      case 'exampleCard': return withDefaultBlockStyle({ id: uuid(), type: 'exampleCard', props: { exampleId: 'book_one_author', heading: 'Example: book with one author', body: 'In-text citations\n\nThe overview by McCormick (2023) confirms Hill’s experience (2023, pp. 46–52).\n\nNB: No page number citation for McCormick because the reference is to the whole book.\n\nSpecific pages are being cited in Hill’s book.\n\nReference list\n\nHill, F. (2023) There’s nothing for you here: finding opportunity in the twenty-first century. Mariner Books.\n\nMcCormick, J.M. (2023) American foreign policy and process. 7th edn. Cambridge University Press.', youTry: 'Surname, Initial. (Year of publication) Title. Edition. Publisher.', showYouTry: true }, styleText:{} });
-      case 'linkList': return withDefaultBlockStyle({ id: uuid(), type: 'linkList', props: { title: 'Harvard guidance', items: [{ title: 'Setting out citations', subtitle: '', url: '#' }, { title: 'What to include in your reference list', subtitle: '', url: '#' }, { title: 'Elements that you may need to include in your references', subtitle: '', url: '#' }], footerLabel: 'View More', footerUrl: '#' }, styleText:{} });
+      case 'citationOrder': return withDefaultBlockStyle({ id: uuid(), type: 'citationOrder', props: { title: 'Citation order', body: '• Author/editor\n• Year of publication (in round brackets)\n• Title (in italics)\n• Edition (edition number if not the first edn and/or rev. edn)\n• Publisher\n• Series and volume number (where relevant)' }, styleText:{ fontFamily: NUNITO_FONT_STACK } });
+      case 'exampleCard': return withDefaultBlockStyle({ id: uuid(), type: 'exampleCard', props: { exampleId: 'book_one_author', heading: 'Example: book with one author', body: 'In-text citations\n\nThe overview by McCormick (2023) confirms Hill’s experience (2023, pp. 46–52).\n\nNB: No page number citation for McCormick because the reference is to the whole book.\n\nSpecific pages are being cited in Hill’s book.\n\nReference list\n\nHill, F. (2023) There’s nothing for you here: finding opportunity in the twenty-first century. Mariner Books.\n\nMcCormick, J.M. (2023) American foreign policy and process. 7th edn. Cambridge University Press.', youTry: 'Surname, Initial. (Year of publication) Title. Edition. Publisher.', showYouTry: true }, styleText:{ fontFamily: NUNITO_FONT_STACK } });
+      case 'linkList': return withDefaultBlockStyle({ id: uuid(), type: 'linkList', props: { title: 'Harvard guidance', items: [{ title: 'Setting out citations', subtitle: '', url: '#' }, { title: 'What to include in your reference list', subtitle: '', url: '#' }, { title: 'Elements that you may need to include in your references', subtitle: '', url: '#' }], footerLabel: 'View More', footerUrl: '#' }, styleText:{ fontFamily: NUNITO_FONT_STACK } });
       case 'panel': return withDefaultBlockStyle({
         id: uuid(),
         type: 'panel',
@@ -636,7 +653,7 @@
       });
       case 'testimonial': return withDefaultBlockStyle({ id: uuid(), type: 'testimonial', props: { body: 'I am meeting my deadlines consistently!' }, styleText:{} });
       case 'download': return withDefaultBlockStyle({ id: uuid(), type: 'download', props: { label: 'Download', url: '' }, styleText:{} });
-      case 'heroBanner': return withDefaultBlockStyle({ id: uuid(), type: 'heroBanner', props: { heading: 'Welcome to Cite Them Right', cta: 'Choose your referencing style', ctaHtml: '', bgImage: '', overlayOpacity: 0.6 }, styleText:{} });
+      case 'heroBanner': return withDefaultBlockStyle({ id: uuid(), type: 'heroBanner', props: { heading: 'Welcome to Cite Them Right', cta: 'Choose your referencing style', ctaHtml: '', bgImage: '', overlayOpacity: 0.6 }, styleText:{ fontFamily: NUNITO_FONT_STACK } });
       case 'table': {
         return withDefaultBlockStyle({
           id: uuid(),
@@ -657,7 +674,7 @@
           }
         });
       }
-      case 'heroCard': return withDefaultBlockStyle({ id: uuid(), type: 'heroCard', props: { title: 'Hero Title', body: 'Hero text', bgImage: '', bgColor: '#111827', overlayOpacity: 0.35 }, styleText:{} });
+      case 'heroCard': return withDefaultBlockStyle({ id: uuid(), type: 'heroCard', props: { title: 'Hero Title', body: 'Hero text', bgImage: '', bgColor: '#111827', overlayOpacity: 0.35 }, styleText:{ fontFamily: NUNITO_FONT_STACK } });
       case 'dragWords': return withDefaultBlockStyle({ id: uuid(), type: 'dragWords', props: {
         instruction: 'Drag or click the correct words into the blanks',
         sentence: 'The {1} sat on the {2}.',
@@ -1165,6 +1182,431 @@
 
   let selected = null;     // {r,c,b}
   let selectedRow = null;  // number | null
+  let dragBlueprintActive = false;
+  let activeDragBlock = null;
+  let activeCanvasDropBlock = null;
+  let canvasViewMode = 'content';
+
+  const BLOCK_TYPE_LABELS = {
+    heading: 'Heading',
+    text: 'Text',
+    card: 'Card',
+    heroCard: 'Hero Card',
+    heroBanner: 'Hero Banner',
+    image: 'Image',
+    panel: 'Panel',
+    testimonial: 'Testimonial',
+    video: 'Video',
+    divider: 'Divider',
+    flipCard: 'Dialogue Card',
+    carousel: 'Carousel',
+    accordionTabs: 'Accordion/Tabs',
+    download: 'Download',
+    dragWords: 'Drag Words',
+    trueFalse: 'True/False',
+    multipleChoiceQuiz: 'Multiple Choice Quiz',
+    citationOrder: 'Citation Order',
+    exampleCard: 'Example',
+    linkList: 'Link List',
+    youTry: 'You Try'
+  };
+
+  const getBlockTypeLabel = (type) => {
+    const raw = String(type || '').trim();
+    if (!raw) return 'Block';
+    if (BLOCK_TYPE_LABELS[raw]) return BLOCK_TYPE_LABELS[raw];
+    return raw
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/^./, (ch) => ch.toUpperCase());
+  };
+
+  const stripHtmlPreviewText = (value) => String(value || '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/?(?:div|p|section|article|li|ul|ol|strong|em|b|i|span|small|h[1-6])\b[^>]*>/gi, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const compactBlueprintLabel = (value, max = 34) => {
+    const clean = stripHtmlPreviewText(value);
+    if (!clean) return '';
+    return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+  };
+
+  function getBlueprintBlockLabel(blk, counts) {
+    const type = String(blk?.type || '').trim();
+    const base = getBlockTypeLabel(type);
+    const p = blk?.props || {};
+    let detail = '';
+
+    if (type === 'exampleCard') {
+      const liveCitation = getLiveCitationForBlock(blk);
+      detail = compactBlueprintLabel((liveCitation && (liveCitation.heading || liveCitation.label)) || p.heading || '');
+    } else if (type === 'citationOrder' || type === 'youTry' || type === 'linkList') {
+      detail = compactBlueprintLabel(p.title || '');
+    } else if (type === 'heroBanner') {
+      detail = compactBlueprintLabel(p.heading || p.title || '');
+    } else if (type === 'heroCard' || type === 'heroPage' || type === 'card') {
+      detail = compactBlueprintLabel(p.title || '');
+    } else if (type === 'heading') {
+      detail = compactBlueprintLabel(p.text || p.html || '');
+    } else if (type === 'panel') {
+      detail = compactBlueprintLabel(p.title || p.heading || p.body || p.html || '');
+    } else if (type === 'text') {
+      detail = compactBlueprintLabel(p.text || p.html || '');
+    }
+
+    const count = (counts[type] || 0) + 1;
+    counts[type] = count;
+
+    if (detail) return `${base} ${count}: ${detail}`;
+    if (count > 1) return `${base} ${count}`;
+    return base;
+  }
+
+  function setCustomDragPreview(e, label) {
+    if (!e?.dataTransfer) return;
+    const ghost = document.createElement('div');
+    ghost.className = 'nx-blueprint-drag-ghost';
+    ghost.textContent = label || 'Block';
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 18, 18);
+    requestAnimationFrame(() => ghost.remove());
+  }
+
+  function setDragBlueprintMode(active) {
+    dragBlueprintActive = !!active;
+    if (!dragBlueprintActive) activeDragBlock = null;
+    if (canvasViewMode === 'blueprint') render();
+  }
+
+  function setBlockDragMode(active) {
+    document.body.classList.toggle('dragging-blocks', !!active);
+    if (!activeCanvasDropBlock) return;
+    activeCanvasDropBlock.classList.remove('block-drop-before', 'block-drop-after');
+    delete activeCanvasDropBlock.dataset.dropPos;
+    activeCanvasDropBlock = null;
+  }
+
+  function clearCanvasDropBlockState() {
+    if (!activeCanvasDropBlock) return;
+    activeCanvasDropBlock.classList.remove('block-drop-before', 'block-drop-after');
+    delete activeCanvasDropBlock.dataset.dropPos;
+    activeCanvasDropBlock = null;
+  }
+
+  function updateCanvasDropBlockState(el, clientY) {
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const dropPos = clientY < (rect.top + rect.height / 2) ? 'before' : 'after';
+
+    if (activeCanvasDropBlock && activeCanvasDropBlock !== el) {
+      activeCanvasDropBlock.classList.remove('block-drop-before', 'block-drop-after');
+      delete activeCanvasDropBlock.dataset.dropPos;
+    }
+
+    activeCanvasDropBlock = el;
+    el.dataset.dropPos = dropPos;
+    el.classList.toggle('block-drop-before', dropPos === 'before');
+    el.classList.toggle('block-drop-after', dropPos === 'after');
+    return dropPos;
+  }
+
+  function syncCanvasViewToggle() {
+    if (viewContentBtn) {
+      const on = canvasViewMode === 'content';
+      viewContentBtn.classList.toggle('active', on);
+      viewContentBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    if (viewBlueprintBtn) {
+      const on = canvasViewMode === 'blueprint';
+      viewBlueprintBtn.classList.toggle('active', on);
+      viewBlueprintBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+  }
+
+  function setCanvasViewMode(mode) {
+    canvasViewMode = mode === 'blueprint' ? 'blueprint' : 'content';
+    syncCanvasViewToggle();
+    render();
+  }
+
+  function applyCanvasColumnDrop(r, c, movePayload, type) {
+    const destBlocks = doc.rows?.[r]?.cols?.[c]?.blocks;
+    if (!destBlocks) return false;
+
+    if (movePayload) {
+      let move;
+      try {
+        move = JSON.parse(movePayload);
+      } catch (err) {
+        return false;
+      }
+      const fromBlocks = doc.rows?.[move.r]?.cols?.[move.c]?.blocks;
+      if (!fromBlocks || !fromBlocks[move.b]) return false;
+      const movedBlk = fromBlocks[move.b];
+      const insertAtRaw = destBlocks.length;
+      if (move.r === r && move.c === c && (insertAtRaw === move.b || insertAtRaw === move.b + 1)) {
+        return false;
+      }
+      pushHistory();
+      fromBlocks.splice(move.b, 1);
+      let insertAt = insertAtRaw;
+      if (move.r === r && move.c === c && move.b < insertAt) insertAt -= 1;
+      destBlocks.splice(insertAt, 0, movedBlk);
+      selected = { r, c, b: insertAt };
+      selectedRow = null;
+      persistUnsaved();
+      render();
+      return true;
+    }
+
+    if (type) {
+      pushHistory();
+      const newBlk = defBlock(type);
+      destBlocks.push(newBlk);
+      selected = { r, c, b: destBlocks.length - 1 };
+      selectedRow = null;
+      persistUnsaved();
+      render();
+      return true;
+    }
+
+    return false;
+  }
+
+  function applyCanvasBlockReorder(r, c, b, dropPos, movePayload) {
+    let move;
+    try {
+      move = JSON.parse(movePayload);
+    } catch (err) {
+      return false;
+    }
+    const fromBlocks = doc.rows?.[move.r]?.cols?.[move.c]?.blocks;
+    const destBlocks = doc.rows?.[r]?.cols?.[c]?.blocks;
+    if (!fromBlocks || !destBlocks || !fromBlocks[move.b]) return false;
+
+    const targetIndexRaw = dropPos === 'after' ? (b + 1) : b;
+    if (move.r === r && move.c === c && (targetIndexRaw === move.b || targetIndexRaw === move.b + 1)) {
+      return false;
+    }
+
+    const movedBlk = fromBlocks[move.b];
+    pushHistory();
+    fromBlocks.splice(move.b, 1);
+    let insertAt = targetIndexRaw;
+    if (move.r === r && move.c === c && move.b < insertAt) insertAt -= 1;
+    destBlocks.splice(insertAt, 0, movedBlk);
+    selected = { r, c, b: insertAt };
+    selectedRow = null;
+    persistUnsaved();
+    render();
+    return true;
+  }
+
+  function applyCanvasInsertAt(r, c, insertAtRaw, movePayload, type) {
+    const destBlocks = doc.rows?.[r]?.cols?.[c]?.blocks;
+    if (!destBlocks) return false;
+    const insertAtClamped = Math.max(0, Math.min(insertAtRaw, destBlocks.length));
+
+    if (movePayload) {
+      let move;
+      try {
+        move = JSON.parse(movePayload);
+      } catch (err) {
+        return false;
+      }
+      const fromBlocks = doc.rows?.[move.r]?.cols?.[move.c]?.blocks;
+      if (!fromBlocks || !fromBlocks[move.b]) return false;
+      if (move.r === r && move.c === c && (insertAtClamped === move.b || insertAtClamped === move.b + 1)) {
+        return false;
+      }
+      const movedBlk = fromBlocks[move.b];
+      pushHistory();
+      fromBlocks.splice(move.b, 1);
+      let insertAt = insertAtClamped;
+      if (move.r === r && move.c === c && move.b < insertAt) insertAt -= 1;
+      destBlocks.splice(insertAt, 0, movedBlk);
+      selected = { r, c, b: insertAt };
+      selectedRow = null;
+      persistUnsaved();
+      render();
+      return true;
+    }
+
+    if (type) {
+      pushHistory();
+      const newBlk = defBlock(type);
+      destBlocks.splice(insertAtClamped, 0, newBlk);
+      selected = { r, c, b: insertAtClamped };
+      selectedRow = null;
+      persistUnsaved();
+      render();
+      return true;
+    }
+
+    return false;
+  }
+
+  function applyCanvasBlockInsert(r, c, b, dropPos, type) {
+    const destBlocks = doc.rows?.[r]?.cols?.[c]?.blocks;
+    if (!destBlocks || !type) return false;
+    const insertAt = dropPos === 'after' ? (b + 1) : b;
+    pushHistory();
+    const newBlk = defBlock(type);
+    destBlocks.splice(insertAt, 0, newBlk);
+    selected = { r, c, b: insertAt };
+    selectedRow = null;
+    persistUnsaved();
+    render();
+    return true;
+  }
+
+  function applyBlockDrop(target, movePayload, type) {
+    const destBlocks = doc.rows?.[target.r]?.cols?.[target.c]?.blocks;
+    if (!destBlocks) return false;
+
+    if (movePayload) {
+      let move;
+      try {
+        move = JSON.parse(movePayload);
+      } catch (err) {
+        return false;
+      }
+      const fromBlocks = doc.rows?.[move.r]?.cols?.[move.c]?.blocks;
+      if (!fromBlocks || !fromBlocks[move.b]) return false;
+      const movedBlk = fromBlocks[move.b];
+      let insertAt = Math.max(0, Math.min(target.b, destBlocks.length));
+      if (move.r === target.r && move.c === target.c && (insertAt === move.b || insertAt === move.b + 1)) {
+        return false;
+      }
+      pushHistory();
+      fromBlocks.splice(move.b, 1);
+      if (move.r === target.r && move.c === target.c && move.b < insertAt) insertAt -= 1;
+      destBlocks.splice(insertAt, 0, movedBlk);
+      selected = { r: target.r, c: target.c, b: insertAt };
+      selectedRow = null;
+      persistUnsaved();
+      render();
+      return true;
+    }
+
+    if (type) {
+      const insertAt = Math.max(0, Math.min(target.b, destBlocks.length));
+      pushHistory();
+      const newBlk = defBlock(type);
+      destBlocks.splice(insertAt, 0, newBlk);
+      selected = { r: target.r, c: target.c, b: insertAt };
+      selectedRow = null;
+      persistUnsaved();
+      render();
+      return true;
+    }
+
+    return false;
+  }
+
+  function bindBlueprintDropTarget(el, target) {
+    if (!el) return;
+    const clear = () => el.classList.remove('is-over');
+    el.addEventListener('dragover', (e) => {
+      const types = Array.from(e.dataTransfer?.types || []);
+      if (!types.includes('nx/move') && !types.includes('nx/type')) return;
+      e.preventDefault();
+      el.classList.add('is-over');
+    });
+    el.addEventListener('dragleave', clear);
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      clear();
+      const moving = e.dataTransfer.getData('nx/move');
+      const type = e.dataTransfer.getData('nx/type');
+      if (applyBlockDrop(target, moving, type)) setDragBlueprintMode(false);
+    });
+  }
+
+  function buildBlueprintPage() {
+    const blockCounts = {};
+
+    const title = document.createElement('div');
+    title.className = 'nx-blueprint-title';
+    title.textContent = activeDragBlock ? `Moving ${activeDragBlock.label}` : 'Move Block';
+
+    const hint = document.createElement('div');
+    hint.className = 'nx-blueprint-hint';
+    hint.textContent = 'Use this structure view to move blocks or add new ones.';
+
+    const pageEl = document.createElement('div');
+    pageEl.className = 'nx-blueprint-page';
+
+    (doc.rows || []).forEach((row, r) => {
+      ensureRow(row);
+      ensureRowMeta(row);
+
+      const rowEl = document.createElement('div');
+      rowEl.className = 'nx-blueprint-row';
+      if (selectedRow === r) rowEl.classList.add('is-selected');
+
+      const rowHead = document.createElement('div');
+      rowHead.className = 'nx-blueprint-row-head';
+      rowHead.textContent = `Row ${r + 1}`;
+      rowEl.appendChild(rowHead);
+
+      const colsEl = document.createElement('div');
+      colsEl.className = 'nx-blueprint-cols';
+
+      (row.cols || []).forEach((col, c) => {
+        const colEl = document.createElement('div');
+        colEl.className = 'nx-blueprint-col';
+        colEl.style.gridColumn = `span ${Math.max(1, Math.min(12, parseInt(col.span || 12, 10) || 12))}`;
+
+        const label = document.createElement('div');
+        label.className = 'nx-blueprint-col-label';
+        label.textContent = `Col ${c + 1}`;
+        colEl.appendChild(label);
+
+        const blocks = Array.isArray(col.blocks) ? col.blocks : [];
+        const topSlot = document.createElement('div');
+        topSlot.className = 'nx-blueprint-drop';
+        topSlot.textContent = blocks.length ? 'Insert here' : 'Drop here';
+        bindBlueprintDropTarget(topSlot, { r, c, b: 0 });
+        colEl.appendChild(topSlot);
+
+        blocks.forEach((blk, b) => {
+          const chip = document.createElement('div');
+          chip.className = 'nx-blueprint-block';
+          const blockLabel = getBlueprintBlockLabel(blk, blockCounts);
+          const isDragged = activeDragBlock && activeDragBlock.r === r && activeDragBlock.c === c && activeDragBlock.b === b;
+          if (selected && selected.r === r && selected.c === c && selected.b === b) chip.classList.add('is-selected');
+          if (isDragged) chip.classList.add('is-dragging');
+          chip.textContent = blockLabel;
+          colEl.appendChild(chip);
+
+          const betweenSlot = document.createElement('div');
+          betweenSlot.className = 'nx-blueprint-drop';
+          betweenSlot.textContent = 'Insert here';
+          bindBlueprintDropTarget(betweenSlot, { r, c, b: b + 1 });
+          colEl.appendChild(betweenSlot);
+        });
+
+        colsEl.appendChild(colEl);
+      });
+
+      rowEl.appendChild(colsEl);
+      pageEl.appendChild(rowEl);
+    });
+
+    const frag = document.createDocumentFragment();
+    frag.appendChild(title);
+    frag.appendChild(hint);
+    frag.appendChild(pageEl);
+    return frag;
+  }
 
   const ensureRow = (row) => {
     if (!row.cols || row.cols.length === 0) row.cols = [{ span: 12, blocks: [] }];
@@ -1417,6 +1859,18 @@
     }
     return raw;
   };
+  const normalizeInlineBreakHtml = (raw) => {
+    if (!raw) return '';
+    return String(raw)
+      .replace(/<\s*\/?(?:div|p|section|article)\b[^>]*>/gi, '\n')
+      .replace(/<\s*li\b[^>]*>/gi, '\n• ')
+      .replace(/<\s*\/li\s*>/gi, '\n')
+      .replace(/<\s*\/?(?:ul|ol)\b[^>]*>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/^\n+|\n+$/g, '')
+      .replace(/\n/g, '<br>');
+  };
 
   if (blk.type === 'heading') {
     const inner = hasHtml(p.html)
@@ -1443,8 +1897,11 @@
   }
 
   if (blk.type === 'youTry') {
+    const liveCitation = getLiveCitationForBlock(blk);
     const title = esc(p.title || 'You try');
-    const body = hasHtml(p.html)
+    const body = liveCitation
+      ? formatMarked(String(liveCitation.youTry || liveCitation.youTryHtml || '').slice(0, 180))
+      : hasHtml(p.html)
       ? p.html
       : formatMarked((p.body || '').slice(0, 180));
     return wrap(`<div><b>${title}</b><div style="margin-top:6px">${body}</div></div>`);
@@ -1538,9 +1995,15 @@
   }
 
   if (blk.type === 'citationOrder') {
+    const liveCitation = getLiveCitationForBlock(blk);
     const title = esc(p.title || 'Citation order');
-    const normalized = formatCitationOrder(p.body || '');
-    const body = p.html
+    const citationSource = liveCitation
+      ? (liveCitation.citationOrder || liveCitation.citationOrderHtml || liveCitation.body || '')
+      : (p.body || '');
+    const normalized = formatCitationOrder(citationSource);
+    const body = liveCitation
+      ? formatMarked(normalized.slice(0, 320))
+      : p.html
       ? renderMarkedHtml(p.html)
       : formatMarked(normalized.slice(0, 320));
     return wrap(`
@@ -1552,15 +2015,22 @@
   }
 
   if (blk.type === 'exampleCard') {
-    const heading = esc(p.heading || 'Example');
-    const exampleBodyHtml = hasHtml(p.bodyHtml) ? flattenExampleHtml(p.bodyHtml) : p.bodyHtml;
-    const exampleTryHtml = hasHtml(p.youTry) ? flattenExampleHtml(p.youTry) : p.youTry;
+    const liveCitation = getLiveCitationForBlock(blk);
+    const heading = esc((liveCitation && (liveCitation.heading || liveCitation.label)) || p.heading || 'Example');
+    const liveBody = liveCitation ? (liveCitation.bodyHtml || liveCitation.body || '') : '';
+    const liveYouTry = liveCitation ? (liveCitation.youTryHtml || liveCitation.youTry || '') : '';
+    const exampleBodyHtml = hasHtml(liveBody)
+      ? flattenExampleHtml(liveBody)
+      : hasHtml(p.bodyHtml) ? flattenExampleHtml(p.bodyHtml) : p.bodyHtml;
+    const exampleTryHtml = hasHtml(liveYouTry)
+      ? flattenExampleHtml(liveYouTry)
+      : hasHtml(p.youTry) ? flattenExampleHtml(p.youTry) : p.youTry;
     const body = hasHtml(exampleBodyHtml)
-      ? exampleBodyHtml.replace(/\n/g, '<br>')
-      : formatMarked(compactExampleText((p.body || '').slice(0, 420)));
+      ? normalizeInlineBreakHtml(exampleBodyHtml)
+      : formatMarked(compactExampleText(String(liveCitation ? (liveCitation.body || '') : (p.body || '')).slice(0, 420)));
     const youTry = hasHtml(exampleTryHtml)
-      ? (exampleTryHtml || '').replace(/\n/g, '<br>')
-      : formatMarked(compactExampleText((p.youTry || 'Your turn…').slice(0, 180)));
+      ? normalizeInlineBreakHtml(exampleTryHtml || '')
+      : formatMarked(compactExampleText(String(liveCitation ? (liveCitation.youTry || '') : (p.youTry || 'Your turn…')).slice(0, 180)));
     const showTry = p.showYouTry !== false;
     const extraClass = showTry ? '' : ' nx-examplecard--single';
     const rightCol = showTry ? `
@@ -4097,7 +4567,7 @@
             <input id="p_title" value="${esc(p.title || '')}" style="${inputStyle}">
             <br><br>
             <label class="nx-muted">Body</label><br>
-            <div id="p_html" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:140px;white-space:pre-wrap"></div>
+            <div id="p_html" class="nx-rich nx-rich--citation-source" contenteditable="true" style="${inputStyle};min-height:140px;white-space:pre-wrap"></div>
             <div class="nx-muted" style="margin-top:6px">Edits here save to this page only (not the citation database).</div>
           </div>
         </details>
@@ -4114,7 +4584,7 @@
             <input id="p_title" value="${esc(p.title || '')}" style="${inputStyle}">
             <br><br>
             <label class="nx-muted">Body (use bullets/lines)</label><br>
-            <div id="p_html" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:160px;white-space:pre-wrap"></div>
+            <div id="p_html" class="nx-rich nx-rich--citation-source" contenteditable="true" style="${inputStyle};min-height:160px;white-space:pre-wrap"></div>
             <div class="nx-muted" style="margin-top:6px">Edits here save to this page only (not the citation database).</div>
           </div>
         </details>
@@ -4171,7 +4641,7 @@
         <input id="p_car_title" style="${inputStyle}">
         <br><br>
         <label class="nx-muted">Body</label>
-        <div id="p_html" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:140px;white-space:pre-wrap"></div>
+            <div id="p_html" class="nx-rich nx-rich--citation-source" contenteditable="true" style="${inputStyle};min-height:140px;white-space:pre-wrap"></div>
         <br><br>
         <label class="nx-muted">Image</label>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -4318,9 +4788,45 @@
 
     insp.innerHTML = html;
 
+    const richHtmlToPlainText = (html, collapseToSingleBreak = false) => {
+      if (!html) return '';
+      let text = String(html)
+        .replace(/<\s*\/?(?:div|p|li)\b[^>]*>/gi, '\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/\r/g, '')
+        .replace(/[ \t]+\n/g, '\n')
+        .trim();
+      text = text.replace(collapseToSingleBreak ? /\n{2,}/g : /\n{3,}/g, collapseToSingleBreak ? '\n' : '\n\n');
+      return text;
+    };
+
+    const insertSoftLineBreak = () => {
+      if (document.queryCommandSupported && document.queryCommandSupported('insertLineBreak')) {
+        document.execCommand('insertLineBreak');
+        return;
+      }
+      if (document.queryCommandSupported && document.queryCommandSupported('insertHTML')) {
+        document.execCommand('insertHTML', false, '<br>');
+        return;
+      }
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const br = document.createElement('br');
+      range.insertNode(br);
+      range.setStartAfter(br);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    };
+
     const initRichField = (id, initialVal, onChange) => {
       const el = document.getElementById(id);
       if (!el) return null;
+      const useSoftBreaks = ['youTry', 'citationOrder', 'exampleCard'].includes(blk.type);
 
       const asHtml = String(initialVal || '')
         .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -4332,7 +4838,7 @@
 
       const handleInput = () => {
         const htmlVal = el.innerHTML;
-        const textVal = el.textContent || '';
+        const textVal = richHtmlToPlainText(htmlVal, useSoftBreaks);
         onChange(htmlVal, textVal);
         persistUnsaved();
         updateBlockCard(blk);
@@ -4353,6 +4859,15 @@
             document.execCommand('insertHTML', false, '&nbsp;&nbsp;');
             handleInput();
           }
+        }, true);
+      }
+
+      if (useSoftBreaks) {
+        el.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          insertSoftLineBreak();
+          handleInput();
         }, true);
       }
       return el;
@@ -5699,8 +6214,21 @@
       }
 
       canvas.innerHTML = '';
+      canvas.classList.toggle('nx-blueprint-canvas', canvasViewMode === 'blueprint');
       doc.rows = doc.rows || [];
       doc.rows.forEach(ensureRow);
+
+      if (canvasViewMode === 'blueprint') {
+        canvas.appendChild(buildBlueprintPage());
+        if (selected) {
+          const blk = doc.rows?.[selected.r]?.cols?.[selected.c]?.blocks?.[selected.b];
+          if (!blk) selected = null;
+        }
+        if (selectedRow != null && !doc.rows?.[selectedRow]) selectedRow = null;
+        renderInspector();
+        syncToolbarFromSelection();
+        return;
+      }
 
     doc.rows.forEach((row, r) => {
       ensureRowMeta(row);
@@ -5806,7 +6334,8 @@
         e.dataTransfer.effectAllowed = 'move';
       });
       head.addEventListener('dragover', (e) => {
-        if (e.dataTransfer.types.includes('nx/row')) {
+        const types = Array.from(e.dataTransfer?.types || []);
+        if (types.includes('nx/row')) {
           e.preventDefault();
           head.classList.add('row-dragover');
         }
@@ -5889,28 +6418,31 @@
 
         // Drop blocks into columns
         colEl.addEventListener('dragover', (e) => {
+          const types = Array.from(e.dataTransfer?.types || []);
+          const hasMove = types.includes('nx/move');
+          const hasType = types.includes('nx/type') || types.includes('text/plain');
+          if (!hasMove && !hasType) return;
+          if ((colBlocks?.length || 0) > 0) return;
           e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = hasMove ? 'move' : 'copy';
           colEl.classList.add('dragover');
         });
         colEl.addEventListener('dragleave', () => colEl.classList.remove('dragover'));
 
         colEl.addEventListener('drop', (e) => {
+          const types = Array.from(e.dataTransfer?.types || []);
+          const hasMove = types.includes('nx/move');
+          const hasType = types.includes('nx/type') || types.includes('text/plain');
+          if (!hasMove && !hasType) return;
           e.preventDefault();
+          e.stopPropagation();
           colEl.classList.remove('dragover');
+          clearCanvasDropBlockState();
+          if ((colBlocks?.length || 0) > 0) return;
 
-          const type = e.dataTransfer.getData('nx/type');
+          const type = e.dataTransfer.getData('nx/type') || (!e.dataTransfer.getData('nx/move') ? e.dataTransfer.getData('text/plain') : '');
           const moving = e.dataTransfer.getData('nx/move');
-          pushHistory();
-
-          if (moving) {
-            const m = JSON.parse(moving);
-            const movedBlk = doc.rows[m.r].cols[m.c].blocks.splice(m.b, 1)[0];
-            doc.rows[r].cols[c].blocks.push(movedBlk);
-          } else if (type) {
-            doc.rows[r].cols[c].blocks.push(defBlock(type));
-          }
-          persistUnsaved();
-          render();
+          applyCanvasColumnDrop(r, c, moving, type);
         });
 
         // Blocks
@@ -5938,46 +6470,50 @@
             <div class="nx-block-preview" style="margin-top:6px">${blockPreviewSafe(blk)}</div>
           `;
 
-          // Dragover to allow repositioning OR effect drop
           el.addEventListener('dragover', (e) => {
-            const hasMove = e.dataTransfer.types.includes('nx/move');
-            const hasEff = e.dataTransfer.types.includes('nx/effect');
-            if (!hasMove && !hasEff) return;
+            const types = Array.from(e.dataTransfer?.types || []);
+            const hasMove = types.includes('nx/move');
+            const hasType = types.includes('nx/type') || types.includes('text/plain');
+            if (hasMove || hasType) {
+              e.preventDefault();
+              e.stopPropagation();
+              updateCanvasDropBlockState(el, e.clientY);
+              if (e.dataTransfer) e.dataTransfer.dropEffect = hasMove ? 'move' : 'copy';
+              return;
+            }
+            if (!types.includes('nx/effect')) return;
             e.preventDefault();
-            if (hasMove) el.classList.add('block-drop-before');
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
           });
 
-          el.addEventListener('dragleave', () => {
-            el.classList.remove('block-drop-before');
+          el.addEventListener('dragleave', (e) => {
+            if (activeCanvasDropBlock !== el) return;
+            const next = e.relatedTarget;
+            if (next && el.contains(next)) return;
+            clearCanvasDropBlockState();
           });
 
           el.addEventListener('drop', (e) => {
             const moving = e.dataTransfer.getData('nx/move');
-            const eff = e.dataTransfer.getData('nx/effect');
-            el.classList.remove('block-drop-before');
-            if (moving) {
+            const type = e.dataTransfer.getData('nx/type') || (!moving ? e.dataTransfer.getData('text/plain') : '');
+            if (moving || type) {
               e.preventDefault();
-              const m = JSON.parse(moving);
-              const fromBlocks = doc.rows?.[m.r]?.cols?.[m.c]?.blocks;
-              if (!fromBlocks) return;
-              const movedBlk = fromBlocks.splice(m.b, 1)[0];
-              pushHistory();
-              const destBlocks = doc.rows[r].cols[c].blocks;
-              let insertAt = b;
-              if (m.r === r && m.c === c && m.b < b) insertAt -= 1; // account for removal offset
-              destBlocks.splice(insertAt, 0, movedBlk);
-              selected = { r, c, b: insertAt };
-              persistUnsaved();
-              render();
+              e.stopPropagation();
+              const dropPos = el.dataset.dropPos === 'after' ? 'after' : 'before';
+              const insertAt = dropPos === 'after' ? (b + 1) : b;
+              clearCanvasDropBlockState();
+              applyCanvasInsertAt(r, c, insertAt, moving, type);
               return;
             }
-            if (eff) {
-              e.preventDefault();
-              pushHistory();
-              blk.effect = eff;
-              persistUnsaved();
-              render();
-            }
+            const eff = e.dataTransfer.getData('nx/effect');
+            if (!eff) return;
+            e.preventDefault();
+            e.stopPropagation();
+            pushHistory();
+            blk.effect = eff;
+            persistUnsaved();
+            render();
           });
 
           el.addEventListener('click', (e) => {
@@ -6004,6 +6540,16 @@
 
           el.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('nx/move', JSON.stringify({ r, c, b }));
+            e.dataTransfer.setData('text/plain', blk.id || `${r}-${c}-${b}`);
+            e.dataTransfer.effectAllowed = 'move';
+            activeDragBlock = { r, c, b, label: getBlueprintBlockLabel(blk, {}) };
+            setDragBlueprintMode(true);
+            setBlockDragMode(true);
+            setCustomDragPreview(e, activeDragBlock.label);
+          });
+          el.addEventListener('dragend', () => {
+            setDragBlueprintMode(false);
+            setBlockDragMode(false);
           });
 
           if (selected && selected.r === r && selected.c === c && selected.b === b) {
@@ -6042,8 +6588,27 @@
   document.querySelectorAll('.nx-item').forEach((el) => {
     el.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('nx/type', el.dataset.type || '');
+      e.dataTransfer.setData('text/plain', el.dataset.type || '');
+      e.dataTransfer.effectAllowed = 'copyMove';
+      activeDragBlock = { r: -1, c: -1, b: -1, label: getBlockTypeLabel(el.dataset.type || '') };
+      setDragBlueprintMode(true);
+      setBlockDragMode(true);
+      setCustomDragPreview(e, getBlockTypeLabel(el.dataset.type || ''));
+    });
+    el.addEventListener('dragend', () => {
+      setDragBlueprintMode(false);
+      setBlockDragMode(false);
     });
   });
+
+  document.addEventListener('dragend', () => {
+    setDragBlueprintMode(false);
+    setBlockDragMode(false);
+  });
+
+  viewContentBtn?.addEventListener('click', () => setCanvasViewMode('content'));
+  viewBlueprintBtn?.addEventListener('click', () => setCanvasViewMode('blueprint'));
+  syncCanvasViewToggle();
 
   // Close revisions if user clicks empty canvas area
   canvas?.addEventListener('click', () => {
@@ -6064,4 +6629,7 @@
   showInspector();
   applyPageStyles();
   render();
+  loadCitationExamples().then(() => {
+    render();
+  }).catch(() => {});
 })();

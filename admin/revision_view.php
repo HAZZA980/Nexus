@@ -18,7 +18,7 @@ $site = Site::find((int)$page['site_id']);
 if (!$site) { http_response_code(404); echo "Site not found"; exit; }
 
 $doc = json_decode($rev['doc_json'] ?? '{}', true) ?: ['version'=>1,'rows'=>[]];
-$content = Renderer::render($doc);
+$content = Renderer::render($doc, ['site' => $site, 'page' => $page]);
 
 $base = base_path();
 $themeIsLight = ui_theme_is_light();

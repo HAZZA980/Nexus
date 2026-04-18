@@ -1,15 +1,70 @@
 <?php
 
+$nunitoFontStack = '"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif';
+
 $titlePageBlockStyle = [
   'marginBottom' => '18px',
   'boxShadow' => 'none',
 ];
+
+$makeTitlePageStackedPanel = static function(string $id, string $title, string $summary, int $imageSizeLevel = 4): array {
+  return [
+    'id' => $id,
+    'type' => 'panel',
+    'props' => [
+      'image' => '',
+      'alt' => '',
+      'layout' => 'img-top',
+      'imageSizeLevel' => $imageSizeLevel,
+      'bodyHtml' => '<div><strong>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</strong><div>' . htmlspecialchars($summary, ENT_QUOTES, 'UTF-8') . '</div></div>',
+      'body' => $title . "\n" . $summary,
+    ],
+    'style' => [
+      'marginBottom' => '18px',
+      'boxShadow' => 'none',
+    ],
+    'styleText' => [
+      'fontFamily' => 'Georgia, "Times New Roman", serif',
+      'fontSize' => 24,
+      'align' => 'center',
+      'color' => '#1f2937',
+    ],
+  ];
+};
+
+$makeTitlePagePromoPanel = static function(string $id, string $title, string $summary, string $layout = 'img-left'): array {
+  return [
+    'id' => $id,
+    'type' => 'panel',
+    'props' => [
+      'image' => '',
+      'alt' => '',
+      'layout' => $layout,
+      'splitRatio' => '40-60',
+      'imageSizeLevel' => 4,
+      'bodyHtml' => '<strong>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</strong><div>' . htmlspecialchars($summary, ENT_QUOTES, 'UTF-8') . '</div>',
+      'body' => $title . "\n" . $summary,
+    ],
+    'style' => [
+      'marginBottom' => '18px',
+      'boxShadow' => 'none',
+    ],
+    'styleText' => [
+      'fontFamily' => 'Georgia, "Times New Roman", serif',
+      'fontSize' => 30,
+      'align' => 'center',
+      'color' => '#1f2937',
+    ],
+  ];
+};
 
 $titlePage = [
   'version' => 1,
   'page' => [
     'backgroundColor' => '#ffffff',
     'textColor' => '#333333',
+    'fontFamily' => 'Georgia, "Times New Roman", serif',
+    'fontSize' => 16,
   ],
   'rows' => [
     [
@@ -23,8 +78,8 @@ $titlePage = [
               'type' => 'heroBanner',
               'style' => $titlePageBlockStyle,
               'props' => [
-                'heading' => 'Hero heading',
-                'cta' => 'Primary action',
+                'heading' => 'Hero heading placeholder',
+                'cta' => 'Primary action placeholder',
                 'bgImage' => '',
                 'overlayOpacity' => 0.75,
               ],
@@ -40,60 +95,34 @@ $titlePage = [
         [
           'span' => 4,
           'blocks' => [
-            [
-              'id' => 'tp-feature-1',
-              'type' => 'card',
-              'props' => [
-                'title' => 'Feature tile 1',
-                'body' => 'Add a short title-led promo panel here.',
-              ],
-              'style' => [
-                'marginBottom' => '18px',
-                'boxShadow' => 'none',
-                'minHeight' => '138px',
-              ],
-              'styleText' => ['align' => 'center'],
-            ],
+            $makeTitlePageStackedPanel(
+              'tp-feature-1',
+              'Feature panel placeholder',
+              'Add short placeholder text for this introductory panel.',
+              3
+            ),
           ],
         ],
         [
           'span' => 4,
           'blocks' => [
-            [
-              'id' => 'tp-feature-2',
-              'type' => 'card',
-              'props' => [
-                'title' => 'Feature tile 2',
-                'body' => 'Add a second promo panel here.',
-              ],
-              'style' => [
-                'marginBottom' => '18px',
-                'boxShadow' => 'none',
-                'minHeight' => '138px',
-              ],
-              'styleText' => ['align' => 'center'],
-            ],
+            $makeTitlePageStackedPanel(
+              'tp-feature-2',
+              'Feature panel placeholder',
+              'Add short placeholder text for this introductory panel.',
+              3
+            ),
           ],
         ],
         [
           'span' => 4,
           'blocks' => [
-            [
-              'id' => 'tp-sidebar',
-              'type' => 'text',
-              'props' => [
-                'html' => '<h2 style="margin:0 0 12px">Sidebar feature</h2><p style="margin:0 0 12px">Add supporting copy for the right-hand panel.</p><ul style="margin:0;padding-left:18px"><li>Editable link item</li></ul>',
-              ],
-              'style' => [
-                'marginBottom' => '18px',
-                'boxShadow' => 'none',
-                'backgroundColor' => '#20366f',
-                'padding' => '22px 20px',
-                'minHeight' => '292px',
-                'borderRadius' => '16px',
-              ],
-              'styleText' => ['color' => '#ffffff'],
-            ],
+            $makeTitlePageStackedPanel(
+              'tp-feature-3',
+              'Feature panel placeholder',
+              'Add short placeholder text for this introductory panel.',
+              3
+            ),
           ],
         ],
       ],
@@ -108,7 +137,7 @@ $titlePage = [
               'id' => 'tp-searches-heading',
               'type' => 'heading',
               'style' => $titlePageBlockStyle,
-              'props' => ['level' => 2, 'text' => 'Section heading'],
+              'props' => ['level' => 2, 'text' => 'Popular searches placeholder'],
               'styleText' => ['align' => 'center'],
             ],
           ],
@@ -119,54 +148,54 @@ $titlePage = [
       'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
       'equalHeight' => true,
       'cols' => [
-        ['span' => 4, 'blocks' => [[
-          'id' => 'tp-search-1',
-          'type' => 'card',
-          'props' => ['title' => 'Search tile 1', 'body' => 'Add search category content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
-          'styleText' => ['align' => 'center'],
-        ]]],
-        ['span' => 4, 'blocks' => [[
-          'id' => 'tp-search-2',
-          'type' => 'card',
-          'props' => ['title' => 'Search tile 2', 'body' => 'Add search category content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
-          'styleText' => ['align' => 'center'],
-        ]]],
-        ['span' => 4, 'blocks' => [[
-          'id' => 'tp-search-3',
-          'type' => 'card',
-          'props' => ['title' => 'Search tile 3', 'body' => 'Add search category content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
-          'styleText' => ['align' => 'center'],
-        ]]],
+        ['span' => 4, 'blocks' => [
+          $makeTitlePageStackedPanel(
+            'tp-search-1',
+            'Search panel placeholder',
+            'Add placeholder text for this category panel.'
+          ),
+        ]],
+        ['span' => 4, 'blocks' => [
+          $makeTitlePageStackedPanel(
+            'tp-search-2',
+            'Search panel placeholder',
+            'Add placeholder text for this category panel.'
+          ),
+        ]],
+        ['span' => 4, 'blocks' => [
+          $makeTitlePageStackedPanel(
+            'tp-search-3',
+            'Search panel placeholder',
+            'Add placeholder text for this category panel.'
+          ),
+        ]],
       ],
     ],
     [
       'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
       'equalHeight' => true,
       'cols' => [
-        ['span' => 4, 'blocks' => [[
-          'id' => 'tp-search-4',
-          'type' => 'card',
-          'props' => ['title' => 'Search tile 4', 'body' => 'Add search category content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
-          'styleText' => ['align' => 'center'],
-        ]]],
-        ['span' => 4, 'blocks' => [[
-          'id' => 'tp-search-5',
-          'type' => 'card',
-          'props' => ['title' => 'Search tile 5', 'body' => 'Add search category content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
-          'styleText' => ['align' => 'center'],
-        ]]],
-        ['span' => 4, 'blocks' => [[
-          'id' => 'tp-search-6',
-          'type' => 'card',
-          'props' => ['title' => 'Search tile 6', 'body' => 'Add search category content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '168px'],
-          'styleText' => ['align' => 'center'],
-        ]]],
+        ['span' => 4, 'blocks' => [
+          $makeTitlePageStackedPanel(
+            'tp-search-4',
+            'Search panel placeholder',
+            'Add placeholder text for this category panel.'
+          ),
+        ]],
+        ['span' => 4, 'blocks' => [
+          $makeTitlePageStackedPanel(
+            'tp-search-5',
+            'Search panel placeholder',
+            'Add placeholder text for this category panel.'
+          ),
+        ]],
+        ['span' => 4, 'blocks' => [
+          $makeTitlePageStackedPanel(
+            'tp-search-6',
+            'Search panel placeholder',
+            'Add placeholder text for this category panel.'
+          ),
+        ]],
       ],
     ],
     [
@@ -179,7 +208,7 @@ $titlePage = [
               'id' => 'tp-highlights-heading',
               'type' => 'heading',
               'style' => $titlePageBlockStyle,
-              'props' => ['level' => 2, 'text' => 'Section heading'],
+              'props' => ['level' => 2, 'text' => 'Editors highlights placeholder'],
               'styleText' => ['align' => 'center'],
             ],
           ],
@@ -190,79 +219,60 @@ $titlePage = [
       'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
       'equalHeight' => true,
       'cols' => [
-        ['span' => 6, 'blocks' => [[
-          'id' => 'tp-highlight-1',
-          'type' => 'card',
-          'props' => ['title' => 'Highlight item 1', 'body' => 'Add highlight summary content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
-        ]]],
-        ['span' => 6, 'blocks' => [[
-          'id' => 'tp-highlight-2',
-          'type' => 'card',
-          'props' => ['title' => 'Highlight item 2', 'body' => 'Add highlight summary content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
-        ]]],
+        ['span' => 6, 'blocks' => [
+          $makeTitlePagePromoPanel(
+            'tp-highlight-1',
+            'Panel heading placeholder',
+            'Add placeholder summary text for this horizontal panel.'
+          ),
+        ]],
+        ['span' => 6, 'blocks' => [
+          $makeTitlePagePromoPanel(
+            'tp-highlight-2',
+            'Panel heading placeholder',
+            'Add placeholder summary text for this horizontal panel.'
+          ),
+        ]],
       ],
     ],
     [
       'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
       'equalHeight' => true,
       'cols' => [
-        ['span' => 6, 'blocks' => [[
-          'id' => 'tp-highlight-3',
-          'type' => 'card',
-          'props' => ['title' => 'Highlight item 3', 'body' => 'Add highlight summary content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
-        ]]],
-        ['span' => 6, 'blocks' => [[
-          'id' => 'tp-highlight-4',
-          'type' => 'card',
-          'props' => ['title' => 'Highlight item 4', 'body' => 'Add highlight summary content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
-        ]]],
+        ['span' => 6, 'blocks' => [
+          $makeTitlePagePromoPanel(
+            'tp-highlight-3',
+            'Panel heading placeholder',
+            'Add placeholder summary text for this horizontal panel.'
+          ),
+        ]],
+        ['span' => 6, 'blocks' => [
+          $makeTitlePagePromoPanel(
+            'tp-highlight-4',
+            'Panel heading placeholder',
+            'Add placeholder summary text for this horizontal panel.'
+          ),
+        ]],
       ],
     ],
     [
       'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
       'equalHeight' => true,
       'cols' => [
-        ['span' => 6, 'blocks' => [[
-          'id' => 'tp-highlight-5',
-          'type' => 'card',
-          'props' => ['title' => 'Highlight item 5', 'body' => 'Add highlight summary content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
-        ]]],
-        ['span' => 6, 'blocks' => [[
-          'id' => 'tp-highlight-6',
-          'type' => 'card',
-          'props' => ['title' => 'Highlight item 6', 'body' => 'Add highlight summary content.'],
-          'style' => ['marginBottom' => '18px', 'boxShadow' => 'none', 'minHeight' => '150px'],
-        ]]],
-      ],
-    ],
-    [
-      'styleRow' => ['bgEnabled' => false, 'bgColor' => ''],
-      'cols' => [
-        [
-          'span' => 12,
-          'blocks' => [
-            [
-              'id' => 'tp-footer-banner',
-              'type' => 'text',
-              'props' => [
-                'html' => '<h3 style="margin:0 0 10px">Footer banner</h3><p style="margin:0">Use this space for a final homepage callout or supporting message.</p>',
-              ],
-              'style' => [
-                'marginBottom' => '18px',
-                'boxShadow' => 'none',
-                'backgroundColor' => '#f5f5f5',
-                'padding' => '22px 24px',
-                'borderRadius' => '16px',
-              ],
-              'styleText' => ['align' => 'center'],
-            ],
-          ],
-        ],
+        ['span' => 6, 'blocks' => [
+          $makeTitlePagePromoPanel(
+            'tp-highlight-5',
+            'Panel heading placeholder',
+            'Add placeholder summary text for this horizontal panel.'
+          ),
+        ]],
+        ['span' => 6, 'blocks' => [
+          $makeTitlePagePromoPanel(
+            'tp-highlight-6',
+            'Panel heading placeholder',
+            'Add placeholder summary text for this horizontal panel.'
+          ),
+        ]],
       ],
     ],
   ],
@@ -499,7 +509,6 @@ return [
     ]
   ],
   'title-page' => $titlePage,
-  'title-page-1' => $titlePage,
   'landing' => [
     'version' => 1,
     'rows' => [
@@ -616,7 +625,10 @@ return [
               'padding'=>'0',
               'boxShadow'=>'none',
               'marginBottom'=>'18px'
-            ]
+            ],
+            'styleText'=>[
+              'fontFamily'=>$nunitoFontStack,
+            ],
           ],
           [
             'id'=>'st-links-secondary',
@@ -636,7 +648,10 @@ return [
               'padding'=>'0',
               'boxShadow'=>'none',
               'marginBottom'=>'18px'
-            ]
+            ],
+            'styleText'=>[
+              'fontFamily'=>$nunitoFontStack,
+            ],
           ],
         ]],
         ['span'=>9,'blocks'=>[
@@ -656,7 +671,7 @@ return [
               'border'=>'1px solid rgba(17,24,39,.08)',
               'borderRadius'=>'18px'
             ],
-            'styleText'=>['color'=>'#111827','fontSize'=>16]
+            'styleText'=>['color'=>'#111827','fontSize'=>16,'fontFamily'=>$nunitoFontStack]
           ],
           [
             'id'=>'st-citation-order',
@@ -672,7 +687,10 @@ return [
               'borderRadius'=>'16px',
               'boxShadow'=>'none',
               'marginBottom'=>'18px'
-            ]
+            ],
+            'styleText'=>[
+              'fontFamily'=>$nunitoFontStack,
+            ],
           ],
           [
             'id'=>'st-example',
@@ -689,7 +707,10 @@ return [
               'padding'=>'0',
               'boxShadow'=>'none',
               'marginBottom'=>'18px'
-            ]
+            ],
+            'styleText'=>[
+              'fontFamily'=>$nunitoFontStack,
+            ],
           ],
         ]]
       ]],
