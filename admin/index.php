@@ -4,6 +4,7 @@ require_admin();
 
 use NexusCMS\Core\DB;
 use NexusCMS\Core\Security;
+use NexusCMS\Models\PageFlag;
 use NexusCMS\Models\Site;
 
 $base = base_path();
@@ -204,6 +205,7 @@ $topbarRoleLabel = $roleMap[$rawRole] ?? ($rawRole !== '' ? ucwords(str_replace(
 $themeEndpoint = $base . '/admin/theme.php';
 $csrfToken = Security::csrfToken();
 $themeIsLight = ui_theme_is_light();
+$notificationCount = $currentUser ? PageFlag::inboxCountForUser((int)($currentUser['id'] ?? 0), (string)($currentUser['role'] ?? ''), (array)($_SESSION['site_access'] ?? [])) : 0;
 
 function normalize_status(array $site): string {
   return site_status_value($site);
@@ -464,13 +466,15 @@ usort($rows, function (array $a, array $b): int {
       <div class="brand">NexusCMS</div>
 
       <div class="nav-label">Content Management</div>
+      <a class="nav-link" href="<?= $base ?>/">Dashboard</a>
       <a class="nav-link active" href="<?= $base ?>/admin/index.php">Sites</a>
       <a class="nav-link" href="<?= $base ?>/admin/users.php">Users</a>
       <a class="nav-link" href="<?= $base ?>/admin/images.php">Media</a>
-      <a class="nav-link" href="<?= $base ?>/admin/databases.php">Databases</a>
+      <a class="nav-link" href="<?= $base ?>/admin/databases.php">Database</a>
 
       <div class="nav-label">Create</div>
       <a class="nav-link" href="<?= $base ?>/admin/site_new.php">New Site</a>
+      <a class="nav-link" href="<?= $base ?>/admin/user_new.php">New User</a>
     </aside>
 
     <div class="workspace">
@@ -480,20 +484,23 @@ usort($rows, function (array $a, array $b): int {
           <span class="topbar-role"><?= Security::e($topbarRoleLabel) ?></span>
         </div>
         <div class="topbar-actions">
+          <a class="nx-icon-btn nx-icon-link" id="nxNotificationsBtnSites" href="<?= $base ?>/admin/notifications.php" aria-label="Notifications" title="Notifications">
+            <span aria-hidden="true">🔔</span>
+            <?php if ($notificationCount > 0): ?><span class="nx-icon-badge"><?= (int)$notificationCount ?></span><?php endif; ?>
+          </a>
+          <button type="button" class="nx-icon-btn" id="nxThemeToggleSites" aria-label="Toggle theme" title="Toggle theme">
+            <span id="nxThemeToggleIconSites" aria-hidden="true">◐</span>
+          </button>
           <details class="nx-user-menu" id="nxUserMenuSites">
             <summary aria-haspopup="menu" aria-label="Open account menu">
               <span class="nx-user-label"><?= Security::e($userName) ?></span>
               <span class="nx-user-arrow" aria-hidden="true">▾</span>
             </summary>
             <div class="nx-user-dropdown" role="menu">
-              <a role="menuitem" href="<?= $base ?>/admin/users.php">
+              <a role="menuitem" href="<?= $base ?>/admin/settings.php">
                 <span class="nx-menu-icon" aria-hidden="true">⚙</span>
                 <span>Settings</span>
               </a>
-              <button type="button" id="nxThemeToggleSites" role="menuitem">
-                <span class="nx-menu-icon" aria-hidden="true">◐</span>
-                <span id="nxThemeToggleLabelSites">Dark mode</span>
-              </button>
               <a class="logout" role="menuitem" href="<?= $base ?>/admin/logout.php">
                 <span class="nx-menu-icon" aria-hidden="true">↪</span>
                 <span>Logout</span>
@@ -815,7 +822,7 @@ usort($rows, function (array $a, array $b): int {
       var root = document.documentElement;
       var menu = document.getElementById('nxUserMenuSites');
       var toggle = document.getElementById('nxThemeToggleSites');
-      var label = document.getElementById('nxThemeToggleLabelSites');
+      var icon = document.getElementById('nxThemeToggleIconSites');
       var endpoint = <?= json_encode($themeEndpoint, JSON_UNESCAPED_SLASHES) ?>;
       var csrf = <?= json_encode($csrfToken, JSON_UNESCAPED_SLASHES) ?>;
 
@@ -824,8 +831,13 @@ usort($rows, function (array $a, array $b): int {
       }
 
       function updateLabel() {
-        if (!label) return;
-        label.textContent = currentTheme() === 'light' ? 'Dark mode' : 'Light mode';
+        if (!icon) return;
+        icon.textContent = currentTheme() === 'light' ? '☾' : '☀️';
+        if (toggle) {
+          var nextMode = currentTheme() === 'light' ? 'dark' : 'light';
+          toggle.setAttribute('aria-label', nextMode === 'dark' ? 'Switch to dark mode' : 'Switch to light mode');
+          toggle.setAttribute('title', nextMode === 'dark' ? 'Switch to dark mode' : 'Switch to light mode');
+        }
       }
 
       function persistTheme(mode) {

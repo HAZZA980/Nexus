@@ -32,4 +32,27 @@ final class User {
     $st->execute([$userId]);
     return array_column($st->fetchAll(), 'slug');
   }
+
+  public static function notificationRecipientsForRoleAndSite(string $role, int $siteId): array {
+    $role = \NexusCMS\Models\PageFlag::canonicalRole($role);
+    if ($siteId <= 0) return [];
+    if ($role === 'super_admin') {
+      $st = DB::pdo()->prepare("SELECT email FROM users WHERE role IN ('super_admin') AND email <> ''");
+      $st->execute();
+      return array_values(array_unique(array_column($st->fetchAll(), 'email')));
+    }
+
+    $st = DB::pdo()->prepare("
+      SELECT DISTINCT u.email
+      FROM users u
+      LEFT JOIN user_site_access usa ON usa.user_id = u.id
+      WHERE u.email <> ''
+        AND (
+          (u.role = ? AND usa.site_id = ?)
+          OR (u.role = 'super_admin')
+        )
+    ");
+    $st->execute([$role, $siteId]);
+    return array_values(array_unique(array_column($st->fetchAll(), 'email')));
+  }
 }

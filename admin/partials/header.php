@@ -1,6 +1,7 @@
 <?php
 use NexusCMS\Core\DB;
 use NexusCMS\Core\Security;
+use NexusCMS\Models\PageFlag;
 
 if (!function_exists('base_path')) {
   require_once __DIR__ . '/../../app/bootstrap.php';
@@ -10,7 +11,14 @@ $base = $base ?? base_path();
 $nav = $activeNav ?? '';
 if ($nav === '') {
   $path = (string)parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
-  if (strpos($path, '/admin/users') !== false) $nav = 'users';
+  $rootIndexPath = rtrim($base, '/') . '/index.php';
+  $rootPath = rtrim($base, '/') . '/';
+  if ($path === $rootIndexPath || $path === $rootPath || $path === '' || $path === '/') $nav = 'dashboard';
+  elseif (strpos($path, '/admin/notifications') !== false) $nav = 'notifications';
+  elseif (strpos($path, '/admin/settings') !== false) $nav = 'settings';
+  elseif (strpos($path, '/admin/user_new') !== false) $nav = 'user_new';
+  elseif (strpos($path, '/admin/site_new') !== false) $nav = 'site_new';
+  elseif (strpos($path, '/admin/users') !== false) $nav = 'users';
   elseif (strpos($path, '/admin/images') !== false) $nav = 'images';
   elseif (strpos($path, '/admin/databases') !== false || strpos($path, '/admin/database_') !== false) $nav = 'databases';
   else $nav = 'sites';
@@ -45,18 +53,24 @@ $roleMap = [
 $topbarRoleLabel = $roleMap[$rawRole] ?? ($rawRole !== '' ? ucwords(str_replace('_', ' ', $rawRole)) : 'Administrator');
 $themeEndpoint = $base . '/admin/theme.php';
 $csrfToken = Security::csrfToken();
+$notificationCount = 0;
+if ($currentUser) {
+  $notificationCount = PageFlag::inboxCountForUser((int)($currentUser['id'] ?? 0), (string)($currentUser['role'] ?? ''), (array)($_SESSION['site_access'] ?? []));
+}
 ?>
 <aside class="nx-admin-sidebar" aria-label="Primary navigation">
   <a class="nx-admin-brand" href="<?= $base ?>/admin/index.php">NexusCMS</a>
 
   <div class="nx-admin-nav-label">Content Management</div>
+  <a class="nx-admin-nav-link <?= $nav === 'dashboard' ? 'active' : '' ?>" href="<?= $base ?>/">Dashboard</a>
   <a class="nx-admin-nav-link <?= $nav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
   <a class="nx-admin-nav-link <?= $nav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
   <a class="nx-admin-nav-link <?= $nav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Media</a>
-  <a class="nx-admin-nav-link <?= $nav === 'databases' ? 'active' : '' ?>" href="<?= $base ?>/admin/databases.php">Databases</a>
+  <a class="nx-admin-nav-link <?= $nav === 'databases' ? 'active' : '' ?>" href="<?= $base ?>/admin/databases.php">Database</a>
 
   <div class="nx-admin-nav-label">Create</div>
-  <a class="nx-admin-nav-link" href="<?= $base ?>/admin/site_new.php">New Site</a>
+  <a class="nx-admin-nav-link <?= $nav === 'site_new' ? 'active' : '' ?>" href="<?= $base ?>/admin/site_new.php">New Site</a>
+  <a class="nx-admin-nav-link <?= $nav === 'user_new' ? 'active' : '' ?>" href="<?= $base ?>/admin/user_new.php">New User</a>
 </aside>
 
 <header class="nx-admin-topbar" role="banner">
@@ -65,20 +79,23 @@ $csrfToken = Security::csrfToken();
     <span class="nx-admin-top-role"><?= Security::e($topbarRoleLabel) ?></span>
   </div>
   <div class="nx-admin-top-actions">
+    <a class="nx-icon-btn nx-icon-link" id="nxNotificationsBtn" href="<?= $base ?>/admin/notifications.php" aria-label="Notifications" title="Notifications">
+      <span aria-hidden="true">🔔</span>
+      <?php if ($notificationCount > 0): ?><span class="nx-icon-badge"><?= (int)$notificationCount ?></span><?php endif; ?>
+    </a>
+    <button type="button" class="nx-icon-btn" id="nxThemeToggle" aria-label="Toggle theme" title="Toggle theme">
+      <span id="nxThemeToggleIcon" aria-hidden="true">◐</span>
+    </button>
     <details class="nx-user-menu" id="nxUserMenu">
       <summary aria-haspopup="menu" aria-label="Open account menu">
         <span class="nx-user-label"><?= Security::e($userLabel) ?></span>
         <span class="nx-user-arrow" aria-hidden="true">▾</span>
       </summary>
       <div class="nx-user-dropdown" role="menu">
-        <a role="menuitem" href="<?= $base ?>/admin/users.php">
+        <a role="menuitem" href="<?= $base ?>/admin/settings.php">
           <span class="nx-menu-icon" aria-hidden="true">⚙</span>
           <span>Settings</span>
         </a>
-        <button type="button" id="nxThemeToggle" role="menuitem">
-          <span class="nx-menu-icon" aria-hidden="true">◐</span>
-          <span id="nxThemeToggleLabel">Dark mode</span>
-        </button>
         <a class="logout" role="menuitem" href="<?= $base ?>/admin/logout.php">
           <span class="nx-menu-icon" aria-hidden="true">↪</span>
           <span>Logout</span>
@@ -94,7 +111,7 @@ $csrfToken = Security::csrfToken();
     var root = document.documentElement;
     var menu = document.getElementById('nxUserMenu');
     var toggle = document.getElementById('nxThemeToggle');
-    var label = document.getElementById('nxThemeToggleLabel');
+    var icon = document.getElementById('nxThemeToggleIcon');
     var endpoint = <?= json_encode($themeEndpoint, JSON_UNESCAPED_SLASHES) ?>;
     var csrf = <?= json_encode($csrfToken, JSON_UNESCAPED_SLASHES) ?>;
 
@@ -103,8 +120,13 @@ $csrfToken = Security::csrfToken();
     }
 
     function updateLabel() {
-      if (!label) return;
-      label.textContent = currentTheme() === 'light' ? 'Dark mode' : 'Light mode';
+      if (!icon) return;
+      icon.textContent = currentTheme() === 'light' ? '☾' : '☀️';
+      if (toggle) {
+        var nextMode = currentTheme() === 'light' ? 'dark' : 'light';
+        toggle.setAttribute('aria-label', nextMode === 'dark' ? 'Switch to dark mode' : 'Switch to light mode');
+        toggle.setAttribute('title', nextMode === 'dark' ? 'Switch to dark mode' : 'Switch to light mode');
+      }
     }
 
     function persistTheme(mode) {

@@ -4,6 +4,8 @@ require_admin();
 
 use NexusCMS\Models\Site;
 use NexusCMS\Models\Page;
+use NexusCMS\Models\DeletedPage;
+use NexusCMS\Models\User;
 use NexusCMS\Core\Security;
 use NexusCMS\Core\DB;
 use NexusCMS\Support\PartialsManager;
@@ -18,6 +20,13 @@ use NexusCMS\Models\CitationRelease;
 $siteId = (int)($_GET['id'] ?? 0);
 $site = Site::find($siteId);
 if (!$site) { http_response_code(404); echo "Site not found"; exit; }
+$me = null;
+if (isset($_SESSION['user_id'])) {
+  $me = User::findById((int)$_SESSION['user_id']) ?: null;
+}
+$myRole = strtolower((string)($me['role'] ?? ($_SESSION['user_role'] ?? '')));
+$isSuperAdmin = $myRole === 'super_admin';
+$isCtrSite = PartialsManager::safeSlug((string)($site['slug'] ?? '')) === 'cite-them-right';
 $styleOptions = ['Harvard','APA 7th','Chicago 18th','Chicago 17th','IEEE','MHRA 4th','MHRA 3rd','MLA 9th','OSCOLA','Vancouver'];
 $topicOptions = ['Books','Journals','Digital & Internet','Media & Art','Research','Legal','Governmental','Communications'];
 
@@ -108,7 +117,7 @@ $themeDefaults = [
     'hover'   => 'rgba(0,0,0,.06)',
   ],
   'typography' => [
-    'fontFamily' => 'system-ui,-apple-system,Segoe UI,Roboto,Arial',
+    'fontFamily' => $isCtrSite ? 'Georgia,"Times New Roman",serif' : 'system-ui,-apple-system,Segoe UI,Roboto,Arial',
     'baseSize'   => 16,
     'headingScale' => 1.35,
     'fontWeight' => 500,
@@ -244,6 +253,7 @@ $colorOpts = [
 
 $typoOpts = [
   'fontFamily' => [
+    'Georgia,"Times New Roman",serif' => 'Georgia / Times',
     '"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial' => 'Nunito',
     'system-ui,-apple-system,Segoe UI,Roboto,Arial' => 'System sans',
     '"Inter",system-ui,-apple-system,Segoe UI,Roboto,Arial' => 'Inter',
@@ -574,6 +584,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $pdo->beginTransaction();
       $pdo->prepare("DELETE FROM pages WHERE site_id=?")->execute([$siteId]);
       try {
+        $pdo->prepare("DELETE FROM deleted_pages WHERE site_id=?")->execute([$siteId]);
+      } catch (\Throwable $e) {}
+      try {
         $pdo->prepare("DELETE FROM shell_presets WHERE site_id=?")->execute([$siteId]);
       } catch (\Throwable $e) {}
       $pdo->prepare("DELETE FROM sites WHERE id=? LIMIT 1")->execute([$siteId]);
@@ -592,9 +605,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
       $page = Page::find($pageId);
       if ($page && (int)$page['site_id'] === $siteId) {
-        $db = nx_db();
-        $stmt = $db->prepare("DELETE FROM pages WHERE id=? AND site_id=? LIMIT 1");
-        $stmt->execute([$pageId, $siteId]);
+        DeletedPage::softDelete($page, [
+          'user_id' => (int)($_SESSION['user_id'] ?? 0),
+          'email' => (string)($me['email'] ?? ''),
+          'name' => (string)($me['display_name'] ?? ($_SESSION['user_name'] ?? '')),
+          'role' => $myRole,
+        ]);
         header('Location: site.php?id=' . $siteId . '&saved=deleted');
         exit;
       } else {
@@ -602,6 +618,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
     } catch (\Throwable $e) {
       $notice = 'Delete failed. Please try again.';
+    }
+  }
+
+  if (isset($_POST['restore_deleted_page']) && $isSuperAdmin) {
+    $deletedPageId = (int)($_POST['deleted_page_id'] ?? 0);
+    try {
+      $deletedPage = DeletedPage::find($deletedPageId);
+      if ($deletedPage && (int)($deletedPage['site_id'] ?? 0) === $siteId) {
+        $restoredPage = DeletedPage::restore($deletedPageId);
+        PartialsManager::ensurePageDirectory((string)($site['slug'] ?? ''), (string)($restoredPage['slug'] ?? ''));
+        header('Location: site.php?id=' . $siteId . '&saved=restored#deleted-pages');
+        exit;
+      } else {
+        $notice = 'Deleted page not found for this site.';
+      }
+    } catch (\Throwable $e) {
+      $notice = 'Restore failed. Please try again.';
     }
   }
 
@@ -1267,10 +1300,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if (!empty($_GET['saved'])) {
-  $notice = $_GET['saved'] === 'theme' ? 'Theme saved.' : ($_GET['saved'] === 'header' ? 'Header saved.' : 'Saved.');
+  switch ((string)$_GET['saved']) {
+    case 'theme':
+      $notice = 'Theme saved.';
+      break;
+    case 'header':
+      $notice = 'Header saved.';
+      break;
+    case 'deleted':
+      $notice = 'Page moved to Deleted pages. It will be permanently removed after 30 days.';
+      break;
+    case 'restored':
+      $notice = 'Deleted page restored to the active pages list.';
+      break;
+    default:
+      $notice = 'Saved.';
+      break;
+  }
 }
 
+DeletedPage::purgeExpired();
 $pages = Page::listBySite($siteId);
+$deletedPages = $isSuperAdmin ? DeletedPage::listBySite($siteId) : [];
 
 // Ensure a default Home page exists (blank draft)
 $homeExisting = Page::findBySlugAnyStatus($siteId, 'home');
@@ -1480,70 +1531,75 @@ if (isset($_SESSION['user_id'])) {
       --bg: #0f172a;
       --panel: #111827;
       --card: #111827;
-      --border: #1f2937;
-      --muted: #9ca3af;
+      --border: #334155;
+      --muted: #94a3b8;
       --text: #e5e7eb;
-      --primary: #5b21b6;
-      --primary-strong: #4c1d95;
-      --radius: 16px;
-      --shadow: 0 10px 40px rgba(0,0,0,0.28);
-      --focus: 0 0 0 3px rgba(91,33,182,0.35);
-      --field-bg: rgba(255,255,255,0.06);
-      --field-border: var(--border);
+      --primary: #3b82f6;
+      --primary-strong: #1d4ed8;
+      --radius: 4px;
+      --shadow: none;
+      --focus: 0 0 0 2px rgba(59,130,246,0.28);
+      --field-bg: #0b1220;
+      --field-border: #334155;
     }
     .theme-light {
-      --bg: #f8fafc;
+      --bg: #f3f4f6;
       --panel: #ffffff;
       --card: #ffffff;
-      --border: #e2e8f0;
-      --muted: #475569;
+      --border: #d1d5db;
+      --muted: #4b5563;
       --text: #0f172a;
       --primary: #2563eb;
       --primary-strong: #1d4ed8;
-      --shadow: 0 10px 30px rgba(15,23,42,0.08);
-      --focus: 0 0 0 3px rgba(37,99,235,0.28);
-      --field-bg: #cbd5e1;
-      --field-border: #cbd5e1;
+      --shadow: none;
+      --focus: 0 0 0 2px rgba(37,99,235,0.22);
+      --field-bg: #f9fafb;
+      --field-border: #d1d5db;
     }
     *{box-sizing:border-box}
     body{
       margin:0;
       background: var(--bg);
       color:var(--text);
-      font-family:"Inter","Helvetica Neue",system-ui,-apple-system,sans-serif;
-      line-height:1.5;
+      font-family:Arial, Helvetica, sans-serif;
+      line-height:1.4;
       transition:background .2s ease,color .2s ease;
     }
     a{color:inherit;text-decoration:none}
     a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline:none; box-shadow:var(--focus); border-color:var(--primary); }
-    main { max-width:1200px; margin:0 auto; padding:24px 20px 48px; }
-    .wrap{max-width:1100px;margin:0 auto;padding:0}
-    .top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px}
-    .crumbs{color:var(--muted);font-size:14px}
+    main { max-width:100%; margin:0; padding:14px; }
+    .wrap{max-width:none;margin:0;padding:0;display:grid;gap:12px}
+    .top{
+      display:flex;justify-content:space-between;align-items:flex-end;gap:12px;
+      padding:16px 18px;border:1px solid var(--border);border-radius:4px;
+      background:var(--card);
+    }
+    .crumbs{color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
-    .card{border:1px solid var(--border);border-radius:18px;background:var(--card);padding:16px;box-shadow:var(--shadow)}
+    .card{border:1px solid var(--border);border-radius:4px;background:var(--card);padding:16px;box-shadow:none}
     .card h2{margin:0 0 10px 0;font-size:18px}
     .muted{color:var(--muted);font-size:13px}
     label{display:block;margin:10px 0 6px 0;color:var(--muted);font-size:13px}
-    input,select,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid var(--field-border);background:var(--field-bg);color:var(--text);font-weight:600;}
+    input,select,textarea{width:100%;padding:10px 12px;border-radius:4px;border:1px solid var(--field-border);background:var(--field-bg);color:var(--text);font-weight:400;}
     textarea{overflow:hidden;resize:vertical;min-height:40px;}
     ::placeholder{color:var(--muted);opacity:0.9;}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-    button{padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,.06);color:var(--text);cursor:pointer}
-    button:hover{background:rgba(255,255,255,.10)}
-    .notice{margin-top:12px;padding:10px 12px;border-radius:12px;border:1px solid rgba(34,197,94,.35);
+    button{padding:9px 12px;border-radius:4px;border:1px solid var(--border);background:var(--field-bg);color:var(--text);cursor:pointer;font-weight:600}
+    button:hover{background:color-mix(in srgb, var(--primary) 10%, var(--field-bg))}
+    .notice{margin-top:0;padding:10px 12px;border-radius:4px;border:1px solid rgba(34,197,94,.35);
       background:rgba(34,197,94,.10)}
     .tabs{
-      display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;
+      display:flex;gap:8px;flex-wrap:wrap;
       position:sticky;top:10px;z-index:5;align-items:center;
-      padding:12px;
-      background:var(--bg);
-      border-radius:14px;
-      box-shadow:0 10px 28px rgba(0,0,0,0.06);
+      padding:10px 12px;
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:4px;
+      box-shadow:none;
     }
-    .tab{padding:10px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);cursor:pointer;color:var(--text);font-weight:700;min-height:44px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);}
-    .tab.active{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border-color:transparent;box-shadow:0 6px 20px rgba(37,99,235,0.25);}
+    .tab{padding:8px 12px;border-radius:4px;border:1px solid var(--border);background:var(--field-bg);cursor:pointer;color:var(--text);font-weight:700;min-height:36px;box-shadow:none;font-size:13px;letter-spacing:.02em;}
+    .tab.active{background:var(--primary);color:#fff;border-color:color-mix(in srgb, var(--primary) 68%, var(--border));box-shadow:none;}
     .panel{display:none}
     .panel.active{display:block}
     .nav-items{display:grid;gap:8px}
@@ -1800,14 +1856,14 @@ if (isset($_SESSION['user_id'])) {
     .section h3{margin:0 0 6px;}
     .danger{border-color:rgba(239,68,68,0.35);background:rgba(239,68,68,0.08);}
     .btn.danger{background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;border-color:rgba(255,255,255,0.08);}
-    .status-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;}
+    .status-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700;}
     .status-badge.published{background:rgba(74,222,128,.16);color:#16a34a;}
     .status-badge.draft{background:rgba(148,163,184,.22);color:#475569;}
     .status-dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;}
     table.page-table{width:100%;margin-top:12px;border-collapse:collapse}
-    table.page-table thead tr{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:0.4px;}
+    table.page-table thead tr{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.4px;background:var(--field-bg);}
     table.page-table tbody tr{border-top:1px solid var(--border);}
-    table.page-table tbody tr:hover{background:rgba(37,99,235,0.06);}
+    table.page-table tbody tr:hover{background:color-mix(in srgb, var(--primary) 8%, transparent);}
     table.page-table td, table.page-table th{padding:10px 8px;vertical-align:middle;}
     .title-main{font-weight:800;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
     .title-path{font-family:"SFMono-Regular","Menlo",monospace;font-size:12px;color:var(--muted);}
@@ -1818,8 +1874,8 @@ if (isset($_SESSION['user_id'])) {
     .btn.text{background:transparent;border-color:transparent;padding:8px 10px;}
     .btn.danger-outline{color:#fca5a5;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.05);}
     .kebab{position:relative;}
-    .kebab-btn{padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.06);color:var(--muted);cursor:pointer;}
-    .kebab-menu{position:absolute;right:0;top:110%;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);min-width:160px;display:none;z-index:30;}
+    .kebab-btn{padding:8px 10px;border-radius:4px;border:1px solid var(--border);background:var(--field-bg);color:var(--muted);cursor:pointer;}
+    .kebab-menu{position:absolute;right:0;top:110%;background:var(--card);border:1px solid var(--border);border-radius:4px;box-shadow:none;min-width:160px;display:none;z-index:30;}
     .kebab-menu button{width:100%;text-align:left;border:none;background:transparent;padding:10px 12px;color:var(--text);border-radius:0;}
     .kebab-menu button:hover{background:rgba(255,255,255,.08);}
     .kebab-menu .danger{color:#fca5a5;}
@@ -1841,7 +1897,7 @@ if (isset($_SESSION['user_id'])) {
   .badge-chip{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--border);}
   .badge-chip.staged{background:rgba(37,99,235,0.12);color:#bfdbfe;border-color:rgba(59,130,246,0.4);}
   .analytics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px;}
-  .analytic-card{border:1px solid var(--border);border-radius:14px;padding:12px;background:rgba(255,255,255,0.03);display:flex;flex-direction:column;gap:6px;}
+  .analytic-card{border:1px solid var(--border);border-radius:4px;padding:12px;background:var(--field-bg);display:flex;flex-direction:column;gap:6px;}
   .analytic-card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.4px;}
   .analytic-card .value{font-size:22px;font-weight:800;letter-spacing:-0.02em;}
   .analytic-card .delta{font-size:12px;color:var(--muted);}
@@ -1852,8 +1908,8 @@ if (isset($_SESSION['user_id'])) {
   .list-table th{color:var(--muted);font-size:12px;letter-spacing:0.4px;text-transform:uppercase;}
   .chart-line{display:flex;gap:4px;align-items:flex-end;height:52px;}
   .chart-line span{flex:1;border-radius:6px;background:linear-gradient(180deg, rgba(37,99,235,.65), rgba(37,99,235,.28));min-height:2px;}
-  .trend-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.03);font-weight:700;font-size:12px;}
-  .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;}
+  .trend-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:4px;border:1px solid var(--border);background:var(--field-bg);font-weight:700;font-size:12px;}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:var(--field-bg);font-weight:700;font-size:12px;}
   .cite-viewer{position:fixed;inset:0 0 0 auto;width:520px;max-width:90vw;height:100dvh;max-height:100dvh;background:var(--panel);border-left:1px solid var(--border);box-shadow:none;transition:transform 0.25s ease;z-index:2600;display:flex;flex-direction:column;transform:translateX(100%);overflow:hidden;}
   .cite-viewer.active{transform:translateX(0);}
   .cite-viewer header{padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;}
@@ -2066,6 +2122,9 @@ if (isset($_SESSION['user_id'])) {
           <button class="tab" data-tab="appearance" type="button">Appearance</button>
           <button class="tab" data-tab="analytics" type="button">Analytics</button>
           <button class="tab" data-tab="settings" type="button">Settings</button>
+          <?php if ($isSuperAdmin): ?>
+            <button class="tab" data-tab="deleted-pages" type="button">Deleted pages</button>
+          <?php endif; ?>
         </div>
       </div>
 
@@ -2166,6 +2225,68 @@ if (isset($_SESSION['user_id'])) {
         </div>
       </div>
     </div>
+
+      <?php if ($isSuperAdmin): ?>
+      <div class="panel" id="panel-deleted-pages">
+        <div class="card" style="margin-top:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <div>
+              <h2 style="margin:0">Deleted pages</h2>
+              <div class="muted">Soft-deleted pages for this site. Records are retained for 30 days, then permanently purged.</div>
+            </div>
+          </div>
+          <?php if (!$deletedPages): ?>
+            <div style="margin-top:14px">
+              <p>No deleted pages recorded for this site.</p>
+            </div>
+          <?php else: ?>
+            <table class="page-table" style="margin-top:14px">
+              <thead>
+                <tr style="text-align:left;color:var(--muted);font-size:14px">
+                  <th>Title</th>
+                  <th>Path</th>
+                  <th>Deleted by</th>
+                  <th>Deleted</th>
+                  <th>Purges</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php foreach ($deletedPages as $dp): ?>
+                  <?php
+                    $deletedBy = trim((string)($dp['deleted_by_name'] ?? ''));
+                    if ($deletedBy === '') $deletedBy = trim((string)($dp['deleted_by_email'] ?? ''));
+                    if ($deletedBy === '') $deletedBy = 'Unknown user';
+                    $deletedRole = trim((string)($dp['deleted_by_role'] ?? ''));
+                  ?>
+                  <tr>
+                    <td>
+                      <div class="title-main"><?= Security::e($dp['title'] ?? '') ?></div>
+                      <div class="title-path">Original ID: <?= (int)($dp['original_page_id'] ?? 0) ?></div>
+                    </td>
+                    <td class="muted title-path">/<?= Security::e($dp['slug'] ?? '') ?></td>
+                    <td>
+                      <div><?= Security::e($deletedBy) ?></div>
+                      <div class="muted"><?= Security::e($deletedRole !== '' ? ucwords(str_replace('_', ' ', $deletedRole)) : 'Role unavailable') ?></div>
+                    </td>
+                    <td class="muted"><?= Security::e($dp['deleted_at'] ?? '') ?></td>
+                    <td class="muted"><?= Security::e($dp['purge_after'] ?? '') ?></td>
+                    <td>
+                      <form method="post" action="site.php?id=<?= (int)$site['id'] ?>#deleted-pages" style="margin:0">
+                        <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+                        <input type="hidden" name="restore_deleted_page" value="1">
+                        <input type="hidden" name="deleted_page_id" value="<?= (int)($dp['id'] ?? 0) ?>">
+                        <button class="btn small" type="submit">Restore</button>
+                      </form>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          <?php endif; ?>
+        </div>
+      </div>
+      <?php endif; ?>
 
       <!-- HEADER & FOOTER -->
       <div class="panel" id="panel-header-footer">
@@ -5179,15 +5300,15 @@ if (isset($_SESSION['user_id'])) {
           <button class="close-btn" type="button" aria-label="Close">×</button>
         </header>
         <div class="danger-modal-body">
-          <div class="danger-modal-copy">This will permanently remove the page from the site. Review the page name below before continuing.</div>
+          <div class="danger-modal-copy">This removes the page from the live page list and stores it in Deleted pages for 30 days before permanent purge.</div>
           <div class="danger-page-card">
             <div class="danger-page-label">Selected page</div>
             <div class="danger-page-name" id="deletePageName"></div>
           </div>
-          <div class="danger-modal-note">This action cannot be undone. If you might need the content later, duplicate the page first or leave it unpublished instead.</div>
+          <div class="danger-modal-note">Super admins can review deleted-page records in the site settings area during the 30-day retention window.</div>
           <div class="danger-modal-actions">
             <button class="btn subtle" type="button" id="cancelDeleteBtn">Keep page</button>
-            <button class="btn danger-solid" type="button" id="confirmDeleteBtn">Delete permanently</button>
+            <button class="btn danger-solid" type="button" id="confirmDeleteBtn">Move to Deleted pages</button>
           </div>
         </div>
       </div>

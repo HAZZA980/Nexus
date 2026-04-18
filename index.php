@@ -7,9 +7,13 @@ require __DIR__ . '/app/bootstrap.php';
 
 use NexusCMS\Models\Site;
 use NexusCMS\Models\Page;
+use NexusCMS\Models\PageFlag;
 use NexusCMS\Models\CitationExample;
+use NexusCMS\Models\User;
 use NexusCMS\Services\Renderer;
+use NexusCMS\Services\PageFlagNotifier;
 use NexusCMS\Core\Security;
+use NexusCMS\Core\DB;
 use NexusCMS\Models\Analytics;
 use NexusCMS\Support\PagePath;
 
@@ -196,8 +200,337 @@ if ($method === 'POST' && $uri === '/api/analytics/collect') {
 // Landing: list sites
 if ($method === 'GET' && $uri === '/') {
   require_admin();
-  header('Location: ' . $base . '/admin/');
-  exit;
+  $currentUser = isset($_SESSION['user_id']) ? User::findById((int)$_SESSION['user_id']) : null;
+  $sessionRole = (string)($_SESSION['user_role'] ?? '');
+  $siteAccess = array_map('strval', (array)($_SESSION['site_access'] ?? []));
+
+  $allSites = Site::all();
+  $sites = array_values(array_filter($allSites, static function (array $site) use ($siteAccess, $sessionRole): bool {
+    if ($sessionRole === 'super_admin' || in_array('*', $siteAccess, true)) return true;
+    return in_array((string)($site['slug'] ?? ''), $siteAccess, true);
+  }));
+
+  usort($sites, static function (array $a, array $b): int {
+    return strcmp((string)($a['name'] ?? ''), (string)($b['name'] ?? ''));
+  });
+
+  $siteIds = array_values(array_map(static fn(array $site): int => (int)($site['id'] ?? 0), $sites));
+  $siteStats = [];
+  $recentPages = [];
+  $analyticsCards = [];
+  $alerts = [];
+  $messages = [];
+  $totals = [
+    'sites' => count($sites),
+    'live_sites' => 0,
+    'draft_sites' => 0,
+    'disabled_sites' => 0,
+    'pages_total' => 0,
+    'pages_published' => 0,
+    'pages_draft' => 0,
+    'views' => 0,
+    'unique' => 0,
+    'sessions' => 0,
+    'new_visitors' => 0,
+    'avg_load_ms' => 0,
+    'avg_ttfb_ms' => 0,
+    'four_oh_four' => 0,
+  ];
+
+  $flashKeys = ['admin_sites_flash', 'admin_users_flash', 'admin_media_flash', 'admin_db_flash'];
+  foreach ($flashKeys as $flashKey) {
+    $flash = $_SESSION[$flashKey] ?? null;
+    unset($_SESSION[$flashKey]);
+    if (is_array($flash) && trim((string)($flash['message'] ?? '')) !== '') {
+      $messages[] = [
+        'type' => (($flash['type'] ?? 'notice') === 'error') ? 'error' : 'notice',
+        'title' => 'System message',
+        'body' => trim((string)$flash['message']),
+      ];
+    }
+  }
+
+  $userName = trim((string)($currentUser['display_name'] ?? $currentUser['email'] ?? $_SESSION['user_name'] ?? 'Administrator'));
+  if ($userName === '') $userName = 'Administrator';
+
+  $pdo = DB::pdo();
+  $pageCountMap = [];
+  if ($siteIds) {
+    $ph = implode(',', array_fill(0, count($siteIds), '?'));
+    $st = $pdo->prepare("
+      SELECT site_id,
+             COUNT(*) AS total_pages,
+             SUM(CASE WHEN status='published' THEN 1 ELSE 0 END) AS published_pages,
+             SUM(CASE WHEN status='draft' THEN 1 ELSE 0 END) AS draft_pages
+      FROM pages
+      WHERE site_id IN ({$ph})
+      GROUP BY site_id
+    ");
+    $st->execute($siteIds);
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+      $pageCountMap[(int)$row['site_id']] = [
+        'total_pages' => (int)($row['total_pages'] ?? 0),
+        'published_pages' => (int)($row['published_pages'] ?? 0),
+        'draft_pages' => (int)($row['draft_pages'] ?? 0),
+      ];
+    }
+
+    $st = $pdo->prepare("
+      SELECT p.id, p.title, p.slug, p.status, p.updated_at, s.name AS site_name, s.slug AS site_slug
+      FROM pages p
+      JOIN sites s ON s.id = p.site_id
+      WHERE p.site_id IN ({$ph})
+      ORDER BY p.updated_at DESC
+      LIMIT 8
+    ");
+    $st->execute($siteIds);
+    $recentPages = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+  }
+
+  $rangeEnd = new DateTimeImmutable('today');
+  $rangeStart = $rangeEnd->sub(new DateInterval('P6D'));
+  $rangeStartSql = $rangeStart->format('Y-m-d 00:00:00');
+  $rangeEndSql = $rangeEnd->format('Y-m-d 23:59:59');
+  $perfLoadSamples = 0;
+  $perfTtfbSamples = 0;
+  $analyticsEnabledCount = 0;
+
+  foreach ($sites as $site) {
+    $siteId = (int)($site['id'] ?? 0);
+    $status = strtolower(trim((string)($site['status'] ?? 'live')));
+    if (!in_array($status, ['live', 'draft', 'disabled'], true)) {
+      $published = (int)($pageCountMap[$siteId]['published_pages'] ?? 0);
+      $status = $published > 0 ? 'live' : 'draft';
+    }
+    $totals[$status . '_sites']++;
+
+    $pageCounts = $pageCountMap[$siteId] ?? ['total_pages' => 0, 'published_pages' => 0, 'draft_pages' => 0];
+    $totals['pages_total'] += (int)$pageCounts['total_pages'];
+    $totals['pages_published'] += (int)$pageCounts['published_pages'];
+    $totals['pages_draft'] += (int)$pageCounts['draft_pages'];
+
+    $analyticsEnabled = (int)($site['analytics_enabled'] ?? 1) === 1;
+    if ($analyticsEnabled) $analyticsEnabledCount++;
+
+    $analytics = $analyticsEnabled ? Analytics::dashboard($siteId, $rangeStart, $rangeEnd) : [
+      'summary' => ['views' => 0, 'unique' => 0, 'sessions' => 0, 'new_visitors' => 0],
+      'breakdowns' => ['slow_pages' => []],
+    ];
+    $summary = is_array($analytics['summary'] ?? null) ? $analytics['summary'] : [];
+    $totals['views'] += (int)($summary['views'] ?? 0);
+    $totals['unique'] += (int)($summary['unique'] ?? 0);
+    $totals['sessions'] += (int)($summary['sessions'] ?? 0);
+    $totals['new_visitors'] += (int)($summary['new_visitors'] ?? 0);
+
+    $perf = ['avg_load_ms' => 0, 'avg_ttfb_ms' => 0, 'four_oh_four' => 0];
+    if ($analyticsEnabled) {
+      try {
+        $st = $pdo->prepare("
+          SELECT
+            ROUND(AVG(CASE WHEN load_ms IS NOT NULL AND load_ms > 0 THEN load_ms END)) AS avg_load_ms,
+            ROUND(AVG(CASE WHEN ttfb_ms IS NOT NULL AND ttfb_ms > 0 THEN ttfb_ms END)) AS avg_ttfb_ms,
+            SUM(CASE WHEN event_type='404' THEN 1 ELSE 0 END) AS four_oh_four,
+            SUM(CASE WHEN load_ms IS NOT NULL AND load_ms > 0 THEN 1 ELSE 0 END) AS load_samples,
+            SUM(CASE WHEN ttfb_ms IS NOT NULL AND ttfb_ms > 0 THEN 1 ELSE 0 END) AS ttfb_samples
+          FROM analytics_events
+          WHERE site_id=? AND occurred_at BETWEEN ? AND ?
+        ");
+        $st->execute([$siteId, $rangeStartSql, $rangeEndSql]);
+        $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        $perf['avg_load_ms'] = (int)($row['avg_load_ms'] ?? 0);
+        $perf['avg_ttfb_ms'] = (int)($row['avg_ttfb_ms'] ?? 0);
+        $perf['four_oh_four'] = (int)($row['four_oh_four'] ?? 0);
+        $perfLoadSamples += (int)($row['load_samples'] ?? 0);
+        $perfTtfbSamples += (int)($row['ttfb_samples'] ?? 0);
+      } catch (\Throwable $e) {
+        // dashboard remains best-effort if analytics tables are not fully available
+      }
+    }
+
+    $totals['four_oh_four'] += (int)$perf['four_oh_four'];
+    if ($perf['avg_load_ms'] > 0) $totals['avg_load_ms'] += $perf['avg_load_ms'];
+    if ($perf['avg_ttfb_ms'] > 0) $totals['avg_ttfb_ms'] += $perf['avg_ttfb_ms'];
+
+    $publicUrl = trim((string)($site['slug'] ?? '')) !== '' ? ($base . '/s/' . trim((string)$site['slug']) . '/home') : ($base . '/');
+    $siteStats[] = [
+      'id' => $siteId,
+      'name' => trim((string)($site['name'] ?? '')) ?: 'Untitled site',
+      'slug' => trim((string)($site['slug'] ?? '')),
+      'status' => $status,
+      'analytics_enabled' => $analyticsEnabled,
+      'public_url' => $publicUrl,
+      'pages_total' => (int)$pageCounts['total_pages'],
+      'pages_published' => (int)$pageCounts['published_pages'],
+      'pages_draft' => (int)$pageCounts['draft_pages'],
+      'views' => (int)($summary['views'] ?? 0),
+      'unique' => (int)($summary['unique'] ?? 0),
+      'sessions' => (int)($summary['sessions'] ?? 0),
+      'new_visitors' => (int)($summary['new_visitors'] ?? 0),
+      'avg_load_ms' => (int)$perf['avg_load_ms'],
+      'avg_ttfb_ms' => (int)$perf['avg_ttfb_ms'],
+      'four_oh_four' => (int)$perf['four_oh_four'],
+      'updated_at' => (string)($site['updated_at'] ?? $site['created_at'] ?? ''),
+    ];
+  }
+
+  if ($messages === []) {
+    $messages[] = [
+      'type' => 'notice',
+      'title' => 'Welcome',
+      'body' => 'Signed in as ' . $userName . '. This dashboard covers your current site access and the latest seven-day metrics.',
+    ];
+    if ($totals['sites'] > 0) {
+      $messages[] = [
+        'type' => 'notice',
+        'title' => 'Coverage',
+        'body' => 'You currently have visibility across ' . $totals['sites'] . ' site' . ($totals['sites'] === 1 ? '' : 's') . '.',
+      ];
+    }
+  }
+
+  if ($totals['draft_sites'] > 0) {
+    $alerts[] = [
+      'level' => 'warning',
+      'title' => 'Draft sites need review',
+      'body' => $totals['draft_sites'] . ' site' . ($totals['draft_sites'] === 1 ? ' is' : 's are') . ' still in draft status.',
+      'href' => $base . '/admin/index.php',
+      'cta' => 'Open sites',
+    ];
+  }
+  if ($totals['disabled_sites'] > 0) {
+    $alerts[] = [
+      'level' => 'warning',
+      'title' => 'Disabled sites detected',
+      'body' => $totals['disabled_sites'] . ' site' . ($totals['disabled_sites'] === 1 ? ' is' : 's are') . ' disabled and not serving publicly.',
+      'href' => $base . '/admin/index.php',
+      'cta' => 'Review status',
+    ];
+  }
+  if ($totals['pages_draft'] > 0) {
+    $alerts[] = [
+      'level' => 'info',
+      'title' => 'Draft pages are pending',
+      'body' => $totals['pages_draft'] . ' page' . ($totals['pages_draft'] === 1 ? ' is' : 's are') . ' still in draft across your sites.',
+      'href' => $base . '/admin/index.php',
+      'cta' => 'Manage pages',
+    ];
+  }
+  if ($totals['four_oh_four'] > 0) {
+    $alerts[] = [
+      'level' => 'warning',
+      'title' => '404 activity recorded',
+      'body' => $totals['four_oh_four'] . ' missing-page hit' . ($totals['four_oh_four'] === 1 ? ' was' : 's were') . ' recorded in the last 7 days.',
+      'href' => $base . '/admin/site.php',
+      'cta' => 'Inspect analytics',
+    ];
+  }
+  if ($totals['sites'] > 0 && $analyticsEnabledCount === 0) {
+    $alerts[] = [
+      'level' => 'warning',
+      'title' => 'Analytics are off',
+      'body' => 'Analytics collection is disabled for every site in your dashboard.',
+      'href' => $base . '/admin/index.php',
+      'cta' => 'Review sites',
+    ];
+  }
+
+  usort($siteStats, static function (array $a, array $b): int {
+    return ($b['views'] <=> $a['views']) ?: strcmp((string)$a['name'], (string)$b['name']);
+  });
+  $analyticsCards = array_slice($siteStats, 0, 4);
+
+  $loadSiteCount = count(array_filter($siteStats, static fn(array $site): bool => (int)$site['avg_load_ms'] > 0));
+  $ttfbSiteCount = count(array_filter($siteStats, static fn(array $site): bool => (int)$site['avg_ttfb_ms'] > 0));
+  $totals['avg_load_ms'] = $loadSiteCount > 0 ? (int)round($totals['avg_load_ms'] / $loadSiteCount) : 0;
+  $totals['avg_ttfb_ms'] = $ttfbSiteCount > 0 ? (int)round($totals['avg_ttfb_ms'] / $ttfbSiteCount) : 0;
+
+  view('dashboard.php', [
+    'userName' => $userName,
+    'currentUser' => $currentUser,
+    'totals' => $totals,
+    'messages' => $messages,
+    'alerts' => $alerts,
+    'siteStats' => $siteStats,
+    'analyticsCards' => $analyticsCards,
+    'recentPages' => $recentPages,
+    'rangeLabel' => $rangeStart->format('j M') . ' to ' . $rangeEnd->format('j M Y'),
+  ]);
+}
+
+// Public page flag submission
+if ($method === 'POST' && $uri === '/report/page-flag') {
+  $returnTarget = (string)($_POST['return_url'] ?? '/');
+  if (preg_match('~^https?://~i', $returnTarget)) {
+    $path = (string)(parse_url($returnTarget, PHP_URL_PATH) ?? '/');
+    $query = (string)(parse_url($returnTarget, PHP_URL_QUERY) ?? '');
+    $returnTarget = $path . ($query !== '' ? '?' . $query : '');
+  }
+  if ($base !== '' && str_starts_with($returnTarget, $base)) {
+    $returnTarget = substr($returnTarget, strlen($base));
+    if ($returnTarget === '') $returnTarget = '/';
+  }
+
+  if (!isset($_SESSION['user_id']) || (int)$_SESSION['user_id'] <= 0) {
+    redirect('/login.php?return=' . urlencode($_SERVER['HTTP_REFERER'] ?? '/'));
+  }
+  if (!Security::checkCsrf($_POST['_csrf'] ?? null)) {
+    $_SESSION['page_flag_flash'] = ['type' => 'error', 'message' => 'Security check failed.'];
+    redirect($returnTarget);
+  }
+
+  $siteSlug = trim((string)($_POST['site_slug'] ?? ''));
+  $site = Site::findBySlug($siteSlug);
+  $user = User::findById((int)$_SESSION['user_id']);
+  $siteAccess = array_map('strval', (array)($_SESSION['site_access'] ?? []));
+  $role = (string)($_SESSION['user_role'] ?? '');
+
+  if (!$site || !$user) {
+    $_SESSION['page_flag_flash'] = ['type' => 'error', 'message' => 'Unable to submit this flag.'];
+    redirect($returnTarget);
+  }
+  if (!in_array('*', $siteAccess, true) && !in_array($siteSlug, $siteAccess, true)) {
+    $_SESSION['page_flag_flash'] = ['type' => 'error', 'message' => 'You do not have access to flag this site.'];
+    redirect($returnTarget);
+  }
+
+  $description = trim((string)($_POST['description'] ?? ''));
+  if ($description === '') {
+    $_SESSION['page_flag_flash'] = ['type' => 'error', 'message' => 'Add a description before sending the flag.'];
+    redirect($returnTarget);
+  }
+
+  $pageId = (int)($_POST['page_id'] ?? 0);
+  $page = $pageId > 0 ? Page::find($pageId) : null;
+  if ($page && (int)($page['site_id'] ?? 0) !== (int)$site['id']) {
+    $page = null;
+    $pageId = 0;
+  }
+
+  $returnUrl = $returnTarget;
+  $pagePath = trim((string)($_POST['page_path'] ?? ''));
+  if ($pagePath === '') $pagePath = parse_url($returnUrl, PHP_URL_PATH) ?: '/';
+  $pageTitle = trim((string)($_POST['page_title'] ?? ''));
+  if ($pageTitle === '') $pageTitle = trim((string)($page['title'] ?? 'Untitled page'));
+
+  $flagId = PageFlag::createFlag([
+    'site_id' => (int)$site['id'],
+    'page_id' => $pageId > 0 ? $pageId : null,
+    'page_path' => $pagePath,
+    'page_title' => $pageTitle,
+    'page_url' => $returnUrl,
+    'reporter_user_id' => (int)$user['id'],
+    'reporter_name' => (string)($user['display_name'] ?? $user['email'] ?? 'User'),
+    'reporter_email' => (string)($user['email'] ?? ''),
+    'reporter_role' => $role,
+    'description' => $description,
+  ]);
+  $createdFlag = PageFlag::findById($flagId) ?: [];
+  $createdFlag['site_name'] = (string)($site['name'] ?? '');
+  PageFlagNotifier::notifyCreated($createdFlag);
+
+  $nextRole = PageFlag::roleLabel(PageFlag::nextOwnerRole($role));
+  $_SESSION['page_flag_flash'] = ['type' => 'notice', 'message' => 'Flag sent to ' . $nextRole . '.'];
+  redirect($returnUrl !== '' ? $returnUrl : '/');
 }
 
 // Site search: /s/{site}/search

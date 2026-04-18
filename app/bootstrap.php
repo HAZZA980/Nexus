@@ -15,8 +15,23 @@ spl_autoload_register(function ($class) {
 use NexusCMS\Core\DB;
 DB::init($config['db']);
 
+function app_config(?string $key = null) {
+  static $cached = null;
+  if ($cached === null) {
+    $cached = require __DIR__ . '/config.php';
+  }
+  if ($key === null || $key === '') return $cached;
+  $parts = explode('.', $key);
+  $value = $cached;
+  foreach ($parts as $part) {
+    if (!is_array($value) || !array_key_exists($part, $value)) return null;
+    $value = $value[$part];
+  }
+  return $value;
+}
+
 function base_path(): string {
-  return rtrim((require __DIR__ . '/config.php')['app']['base_path'], '/');
+  return rtrim((string)(app_config('app.base_path') ?? ''), '/');
 }
 
 function redirect(string $path): void {

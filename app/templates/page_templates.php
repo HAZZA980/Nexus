@@ -331,6 +331,9 @@ $makeReferencingBrowseAccordion = static function(string $id, string $title): ar
     'style' => [
       'marginBottom' => '10px',
     ],
+    'styleText' => [
+      'fontFamily' => 'Georgia, "Times New Roman", serif',
+    ],
   ];
 };
 
@@ -341,23 +344,31 @@ $makeReferencingBrowsePanel = static function(string $id, string $label): array 
     'props' => [
       'image' => '',
       'alt' => '',
-      'layout' => 'img-top',
-      'splitRatio' => '50-50',
+      'layout' => 'img-left',
+      'splitRatio' => '30-70',
+      'imageSizeLevel' => 1,
       'bodyHtml' => $label,
       'body' => $label,
     ],
     'style' => [
-      'marginBottom' => '6px',
+      'marginBottom' => '0',
     ],
     'styleText' => [
-      'fontSize' => 12,
+      'fontFamily' => 'Georgia, "Times New Roman", serif',
+      'fontSize' => 18,
       'color' => '#1f2f55',
+      'bold' => true,
+      'align' => 'left',
     ],
   ];
 };
 
 $referencingBrowse = [
   'version' => 1,
+  'page' => [
+    'fontFamily' => 'Georgia, "Times New Roman", serif',
+    'fontSize' => 14,
+  ],
   'rows' => [
     [
       'cols' => [[
@@ -428,7 +439,8 @@ $referencingBrowse = [
                 'text' => 'General guidance',
               ],
               'styleText' => [
-                'fontSize' => 18,
+                'fontFamily' => 'Georgia, "Times New Roman", serif',
+                'fontSize' => 14,
                 'color' => '#334155',
               ],
               'style' => [

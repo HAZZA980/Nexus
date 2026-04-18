@@ -1,12 +1,10 @@
 <?php
 use NexusCMS\Core\Security;
+use NexusCMS\Models\PageFlag;
 use NexusCMS\Models\ShellPreset;
 use NexusCMS\Support\PartialsManager;
 
 $base = base_path();
-
-// Logged-in check (simple RBAC for now)
-$isAdmin = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
 
 // Preview flag passed in by router
 $isPreview = !empty($is_preview);
@@ -36,7 +34,7 @@ $hover   = $colors['hover'] ?? 'rgba(0,0,0,.06)';
 $radius  = (int)($shape['radius'] ?? ($theme['radius'] ?? 16));
 $shadow  = $shape['shadow'] ?? '0 10px 30px rgba(0,0,0,.18)';
 
-$fontFamily = $typo['fontFamily'] ?? 'system-ui,-apple-system,Segoe UI,Roboto,Arial';
+$fontFamily = $typo['fontFamily'] ?? (($site['slug'] ?? '') === 'cite-them-right' ? 'Georgia,"Times New Roman",serif' : 'system-ui,-apple-system,Segoe UI,Roboto,Arial');
 $baseSize   = (int)($typo['baseSize'] ?? 16);
 $headingScale = (float)($typo['headingScale'] ?? 1.35);
 $fontWeight = (int)($typo['fontWeight'] ?? 500);
@@ -112,11 +110,32 @@ $headerCssPath = __DIR__ . '/../assets/headers/' . $headerKey . '.css';
 $headerCssUrl  = $base . '/public/assets/headers/' . $headerKey . '.css';
 
 $safeSlug = PartialsManager::safeSlug($site['slug'] ?? '');
+$adminRoles = ['super_admin', 'website_admin', 'editor', 'institution_admin', 'admin', 'staff_admin', 'user_admin'];
+$reportRoles = ['super_admin', 'website_admin', 'editor', 'institution_admin', 'student', 'admin', 'staff_admin', 'user_admin', 'viewer'];
+$sessionUserId = (int)($_SESSION['user_id'] ?? 0);
+$sessionRole = (string)($_SESSION['user_role'] ?? '');
+$sessionSiteAccess = array_map('strval', (array)($_SESSION['site_access'] ?? []));
+$canFlagUser = $sessionUserId > 0
+  && in_array($sessionRole, $reportRoles, true)
+  && (in_array('*', $sessionSiteAccess, true) || in_array($safeSlug, $sessionSiteAccess, true));
+$isAdmin = $sessionUserId > 0
+  && in_array($sessionRole, $adminRoles, true)
+  && (in_array('*', $sessionSiteAccess, true) || in_array($safeSlug, $sessionSiteAccess, true));
+$adminUserLabel = trim((string)($_SESSION['user_name'] ?? $_SESSION['display_name'] ?? $_SESSION['username'] ?? 'Administrator'));
+$adminEditUrl = $base . '/admin/page_builder.php?id=' . (int)($page['id'] ?? 0);
+$flagSubmitUrl = $base . '/report/page-flag';
+$flagCsrfToken = Security::csrfToken();
+$flagFlash = $_SESSION['page_flag_flash'] ?? null;
+unset($_SESSION['page_flag_flash']);
+$currentRequestUri = (string)($_SERVER['REQUEST_URI'] ?? ($base . '/s/' . $safeSlug . '/' . trim((string)($page['slug'] ?? 'home'), '/')));
+$currentPagePath = (string)(parse_url($currentRequestUri, PHP_URL_PATH) ?: $currentRequestUri);
 $sitePaths = PartialsManager::paths($safeSlug);
 $partialHeader = $sitePaths['header'];
 $partialFooter = $sitePaths['footer'];
-$siteCssUrl = $base . '/sites/' . $safeSlug . '/assets/site.css';
-$siteJsUrl  = $base . '/sites/' . $safeSlug . '/assets/site.js';
+$siteCssVersion = is_file($sitePaths['css'] ?? '') ? (string)@filemtime($sitePaths['css']) : '';
+$siteJsVersion = is_file($sitePaths['js'] ?? '') ? (string)@filemtime($sitePaths['js']) : '';
+$siteCssUrl = $base . '/sites/' . $safeSlug . '/assets/site.css' . ($siteCssVersion !== '' ? '?v=' . rawurlencode($siteCssVersion) : '');
+$siteJsUrl  = $base . '/sites/' . $safeSlug . '/assets/site.js' . ($siteJsVersion !== '' ? '?v=' . rawurlencode($siteJsVersion) : '');
 
 // Config merge (preset + site config)
 $headerConfig = $headerPreset ? json_decode($headerPreset['config_json'] ?? '', true) ?: [] : [];
@@ -244,7 +263,8 @@ function safe_include(string $path, string $root): bool {
 
     /* Preview admin bar only */
     .nx-adminbar{
-      position:relative;
+      position:sticky;
+      top:0;
       z-index:999;
       background:rgba(15,23,42,.92);
       color:#e6eaf2;
@@ -258,10 +278,127 @@ function safe_include(string $path, string $root): bool {
       padding:12px 16px;
       align-items:center;
     }
-    .nx-adminbar a{
+    .nx-adminbar-meta{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .nx-adminbar-badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:5px 10px;
+      border:1px solid rgba(255,255,255,.16);
+      border-radius:999px;
+      background:rgba(255,255,255,.06);
+      font-size:13px;
+      line-height:1;
+    }
+    .nx-adminbar-actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+      align-items:center;
+    }
+    .nx-adminbar a,
+    .nx-adminbar button{
       color:#e6eaf2;
-      text-decoration:underline;
-      text-underline-offset:3px;
+      text-decoration:none;
+    }
+    .nx-adminbar-action{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(255,255,255,.08);
+      font-size:14px;
+      line-height:1;
+      font-weight:700;
+      cursor:pointer;
+      font-family:inherit;
+    }
+    .nx-adminbar-action:hover{
+      background:rgba(255,255,255,.14);
+    }
+    .nx-adminbar-icon{
+      width:14px;
+      height:14px;
+      display:inline-block;
+      flex:0 0 auto;
+    }
+    .nx-adminbar-note{
+      padding:0 16px 12px;
+      font-size:13px;
+      color:#d7f7e6;
+    }
+    .nx-adminbar-note.error{color:#ffd6d6;}
+    .nx-report-modal{
+      position:fixed;
+      inset:0;
+      background:rgba(2,6,23,.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      z-index:1200;
+    }
+    .nx-report-modal.open{display:flex;}
+    .nx-report-panel{
+      width:min(560px, 100%);
+      background:#fff;
+      color:#111827;
+      border-radius:16px;
+      box-shadow:0 24px 60px rgba(0,0,0,.24);
+      overflow:hidden;
+    }
+    .nx-report-head{
+      padding:16px 18px;
+      border-bottom:1px solid rgba(17,24,39,.12);
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:center;
+    }
+    .nx-report-head h3{margin:0;font-size:18px;}
+    .nx-report-body{padding:16px 18px;display:grid;gap:12px;}
+    .nx-report-body p{margin:0;color:#4b5563;}
+    .nx-report-body textarea{
+      width:100%;
+      min-height:150px;
+      border:1px solid rgba(17,24,39,.16);
+      border-radius:12px;
+      padding:12px 14px;
+      font:inherit;
+      resize:vertical;
+    }
+    .nx-report-actions{
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      padding:0 18px 18px;
+    }
+    .nx-report-btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:40px;
+      padding:0 14px;
+      border-radius:999px;
+      border:1px solid rgba(17,24,39,.16);
+      background:#fff;
+      color:#111827;
+      font:inherit;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .nx-report-btn.primary{
+      background:#1d4ed8;
+      border-color:#1d4ed8;
+      color:#fff;
     }
     .nx-row{
       display:grid;
@@ -348,16 +485,36 @@ $templateKeyClass = PartialsManager::safeSlug((string)($page['template_key'] ?? 
 ?>
 <body class="<?= $motionReduced === 'reduce' ? 'motion-reduce ' : '' ?><?= $isPreview ? 'is-preview ' : '' ?>page-<?= Security::e($pageSlugClass) ?><?= $templateKeyClass !== '' ? ' template-' . Security::e($templateKeyClass) : '' ?>">
 
-<?php if ($isPreview): ?>
+<?php if ($canFlagUser || $isPreview): ?>
   <div class="nx-adminbar">
     <div class="nx-adminbar-inner">
-      <div style="font-weight:900"><?= Security::e($site['name']) ?> (Preview)</div>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:flex-end">
-        <a href="<?= $base ?>/">All Websites</a>
-        <a href="<?= $base ?>/admin/">Admin</a>
-        <a href="<?= $base ?>/admin/page_builder.php?id=<?= (int)$page['id'] ?>">Back to editor</a>
+      <div class="nx-adminbar-meta">
+        <div style="font-weight:900"><?= Security::e($site['name']) ?></div>
+        <?php if ($isPreview): ?>
+          <span class="nx-adminbar-badge">Preview</span>
+        <?php endif; ?>
+        <?php if ($canFlagUser): ?>
+          <span class="nx-adminbar-badge"><?= Security::e($adminUserLabel) ?></span>
+        <?php endif; ?>
+      </div>
+      <div class="nx-adminbar-actions">
+        <?php if ($isAdmin): ?>
+          <a class="nx-adminbar-action" href="<?= $adminEditUrl ?>">
+            <svg class="nx-adminbar-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>
+            <span>Edit</span>
+          </a>
+        <?php endif; ?>
+        <?php if ($canFlagUser): ?>
+          <button type="button" class="nx-adminbar-action" id="nxOpenFlagModal">
+            <svg class="nx-adminbar-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 22V4"/><path d="m4 4 6-2 4 2 6-2v12l-6 2-4-2-6 2"/></svg>
+            <span>Flag</span>
+          </button>
+        <?php endif; ?>
       </div>
     </div>
+    <?php if (is_array($flagFlash) && trim((string)($flagFlash['message'] ?? '')) !== ''): ?>
+      <div class="nx-adminbar-note <?= ($flagFlash['type'] ?? 'notice') === 'error' ? 'error' : '' ?>"><?= Security::e((string)$flagFlash['message']) ?></div>
+    <?php endif; ?>
   </div>
 <?php endif; ?>
 
@@ -429,6 +586,33 @@ if (!$usedPartialFooter) {
 
 <?php if (is_file($sitePaths['js'] ?? '')): ?>
   <script src="<?= Security::e($siteJsUrl) ?>" defer></script>
+<?php endif; ?>
+
+<?php if ($canFlagUser): ?>
+  <div class="nx-report-modal" id="nxFlagModal" aria-hidden="true">
+    <div class="nx-report-panel" role="dialog" aria-modal="true" aria-labelledby="nxFlagTitle">
+      <div class="nx-report-head">
+        <h3 id="nxFlagTitle">Flag This Page</h3>
+        <button type="button" class="nx-report-btn" id="nxCloseFlagModal">Close</button>
+      </div>
+      <form method="post" action="<?= Security::e($flagSubmitUrl) ?>">
+        <input type="hidden" name="_csrf" value="<?= Security::e($flagCsrfToken) ?>">
+        <input type="hidden" name="site_slug" value="<?= Security::e($safeSlug) ?>">
+        <input type="hidden" name="page_id" value="<?= (int)($page['id'] ?? 0) ?>">
+        <input type="hidden" name="page_title" value="<?= Security::e((string)($page['title'] ?? 'Untitled page')) ?>">
+        <input type="hidden" name="page_path" value="<?= Security::e($currentPagePath) ?>">
+        <input type="hidden" name="return_url" value="<?= Security::e($currentRequestUri) ?>">
+        <div class="nx-report-body">
+          <p>Describe what is wrong with this page. Your report will be sent to <?= Security::e(PageFlag::roleLabel(PageFlag::nextOwnerRole($sessionRole))) ?> with your name and email so they can follow up if needed.</p>
+          <textarea name="description" required placeholder="What is wrong with this page?"></textarea>
+        </div>
+        <div class="nx-report-actions">
+          <button type="button" class="nx-report-btn" id="nxCancelFlagModal">Cancel</button>
+          <button type="submit" class="nx-report-btn primary">Send Flag</button>
+        </div>
+      </form>
+    </div>
+  </div>
 <?php endif; ?>
 
 <?php if (!empty($site['analytics_enabled']) && !$isPreview): ?>
@@ -523,6 +707,35 @@ if (!$usedPartialFooter) {
 
   if (document.readyState === 'complete') send();
   else window.addEventListener('load', () => send(), {once:true});
+})();
+</script>
+<?php endif; ?>
+
+<?php if ($canFlagUser): ?>
+<script>
+(function(){
+  const modal = document.getElementById('nxFlagModal');
+  const openBtn = document.getElementById('nxOpenFlagModal');
+  const closeBtn = document.getElementById('nxCloseFlagModal');
+  const cancelBtn = document.getElementById('nxCancelFlagModal');
+  function closeModal() {
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+  openBtn?.addEventListener('click', function () {
+    if (!modal) return;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+  });
+  closeBtn?.addEventListener('click', closeModal);
+  cancelBtn?.addEventListener('click', closeModal);
+  modal?.addEventListener('click', function (e) {
+    if (e.target === modal) closeModal();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeModal();
+  });
 })();
 </script>
 <?php endif; ?>

@@ -378,7 +378,7 @@ foreach ($users as $u) {
   <style>
     body{margin:0;background:var(--admin-bg);color:var(--admin-text);font:14px/1.4 Arial, Helvetica, sans-serif;}
     a{color:inherit;text-decoration:none}
-    main{max-width:none;margin:0;padding:14px;display:grid;gap:12px;}
+    .content{padding:14px;display:grid;gap:12px;}
     .panel{background:var(--admin-surface);border:1px solid var(--admin-line);border-radius:4px;}
     .panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid var(--admin-line);}
     .panel-title{margin:0;font-size:16px;font-weight:700;color:var(--admin-text-strong)}
@@ -404,14 +404,14 @@ foreach ($users as $u) {
     .filters{display:flex;gap:8px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--admin-line);background:var(--admin-surface-2)}
     .field{display:flex;align-items:center;gap:8px;padding:0 8px;height:32px;border:1px solid var(--admin-line);border-radius:4px;background:var(--admin-surface)}
     .field input,.field select{border:0;outline:0;background:transparent;font:inherit;color:inherit}
-    .field input{min-width:220px}
+    .field input{min-width:160px}
 
     .bulkbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--admin-line);background:color-mix(in srgb, var(--admin-accent) 8%, transparent)}
     .bulkbar .bulk-count{font-size:12px;color:var(--admin-muted);font-weight:600}
 
     .table-wrap{overflow:auto}
-    table{width:100%;border-collapse:collapse;font-size:13px;background:var(--admin-surface)}
-    thead th{text-align:left;background:var(--admin-surface-2);border-top:1px solid var(--admin-line);border-bottom:1px solid var(--admin-line);padding:7px 8px;font-weight:700;white-space:nowrap}
+    table{width:100%;border-collapse:collapse;font-size:13px;background:var(--admin-surface);table-layout:fixed}
+    thead th{text-align:left;background:var(--admin-surface-2);border-top:1px solid var(--admin-line);border-bottom:1px solid var(--admin-line);padding:7px 8px;font-weight:700}
     tbody tr{cursor:pointer}
     tbody td{padding:7px 8px;border-bottom:1px solid var(--admin-line);vertical-align:middle}
     tbody tr:hover{background:color-mix(in srgb, var(--admin-accent) 10%, transparent)}
@@ -423,8 +423,8 @@ foreach ($users as $u) {
     .meta{font-size:12px;color:var(--admin-muted);margin-top:1px}
     .muted{font-size:12px;color:var(--admin-muted)}
 
-    .status-select,.role-select{height:28px;border:1px solid var(--admin-line);border-radius:4px;background:var(--admin-surface);color:var(--admin-text);font:inherit;padding:0 6px;min-width:124px}
-    .status-select:disabled,.role-select:disabled{opacity:.6}
+    .role-select{height:28px;border:1px solid var(--admin-line);border-radius:4px;background:var(--admin-surface);color:var(--admin-text);font:inherit;padding:0 6px;min-width:100px;max-width:100%}
+    .role-select:disabled{opacity:.6}
 
     .row-actions{display:flex;gap:6px;align-items:center;justify-content:flex-end}
     .access-menu{position:relative}
@@ -450,6 +450,11 @@ foreach ($users as $u) {
     .badge-you{display:inline-flex;align-items:center;padding:2px 6px;border-radius:999px;font-size:11px;font-weight:700;background:color-mix(in srgb, var(--admin-accent) 20%, transparent);color:var(--admin-accent)}
 
     .empty{padding:14px;color:var(--admin-muted)}
+    th,td{overflow-wrap:anywhere}
+    td:nth-child(2){width:18%}
+    td:nth-child(3){width:20%}
+    td:nth-child(4){width:14%}
+    td:nth-child(5),td:nth-child(6),td:nth-child(7){width:14%}
 
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:40}
     .modal{background:var(--admin-surface);border:1px solid var(--admin-line);border-radius:4px;padding:18px;min-width:320px;max-width:460px}
@@ -486,7 +491,7 @@ foreach ($users as $u) {
 </head>
 <body>
   <?php include __DIR__ . '/partials/header.php'; ?>
-  <main>
+  <main class="content">
     <?php if (is_array($flash) && (($flash['message'] ?? '') !== '')): ?>
       <p class="<?= ($flash['type'] ?? 'notice') === 'error' ? 'error-banner' : 'notice' ?>"><?= Security::e((string)$flash['message']) ?></p>
     <?php endif; ?>
@@ -496,14 +501,11 @@ foreach ($users as $u) {
         <h1 class="panel-title">Users Overview</h1>
         <div style="display:flex;gap:8px;align-items:center;">
           <button type="button" class="btn" id="openRoleHelp">Role help</button>
-          <button class="btn primary" type="button" id="openAddUser">+ Invite User</button>
+          <a class="btn primary" href="<?= $base ?>/admin/user_new.php">+ New User</a>
         </div>
       </div>
       <div class="summary">
         <div class="metric"><div class="metric-label">Total Users</div><div class="metric-value"><?= (int)$userStats['total'] ?></div></div>
-        <div class="metric active"><div class="metric-label">Active</div><div class="metric-value"><?= (int)$userStats['active'] ?></div></div>
-        <div class="metric warn"><div class="metric-label">Invited</div><div class="metric-value"><?= (int)$userStats['invited'] ?></div></div>
-        <div class="metric off"><div class="metric-label">Suspended</div><div class="metric-value"><?= (int)$userStats['suspended'] ?></div></div>
         <div class="metric"><div class="metric-label">Super Admins</div><div class="metric-value"><?= (int)$userStats['super_admin'] ?></div></div>
         <div class="metric"><div class="metric-label">Website Admins</div><div class="metric-value"><?= (int)$userStats['website_admin'] ?></div></div>
       </div>
@@ -523,15 +525,6 @@ foreach ($users as $u) {
             <?php foreach ($allowedRoles as $r): ?>
               <option value="<?= Security::e($r) ?>"><?= Security::e(role_label($r)) ?></option>
             <?php endforeach; ?>
-          </select>
-        </label>
-        <label class="field" aria-label="Filter by status">
-          <span>Status</span>
-          <select id="userStatusFilter">
-            <option value="">All statuses</option>
-            <option value="active">Active</option>
-            <option value="invited">Invited</option>
-            <option value="suspended">Suspended</option>
           </select>
         </label>
         <label class="field" aria-label="Filter by university or college">
@@ -583,7 +576,6 @@ foreach ($users as $u) {
               <th style="min-width:220px;"><button type="button" class="sort-btn" data-sort="name">User <span class="arrow">↕</span></button></th>
               <th style="min-width:220px;">Email</th>
               <th style="min-width:170px;"><button type="button" class="sort-btn" data-sort="role">Role <span class="arrow">↕</span></button></th>
-              <th style="min-width:140px;"><button type="button" class="sort-btn" data-sort="status">Status <span class="arrow">↕</span></button></th>
               <th style="min-width:170px;"><button type="button" class="sort-btn active" data-sort="last_active">Last Active <span class="arrow">↓</span></button></th>
               <th style="min-width:150px;"><button type="button" class="sort-btn" data-sort="joined">Date Joined <span class="arrow">↕</span></button></th>
               <th style="min-width:180px;">University / College</th>
@@ -667,18 +659,6 @@ foreach ($users as $u) {
                       <?php foreach ($allowedRoles as $r): ?>
                         <option value="<?= Security::e($r) ?>" <?= strtolower((string)$uRow['role']) === $r ? 'selected' : '' ?>><?= Security::e(role_label($r)) ?></option>
                       <?php endforeach; ?>
-                    </select>
-                  </form>
-                </td>
-                <td>
-                  <form method="post" class="status-form">
-                    <input type="hidden" name="_csrf" value="<?= Security::e($csrfToken) ?>">
-                    <input type="hidden" name="mode" value="inline_status">
-                    <input type="hidden" name="user_id" value="<?= (int)$uRow['id'] ?>">
-                    <select class="status-select" name="status" <?= $canManageUsers ? '' : 'disabled' ?> aria-label="Change status for <?= Security::e($name) ?>">
-                      <option value="active" <?= $status === 'active' ? 'selected' : '' ?>>Active</option>
-                      <option value="invited" <?= $status === 'invited' ? 'selected' : '' ?>>Invited</option>
-                      <option value="suspended" <?= $status === 'suspended' ? 'selected' : '' ?>>Suspended</option>
                     </select>
                   </form>
                 </td>
@@ -780,38 +760,6 @@ foreach ($users as $u) {
     </section>
   </main>
 
-  <div class="modal-backdrop" id="addUserModal">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="addUserTitle">
-      <h3 id="addUserTitle">Invite user</h3>
-      <p>Create a user account and assign an initial role.</p>
-      <form method="post">
-        <input type="hidden" name="_csrf" value="<?= Security::e($csrfToken) ?>">
-        <input type="hidden" name="mode" value="create">
-        <label>Email</label>
-        <input name="email" type="email" required>
-        <label>Display name (optional)</label>
-        <input name="display_name" type="text">
-        <label>Role</label>
-        <select name="role" required>
-          <?php foreach (['student','institution_admin','editor','website_admin','super_admin'] as $r): ?>
-            <option value="<?= Security::e($r) ?>" <?= $r==='student'?'selected':'' ?>><?= Security::e(role_label($r)) ?></option>
-          <?php endforeach; ?>
-        </select>
-        <label>University / College (optional)</label>
-        <input name="institution_name" type="text" list="institutionList" placeholder="e.g. University of Oxford">
-        <datalist id="institutionList">
-          <?php foreach ($institutionOptions as $institution): ?>
-            <option value="<?= Security::e($institution) ?>"></option>
-          <?php endforeach; ?>
-        </datalist>
-        <div class="modal-actions">
-          <button type="button" class="btn" id="cancelAddUser">Cancel</button>
-          <button type="submit" class="btn primary">Send invite</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
   <div class="modal-backdrop" id="manageUserModal">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="manageUserTitle">
       <h3 id="manageUserTitle">Manage user</h3>
@@ -895,7 +843,6 @@ foreach ($users as $u) {
     (function(){
       const searchEl = document.getElementById('userSearch');
       const roleEl = document.getElementById('userRoleFilter');
-      const statusEl = document.getElementById('userStatusFilter');
       const institutionEl = document.getElementById('userInstitutionFilter');
       const resetEl = document.getElementById('resetFilters');
       const rows = Array.from(document.querySelectorAll('#usersTable tbody tr'));
@@ -926,18 +873,15 @@ foreach ($users as $u) {
       function applyFilters() {
         const q = (searchEl?.value || '').trim().toLowerCase();
         const role = (roleEl?.value || '').trim().toLowerCase();
-        const status = (statusEl?.value || '').trim().toLowerCase();
         const institution = (institutionEl?.value || '').trim().toLowerCase();
         rows.forEach((row) => {
           const hay = row.getAttribute('data-search') || '';
           const rowRole = row.getAttribute('data-role') || '';
-          const rowStatus = row.getAttribute('data-status') || '';
           const rowInstitutions = row.getAttribute('data-institutions') || '';
           const matchQ = q === '' || hay.includes(q);
           const matchRole = role === '' || role === rowRole;
-          const matchStatus = status === '' || status === rowStatus;
           const matchInstitution = institution === '' || rowInstitutions.includes(institution);
-          row.style.display = (matchQ && matchRole && matchStatus && matchInstitution) ? '' : 'none';
+          row.style.display = (matchQ && matchRole && matchInstitution) ? '' : 'none';
         });
         updateBulkState();
       }
@@ -956,11 +900,6 @@ foreach ($users as $u) {
             const bv = (b.getAttribute('data-role') || '').toLowerCase();
             return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
           }
-          if (sortKey === 'status') {
-            const av = (a.getAttribute('data-status') || '').toLowerCase();
-            const bv = (b.getAttribute('data-status') || '').toLowerCase();
-            return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
-          }
           const key = sortKey === 'joined' ? 'data-joined-ts' : 'data-last-active-ts';
           const av = parseInt(a.getAttribute(key) || '0', 10);
           const bv = parseInt(b.getAttribute(key) || '0', 10);
@@ -975,7 +914,7 @@ foreach ($users as $u) {
           if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
           else {
             sortKey = key;
-            sortDir = (key === 'name' || key === 'role' || key === 'status') ? 'asc' : 'desc';
+            sortDir = (key === 'name' || key === 'role') ? 'asc' : 'desc';
           }
           sortButtons.forEach((b) => {
             b.classList.toggle('active', b === btn);
@@ -989,12 +928,10 @@ foreach ($users as $u) {
 
       searchEl?.addEventListener('input', applyFilters);
       roleEl?.addEventListener('change', applyFilters);
-      statusEl?.addEventListener('change', applyFilters);
       institutionEl?.addEventListener('change', applyFilters);
       resetEl?.addEventListener('click', function(){
         if (searchEl) searchEl.value = '';
         if (roleEl) roleEl.value = '';
-        if (statusEl) statusEl.value = '';
         if (institutionEl) institutionEl.value = '';
         applyFilters();
       });
@@ -1022,13 +959,6 @@ foreach ($users as $u) {
           if (form && !sel.disabled) form.submit();
         });
       });
-      document.querySelectorAll('.status-form .status-select').forEach((sel) => {
-        sel.addEventListener('change', function(){
-          const form = sel.closest('form');
-          if (form && !sel.disabled) form.submit();
-        });
-      });
-
       document.querySelectorAll('.row-menu-list form').forEach((form) => {
         form.addEventListener('submit', function(e){
           const action = (form.querySelector('button[type="submit"]')?.value || '').toLowerCase();
@@ -1104,11 +1034,6 @@ foreach ($users as $u) {
           if (trigger) trigger.click();
         });
       });
-
-      const addModal = document.getElementById('addUserModal');
-      document.getElementById('openAddUser')?.addEventListener('click', () => { if (addModal) addModal.style.display = 'flex'; });
-      document.getElementById('cancelAddUser')?.addEventListener('click', () => { if (addModal) addModal.style.display = 'none'; });
-      addModal?.addEventListener('click', (e) => { if (e.target === addModal) addModal.style.display = 'none'; });
 
       const roleHelp = document.getElementById('roleHelpModal');
       document.getElementById('openRoleHelp')?.addEventListener('click', () => { if (roleHelp) roleHelp.style.display = 'flex'; });

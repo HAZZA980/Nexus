@@ -43,6 +43,31 @@ CREATE TABLE pages (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+CREATE TABLE deleted_pages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  original_page_id INT NOT NULL,
+  site_id INT NOT NULL,
+  title VARCHAR(190) NOT NULL,
+  slug VARCHAR(190) NOT NULL,
+  status VARCHAR(20) DEFAULT 'draft',
+  template_key VARCHAR(100) DEFAULT 'landing',
+  shell_override_json JSON NULL,
+  builder_json JSON NULL,
+  search_text TEXT NULL,
+  collection_id INT NULL,
+  original_created_at DATETIME NULL,
+  original_updated_at DATETIME NULL,
+  deleted_by_user_id INT NULL,
+  deleted_by_email VARCHAR(190) NULL,
+  deleted_by_name VARCHAR(190) NULL,
+  deleted_by_role VARCHAR(50) NULL,
+  deleted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  purge_after DATETIME NOT NULL,
+  INDEX idx_deleted_pages_site_deleted (site_id, deleted_at),
+  INDEX idx_deleted_pages_purge_after (purge_after),
+  INDEX idx_deleted_pages_original (original_page_id)
+);
+
 -- Citation examples (Cite Them Right)
 CREATE TABLE IF NOT EXISTS citation_examples (
   id INT AUTO_INCREMENT PRIMARY KEY,

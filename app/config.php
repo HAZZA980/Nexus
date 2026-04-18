@@ -12,4 +12,11 @@ return [
     'env' => 'dev',
     'session_name' => 'nexuscms_session',
   ],
+  'mail' => [
+    'transport' => 'log', // change to 'mail' on servers with outbound mail configured
+    'from_email' => 'noreply@nexuscms.local',
+    'from_name' => 'NexusCMS',
+    'subject_prefix' => '[NexusCMS]',
+    'log_file' => __DIR__ . '/../storage/mail.log',
+  ],
 ];

@@ -9,7 +9,7 @@ use NexusCMS\Core\Security;
 use NexusCMS\Support\PartialsManager;
 
 $base = base_path();
-$activeNav = 'sites';
+$activeNav = 'site_new';
 $themeIsLight = ui_theme_is_light();
 $errors = [];
 $values = [
@@ -108,195 +108,119 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     })();
   </script>
   <style>
-    :root {
-      --bg: #0f172a;
-      --panel: #111827;
-      --card: #111827;
-      --border: #1f2937;
-      --muted: #9ca3af;
-      --text: #e5e7eb;
-      --primary: #5b21b6;
-      --primary-strong: #4c1d95;
-      --radius: 16px;
-      --shadow: 0 10px 40px rgba(0,0,0,0.28);
-      --focus: 0 0 0 3px rgba(91,33,182,0.35);
-      --error: #f87171;
-    }
-    .theme-light {
-      --bg: #f8fafc;
-      --panel: #ffffff;
-      --card: #ffffff;
-      --border: #e2e8f0;
-      --muted: #475569;
-      --text: #0f172a;
-      --primary: #2563eb;
-      --primary-strong: #1d4ed8;
-      --shadow: 0 10px 30px rgba(15,23,42,0.08);
-      --focus: 0 0 0 3px rgba(37,99,235,0.28);
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-      transition: background .2s ease, color .2s ease;
-    }
-    a { color: inherit; text-decoration: none; }
-    a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible {
-      outline: none;
-      box-shadow: var(--focus);
-      border-color: var(--primary);
-    }
-
-    main { max-width: 1200px; margin: 0 auto; padding: 24px 20px 48px; }
-    .back-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--muted);
-      text-decoration: none;
-      min-height: 44px;
-      padding: 8px 0;
-      font-weight: 600;
-    }
-    .back-link:hover { color: var(--text); }
-
-    .page-head { margin: 10px 0 18px; }
-    .page-head h1 { margin: 0; font-size: 32px; letter-spacing: -0.02em; }
-    .page-head p { margin: 6px 0 0; color: var(--muted); }
-
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: 22px 24px;
-      max-width: 680px;
-    }
-    form { display: grid; gap: 18px; }
-    label { display: block; font-weight: 600; margin-bottom: 6px; }
-    .required { color: #fbbf24; font-weight: 700; margin-left: 4px; }
-    .input-wrap { display: grid; gap: 6px; }
-    input, textarea {
-      width: 100%;
-      padding: 12px 12px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,0.04);
-      color: var(--text);
-      min-height: 44px;
-      font-size: 15px;
-    }
-    textarea { resize: vertical; min-height: 110px; }
-    .helper { color: var(--muted); font-size: 14px; }
-    .error {
-      color: var(--error);
-      font-size: 14px;
-      margin: 2px 0 0;
-    }
-    .actions {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-      margin-top: 4px;
-    }
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 12px 14px;
-      min-height: 44px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,0.06);
-      color: var(--text);
-      cursor: pointer;
-      font-weight: 600;
-      transition: transform 0.15s ease, background 0.15s ease, border 0.15s ease;
-      text-decoration: none;
-    }
-    .btn:hover { background: rgba(255,255,255,0.1); transform: translateY(-1px); }
-    .btn.primary {
-      background: linear-gradient(120deg, var(--primary), var(--primary-strong));
-      border-color: rgba(91,33,182,0.25);
-      color: #f8fbff;
-      box-shadow: 0 8px 24px rgba(91,33,182,0.25);
-    }
-    .btn.primary[disabled] {
-      opacity: 0.6;
-      cursor: not-allowed;
-      transform: none;
-    }
-    .btn.text {
-      background: transparent;
-      border-color: transparent;
-      color: var(--muted);
-    }
-    .btn.text:hover { color: var(--text); background: rgba(255,255,255,0.04); }
-    .form-error {
-      padding: 12px;
-      border: 1px solid rgba(248,113,113,0.5);
-      background: rgba(248,113,113,0.12);
-      color: var(--error);
-      border-radius: 12px;
-      font-weight: 600;
-    }
-    @media (max-width: 720px) {
-      .card { padding: 18px; }
-      .page-head h1 { font-size: 26px; }
+    body{margin:0;background:var(--admin-bg);color:var(--admin-text);font:14px/1.5 Arial, Helvetica, sans-serif}
+    a{color:inherit;text-decoration:none}
+    .content{padding:14px;display:grid;gap:12px}
+    .panel{background:var(--admin-surface);border:1px solid var(--admin-line);border-radius:4px}
+    .panel-head{padding:12px 14px;border-bottom:1px solid var(--admin-line)}
+    .panel-title{margin:0;font-size:20px;font-weight:700;color:var(--admin-text-strong)}
+    .panel-subtitle{margin:4px 0 0;color:var(--admin-muted)}
+    .panel-body{padding:0}
+    .form-layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.95fr)}
+    .form-main{padding:16px 18px}
+    .form-side{padding:16px 18px;border-left:1px solid var(--admin-line);background:color-mix(in srgb, var(--admin-surface-2) 55%, transparent)}
+    .grid{display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px 18px;align-items:start}
+    .field{display:contents}
+    .field label{font-weight:700;color:var(--admin-text-strong)}
+    .field-control{display:grid;gap:6px;min-width:0}
+    .field input,.field textarea{width:100%;min-height:38px;padding:8px 10px;border:1px solid var(--admin-line);border-radius:4px;background:var(--admin-surface-2);color:var(--admin-text);font:inherit}
+    .field textarea{min-height:120px;resize:vertical}
+    .helper{font-size:12px;color:var(--admin-muted)}
+    .inline-errors{display:grid;gap:4px}
+    .inline-errors p{margin:0;font-size:12px;color:var(--admin-danger)}
+    .error-banner{margin:0;padding:10px 12px;border-radius:4px;border:1px solid color-mix(in srgb, var(--admin-danger) 40%, var(--admin-line));font-size:13px;background:color-mix(in srgb, var(--admin-danger) 14%, transparent);color:var(--admin-danger)}
+    .section-title{margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--admin-muted)}
+    .info-list{display:grid;gap:10px}
+    .info-card{padding:12px;border:1px solid var(--admin-line);border-radius:4px;background:var(--admin-surface)}
+    .info-card strong{display:block;margin-bottom:4px;color:var(--admin-text-strong)}
+    .form-actions{display:flex;gap:10px;justify-content:flex-end;padding-top:14px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 12px;border:1px solid var(--admin-line);border-radius:4px;background:var(--admin-surface-2);color:var(--admin-text-strong);font-size:13px;font-weight:600;cursor:pointer}
+    .btn.primary{border-color:color-mix(in srgb, var(--admin-accent) 60%, var(--admin-line));background:var(--admin-accent);color:#fff}
+    .btn.primary:disabled{opacity:.6;cursor:not-allowed}
+    @media (max-width: 900px){
+      .form-layout{grid-template-columns:1fr}
+      .form-side{border-left:0;border-top:1px solid var(--admin-line)}
+      .grid{grid-template-columns:1fr}
+      .field{display:grid}
     }
   </style>
   <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css?v=20260322">
 </head>
-  <body>
-    <?php include __DIR__ . '/partials/header.php'; ?>
+<body>
+  <?php include __DIR__ . '/partials/header.php'; ?>
 
-  <main>
-    <div class="page-head">
-      <h1>Create new website</h1>
-      <p>Set up a new website. You can change all of these details later.</p>
-    </div>
+  <main class="content">
+    <?php if (!empty($errors['form'])): ?>
+      <p class="error-banner" role="alert"><?= Security::e($errors['form']) ?></p>
+    <?php endif; ?>
 
-    <section class="card" aria-labelledby="create-site">
-      <?php if (!empty($errors['form'])): ?>
-        <div class="form-error" role="alert"><?= Security::e($errors['form']) ?></div>
-      <?php endif; ?>
-      <form id="createForm" method="post" novalidate>
-        <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+    <section class="panel" aria-labelledby="create-site">
+      <div class="panel-head">
+        <h1 id="create-site" class="panel-title">Create New Website</h1>
+        <p class="panel-subtitle">Set up a new website with its name, slug, and internal description.</p>
+      </div>
+      <div class="panel-body">
+        <form id="createForm" method="post" novalidate class="form-layout">
+          <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
 
-        <div class="input-wrap">
-          <label for="name">Name<span class="required" aria-hidden="true">*</span></label>
-          <input id="name" name="name" type="text" required placeholder="e.g. Productivity Hub" value="<?= Security::e($values['name']) ?>" aria-describedby="name-helper<?= isset($errors['name']) ? ' name-error' : '' ?>">
-          <div id="name-helper" class="helper">Human-friendly title for your team.</div>
-          <?php if (isset($errors['name'])): ?>
-            <div id="name-error" class="error"><?= Security::e($errors['name']) ?></div>
-          <?php endif; ?>
-        </div>
+          <div class="form-main">
+            <div class="grid">
+              <div class="field">
+                <label for="name">Name</label>
+                <div class="field-control">
+                  <input id="name" name="name" type="text" required placeholder="e.g. Productivity Hub" value="<?= Security::e($values['name']) ?>" aria-describedby="name-helper<?= isset($errors['name']) ? ' name-error' : '' ?>">
+                  <div id="name-helper" class="helper">Human-friendly title for your team.</div>
+                  <?php if (isset($errors['name'])): ?>
+                    <div id="name-error" class="inline-errors"><p><?= Security::e($errors['name']) ?></p></div>
+                  <?php endif; ?>
+                </div>
+              </div>
 
-        <div class="input-wrap">
-          <label for="slug">Slug<span class="required" aria-hidden="true">*</span></label>
-          <input id="slug" name="slug" type="text" required value="<?= Security::e($values['slug']) ?>" aria-describedby="slug-helper<?= isset($errors['slug']) ? ' slug-error' : '' ?>" inputmode="lowercase">
-          <div id="slug-helper" class="helper">Used in URLs; you can change this later.</div>
-          <?php if (isset($errors['slug'])): ?>
-            <div id="slug-error" class="error"><?= Security::e($errors['slug']) ?></div>
-          <?php endif; ?>
-        </div>
+              <div class="field">
+                <label for="slug">Slug</label>
+                <div class="field-control">
+                  <input id="slug" name="slug" type="text" required value="<?= Security::e($values['slug']) ?>" aria-describedby="slug-helper<?= isset($errors['slug']) ? ' slug-error' : '' ?>" inputmode="lowercase">
+                  <div id="slug-helper" class="helper">Used in URLs; lowercase letters, numbers, and hyphens only.</div>
+                  <?php if (isset($errors['slug'])): ?>
+                    <div id="slug-error" class="inline-errors"><p><?= Security::e($errors['slug']) ?></p></div>
+                  <?php endif; ?>
+                </div>
+              </div>
 
-        <div class="input-wrap">
-          <label for="description">Description</label>
-          <textarea id="description" name="description" aria-describedby="desc-helper"><?= Security::e($values['description']) ?></textarea>
-          <div id="desc-helper" class="helper">Short internal description for admins.</div>
-        </div>
+              <div class="field">
+                <label for="description">Description</label>
+                <div class="field-control">
+                  <textarea id="description" name="description" aria-describedby="desc-helper"><?= Security::e($values['description']) ?></textarea>
+                  <div id="desc-helper" class="helper">Short internal description for admins.</div>
+                </div>
+              </div>
+            </div>
 
-        <div class="actions">
-          <button class="btn primary" type="submit" name="action" value="create_site" id="submitBtn" disabled>Create website</button>
-          <a class="btn text" href="<?= $base ?>/admin/">Cancel</a>
-        </div>
-      </form>
+            <div class="form-actions">
+              <a class="btn" href="<?= $base ?>/admin/">Cancel</a>
+              <button class="btn primary" type="submit" name="action" value="create_site" id="submitBtn" disabled>Create website</button>
+            </div>
+          </div>
+
+          <aside class="form-side">
+            <h2 class="section-title">What Gets Created</h2>
+            <div class="info-list">
+              <div class="info-card">
+                <strong>Homepage</strong>
+                <div class="helper">A default `home` page is created and set as the site homepage.</div>
+              </div>
+              <div class="info-card">
+                <strong>Header and Footer</strong>
+                <div class="helper">Default shell presets are seeded automatically so the site renders immediately.</div>
+              </div>
+              <div class="info-card">
+                <strong>Editable Later</strong>
+                <div class="helper">You can change the site name, slug, description, and shell setup after creation.</div>
+              </div>
+            </div>
+          </aside>
+        </form>
+      </div>
     </section>
   </main>
 

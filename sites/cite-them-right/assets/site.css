@@ -1,7 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap');
+body,
+input,
+button,
+select,
+textarea {
+  font-family: var(--nexus-font, Georgia, "Times New Roman", serif) !important;
+}
 
 body {
-  font-family: 'Open Sans', 'Segoe UI', Arial, sans-serif !important;
   background: #efefef !important;
   color: #333;
 }
@@ -121,6 +126,11 @@ body {
 /* Page + content blocks */
 :is(.page-home, .page-home-signed-in) .nexus-page {
   background: transparent !important;
+  font-family: var(--nexus-font, Georgia, "Times New Roman", serif) !important;
+}
+
+:is(.page-home, .page-home-signed-in) .nexus-page * {
+  font-family: inherit;
 }
 
 :is(.page-home, .page-home-signed-in) .nexus-inner {
@@ -138,7 +148,7 @@ body {
 
 :is(.page-home, .page-home-signed-in) .nx-herobanner,
 :is(.page-home, .page-home-signed-in) .nx-herobanner-inner {
-  min-height: 320px;
+  min-height: 504px;
   border: 0;
   border-radius: 0;
 }
@@ -166,7 +176,7 @@ body {
   box-shadow: none;
 }
 
-:is(.page-home, .page-home-signed-in) .nx-panel--img-top {
+:is(.page-home, .page-home-signed-in) :is(.nx-panel--img-top, .nx-panel--text-top) {
   gap: 0;
   border: 0;
   border-radius: 0;
@@ -180,29 +190,29 @@ body {
   --ctr-home-feature-height: calc(var(--ctr-home-feature-media-height) + var(--ctr-home-feature-body-height));
 }
 
-:is(.page-home, .page-home-signed-in) .nx-panel--img-top {
+:is(.page-home, .page-home-signed-in) :is(.nx-panel--img-top, .nx-panel--text-top) {
   display: grid;
-  grid-template-rows: var(--ctr-home-feature-media-height) var(--ctr-home-feature-body-height);
+  grid-template-rows: var(--panel-media-height, var(--ctr-home-feature-media-height)) var(--ctr-home-feature-body-height);
   height: 100%;
-  min-height: var(--ctr-home-feature-height);
-  max-height: var(--ctr-home-feature-height);
+  min-height: calc(var(--panel-media-height, var(--ctr-home-feature-media-height)) + var(--ctr-home-feature-body-height));
+  max-height: calc(var(--panel-media-height, var(--ctr-home-feature-media-height)) + var(--ctr-home-feature-body-height));
 }
 
-:is(.page-home, .page-home-signed-in) .nx-panel--img-top .nx-panel-media {
+:is(.page-home, .page-home-signed-in) :is(.nx-panel--img-top, .nx-panel--text-top) .nx-panel-media {
   min-height: 0;
   aspect-ratio: auto;
-  height: var(--ctr-home-feature-media-height);
+  height: var(--panel-media-height, var(--ctr-home-feature-media-height));
   border: 0;
   border-radius: 0;
 }
 
-:is(.page-home, .page-home-signed-in) .nx-panel--img-top .nx-panel-media img {
+:is(.page-home, .page-home-signed-in) :is(.nx-panel--img-top, .nx-panel--text-top) .nx-panel-media img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-:is(.page-home, .page-home-signed-in) .nx-panel--img-top .nx-panel-body {
+:is(.page-home, .page-home-signed-in) :is(.nx-panel--img-top, .nx-panel--text-top) .nx-panel-body {
   background: #e9e9e9;
   text-align: center;
   font-size: 24px;
@@ -210,7 +220,7 @@ body {
   padding: 12px 8px;
 }
 
-:is(.page-home, .page-home-signed-in) .nx-panel--img-top .nx-panel-body {
+:is(.page-home, .page-home-signed-in) :is(.nx-panel--img-top, .nx-panel--text-top) .nx-panel-body {
   min-height: var(--ctr-home-feature-body-height);
   max-height: var(--ctr-home-feature-body-height);
   display: flex;
@@ -249,10 +259,10 @@ body {
 }
 
 :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(2) .nx-card,
-:is(.page-home, .page-home-signed-in) .nx-panel--img-top {
+:is(.page-home, .page-home-signed-in) :is(.nx-panel--img-top, .nx-panel--text-top) {
   height: 100%;
-  min-height: var(--ctr-home-feature-height);
-  max-height: var(--ctr-home-feature-height);
+  min-height: calc(var(--panel-media-height, var(--ctr-home-feature-media-height)) + var(--ctr-home-feature-body-height));
+  max-height: calc(var(--panel-media-height, var(--ctr-home-feature-media-height)) + var(--ctr-home-feature-body-height));
 }
 
 :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(2) .nx-card-title {
@@ -276,37 +286,136 @@ body {
   font-weight: 600;
 }
 
-:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel,
-:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel,
-:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel {
-  background: #eaeaea;
-  border: 0;
-  border-radius: 0;
-  gap: 0;
-}
-
 :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-left,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-right,
 :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-left,
-:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-left {
-  grid-template-columns: 34% 66%;
-}
-
-:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel-media,
-:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel-media,
-:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel-media {
-  min-height: 130px;
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-right,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-left,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-right,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-left,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-right {
+  display: grid;
+  grid-template-columns: var(--panel-columns, minmax(0, 1fr) minmax(0, 1fr)) !important;
+  background: #f3f3f1;
   border: 0;
   border-radius: 0;
+  gap: 18px;
+  min-height: var(--panel-media-height, 180px);
+  height: 100%;
+  align-items: stretch;
+  padding: 14px;
 }
 
-:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel-body,
-:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel-body,
-:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel-body {
-  padding: 14px 16px;
-  font-size: 11px;
-  line-height: 1.55;
-  text-align: left;
-  background: #eaeaea;
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7),
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8),
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9),
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) {
+  align-items: stretch;
+}
+
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-col,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-col,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-col,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-col {
+  display: flex;
+}
+
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-col > div,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-col > div,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-col > div,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-col > div {
+  width: 100%;
+  height: 100%;
+}
+
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-left .nx-panel-media,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-right .nx-panel-media,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-left .nx-panel-media,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-right .nx-panel-media,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-left .nx-panel-media,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-right .nx-panel-media,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-left .nx-panel-media,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-right .nx-panel-media {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: var(--panel-media-height, 180px);
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  margin: 0;
+  align-self: stretch;
+  justify-self: stretch;
+}
+
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-left .nx-panel-media img,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-right .nx-panel-media img,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-left .nx-panel-media img,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-right .nx-panel-media img,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-left .nx-panel-media img,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-right .nx-panel-media img,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-left .nx-panel-media img,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-right .nx-panel-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-left .nx-panel-body,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-right .nx-panel-body,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-left .nx-panel-body,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-right .nx-panel-body,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-left .nx-panel-body,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-right .nx-panel-body,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-left .nx-panel-body,
+:is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-right .nx-panel-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: 0;
+  min-width: 0;
+  background: #f3f3f1;
+  min-height: 0;
+}
+
+@media (max-width: 768px) {
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-left,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-right,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-left,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-right,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-left,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-right,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-left,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-right {
+    grid-template-columns: 1fr !important;
+  }
+
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-left .nx-panel-media,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-right .nx-panel-media,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-left .nx-panel-media,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-right .nx-panel-media,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-left .nx-panel-media,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-right .nx-panel-media,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-left .nx-panel-media,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-right .nx-panel-media {
+    width: 100% !important;
+    height: 220px !important;
+    min-height: 220px;
+    margin: 0;
+  }
+
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-left .nx-panel-body,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(7) .nx-panel--img-right .nx-panel-body,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-left .nx-panel-body,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(8) .nx-panel--img-right .nx-panel-body,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-left .nx-panel-body,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(9) .nx-panel--img-right .nx-panel-body,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-left .nx-panel-body,
+  :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) .nx-panel--img-right .nx-panel-body {
+    padding: 0;
+  }
 }
 
 :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(10) {
@@ -511,7 +620,7 @@ body {
     font-size: 16px;
   }
 
-  :is(.page-home, .page-home-signed-in) .nx-panel--img-top .nx-panel-body {
+  :is(.page-home, .page-home-signed-in) :is(.nx-panel--img-top, .nx-panel--text-top) .nx-panel-body {
     font-size: 16px;
   }
 
@@ -525,12 +634,12 @@ body {
     --ctr-home-feature-media-height: auto;
   }
 
-  :is(.page-home, .page-home-signed-in) .nx-panel--img-top {
+  :is(.page-home, .page-home-signed-in) :is(.nx-panel--img-top, .nx-panel--text-top) {
     grid-template-rows: auto auto;
   }
 
-  :is(.page-home, .page-home-signed-in) .nx-panel--img-top .nx-panel-media,
-  :is(.page-home, .page-home-signed-in) .nx-panel--img-top,
+  :is(.page-home, .page-home-signed-in) :is(.nx-panel--img-top, .nx-panel--text-top) .nx-panel-media,
+  :is(.page-home, .page-home-signed-in) :is(.nx-panel--img-top, .nx-panel--text-top),
   :is(.page-home, .page-home-signed-in) .nx-row:nth-of-type(2) .nx-card {
     height: auto;
     max-height: none;
@@ -573,8 +682,7 @@ body {
 }
 
 :is(.page-home, .page-home-signed-in) .nexus-page .nx-row.nx-row--equal > .nx-col > :only-child,
-:is(.page-home, .page-home-signed-in) .nexus-page .nx-row.nx-row--equal > .nx-col > :only-child > div,
-:is(.page-home, .page-home-signed-in) .nexus-page .nx-row.nx-row--equal > .nx-col > :only-child > div > div {
+:is(.page-home, .page-home-signed-in) .nexus-page .nx-row.nx-row--equal > .nx-col > :only-child > div {
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -836,7 +944,7 @@ body {
 .page-source-type .nexus-page,
 .template-source-type .nexus-page {
   margin: 0 auto;
-  font-family: var(--nexus-font, 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif) !important;
+  font-family: var(--nexus-font, Georgia, "Times New Roman", serif) !important;
 }
 
 .page-source-type .nexus-page *,

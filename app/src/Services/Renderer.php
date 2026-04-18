@@ -444,12 +444,23 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         if ($imageSizeLevel < 1 || $imageSizeLevel > 5) $imageSizeLevel = 3;
         $mediaSizeMap = [1 => '96px', 2 => '132px', 3 => '180px', 4 => '220px', 5 => '260px'];
         $mediaHeightMap = [1 => '90px', 2 => '120px', 3 => '160px', 4 => '210px', 5 => '260px'];
-        $colsMap = [
-          '50-50' => '1fr 1fr',
-          '60-40' => '3fr 2fr',
-          '70-30' => '7fr 3fr',
+        $leftColsMap = [
+          '30-70' => 'minmax(0, 3fr) minmax(0, 7fr)',
+          '40-60' => 'minmax(0, 2fr) minmax(0, 3fr)',
+          '50-50' => 'minmax(0, 1fr) minmax(0, 1fr)',
+          '60-40' => 'minmax(0, 3fr) minmax(0, 2fr)',
+          '70-30' => 'minmax(0, 7fr) minmax(0, 3fr)',
         ];
-        $cols = $colsMap[$split] ?? '1fr 1fr';
+        $rightColsMap = [
+          '30-70' => 'minmax(0, 7fr) minmax(0, 3fr)',
+          '40-60' => 'minmax(0, 3fr) minmax(0, 2fr)',
+          '50-50' => 'minmax(0, 1fr) minmax(0, 1fr)',
+          '60-40' => 'minmax(0, 2fr) minmax(0, 3fr)',
+          '70-30' => 'minmax(0, 3fr) minmax(0, 7fr)',
+        ];
+        $cols = $layout === 'img-right'
+          ? ($rightColsMap[$split] ?? 'minmax(0, 1fr) minmax(0, 1fr)')
+          : ($leftColsMap[$split] ?? 'minmax(0, 1fr) minmax(0, 1fr)');
 
         $bodyRaw = (string)($p['bodyHtml'] ?? ($p['html'] ?? ''));
         if (trim((string)($p['blockLink'] ?? '')) !== '' && $bodyRaw !== '') {
@@ -477,8 +488,9 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         $extra = $stacked ? ' nx-panel--stacked' : '';
         $styleParts = [];
         if (!$stacked) {
+          $styleParts[] = "--panel-columns:{$cols}";
           $styleParts[] = "grid-template-columns:{$cols}";
-          $styleParts[] = "--panel-media-size:" . $mediaSizeMap[$imageSizeLevel];
+          $styleParts[] = "--panel-media-height:" . $mediaSizeMap[$imageSizeLevel];
         } else {
           $styleParts[] = "--panel-media-height:" . $mediaHeightMap[$imageSizeLevel];
         }

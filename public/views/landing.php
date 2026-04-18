@@ -269,15 +269,17 @@ $totalSites = count($siteRows);
 
       <div class="nav-group">
         <div class="nav-label">Content Management</div>
+        <a class="nav-link" href="<?= $base ?>/">Dashboard</a>
         <a class="nav-link active" href="<?= $base ?>/admin/index.php">Sites</a>
         <a class="nav-link" href="<?= $base ?>/admin/users.php">Users</a>
         <a class="nav-link" href="<?= $base ?>/admin/images.php">Media</a>
-        <a class="nav-link" href="<?= $base ?>/admin/databases.php">Databases</a>
+        <a class="nav-link" href="<?= $base ?>/admin/databases.php">Database</a>
       </div>
 
       <div class="nav-group">
         <div class="nav-label">Actions</div>
         <a class="nav-link" href="<?= $base ?>/admin/site_new.php">Create Site</a>
+        <a class="nav-link" href="<?= $base ?>/admin/user_new.php">Create User</a>
       </div>
     </aside>
 

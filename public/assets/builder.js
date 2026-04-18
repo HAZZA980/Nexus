@@ -855,6 +855,25 @@
     const n = parseInt(String(raw || '3'), 10);
     return Number.isFinite(n) ? Math.max(1, Math.min(5, n)) : 3;
   };
+  const getPanelGridColumns = (layout, splitRatio) => {
+    const leftColsMap = {
+      '30-70': 'minmax(0, 3fr) minmax(0, 7fr)',
+      '40-60': 'minmax(0, 2fr) minmax(0, 3fr)',
+      '50-50': 'minmax(0, 1fr) minmax(0, 1fr)',
+      '60-40': 'minmax(0, 3fr) minmax(0, 2fr)',
+      '70-30': 'minmax(0, 7fr) minmax(0, 3fr)'
+    };
+    const rightColsMap = {
+      '30-70': 'minmax(0, 7fr) minmax(0, 3fr)',
+      '40-60': 'minmax(0, 3fr) minmax(0, 2fr)',
+      '50-50': 'minmax(0, 1fr) minmax(0, 1fr)',
+      '60-40': 'minmax(0, 2fr) minmax(0, 3fr)',
+      '70-30': 'minmax(0, 3fr) minmax(0, 7fr)'
+    };
+    return layout === 'img-right'
+      ? (rightColsMap[splitRatio] || 'minmax(0, 1fr) minmax(0, 1fr)')
+      : (leftColsMap[splitRatio] || 'minmax(0, 1fr) minmax(0, 1fr)');
+  };
 
   function ensureAccordionTabsProps(blk) {
     blk.props = blk.props || {};
@@ -1436,6 +1455,7 @@
     const body = hasHtml(panelBodyHtml)
       ? panelBodyHtml
       : formatMarked((p.body || '').slice(0, 260));
+    const bodyWrap = (inner, extraStyle = '') => `<div class="panel-body"${extraStyle ? ` style="${extraStyle}"` : ''}>${inner}</div>`;
     const img = p.image ? `<div class="panel-img" style="background:url('${esc(p.image)}') center/cover no-repeat;"></div>` : `<div class="panel-img panel-img--placeholder">Add image</div>`;
     const layout = p.layout || 'img-top';
     const horizontal = layout === 'img-left' || layout === 'img-right';
@@ -1443,25 +1463,19 @@
     const imageSizeLevel = normalizePanelImageSizeLevel(p.imageSizeLevel);
     const horizontalSizeMap = { 1: '96px', 2: '132px', 3: '180px', 4: '220px', 5: '260px' };
     const stackedSizeMap = { 1: '90px', 2: '120px', 3: '160px', 4: '210px', 5: '260px' };
-    const colsMap = {
-      '50-50': '1fr 1fr',
-      '60-40': '3fr 2fr',
-      '40-60': '2fr 3fr',
-      '70-30': '7fr 3fr',
-      '30-70': '3fr 7fr'
-    };
-    const cols = colsMap[split] || '1fr 1fr';
-    const order = (wantFirst) => {
-      if (horizontal) return wantFirst ? (layout === 'img-left' ? img : body) : (layout === 'img-left' ? body : img);
-      return wantFirst ? img : body; // stacked
-    };
+    const cols = getPanelGridColumns(layout, split);
+    const textBlock = bodyWrap(body, horizontal ? '' : 'text-align:center');
+    const orderedChildren = (() => {
+      if (layout === 'img-right') return [textBlock, img];
+      if (layout === 'text-top') return [textBlock, img];
+      return [img, textBlock];
+    })();
     const styleVars = horizontal
-      ? `--panel-media-size:${horizontalSizeMap[imageSizeLevel]};`
+      ? `--panel-columns:${cols};--panel-media-height:${horizontalSizeMap[imageSizeLevel]};`
       : `--panel-media-height:${stackedSizeMap[imageSizeLevel]};`;
     return wrapBlockLink(`
       <div class="nx-panel-preview ${horizontal ? 'panel-horizontal' : 'panel-stacked'}" data-layout="${layout}" style="${styleVars}${horizontal ? `grid-template-columns:${cols}` : ''}">
-        ${order(true)}
-        ${horizontal ? order(false) : `<div class="panel-body" style="text-align:center">${body}</div>`}
+        ${orderedChildren.join('')}
       </div>
     `);
   }
