@@ -1862,12 +1862,18 @@
   const normalizeInlineBreakHtml = (raw) => {
     if (!raw) return '';
     return String(raw)
+      .replace(/<(?:p|div|section|article)\b[^>]*>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:p|div|section|article)>/gi, '\n')
+      .replace(/<\/p>\s*<p\b[^>]*>/gi, '\n')
+      .replace(/<\/div>\s*<div\b[^>]*>/gi, '\n')
+      .replace(/<\/section>\s*<section\b[^>]*>/gi, '\n')
+      .replace(/<\/article>\s*<article\b[^>]*>/gi, '\n')
       .replace(/<\s*\/?(?:div|p|section|article)\b[^>]*>/gi, '\n')
       .replace(/<\s*li\b[^>]*>/gi, '\n• ')
       .replace(/<\s*\/li\s*>/gi, '\n')
       .replace(/<\s*\/?(?:ul|ol)\b[^>]*>/gi, '\n')
       .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{2,}/g, '\n')
       .replace(/^\n+|\n+$/g, '')
       .replace(/\n/g, '<br>');
   };
@@ -2034,14 +2040,23 @@
     const showTry = p.showYouTry !== false;
     const extraClass = showTry ? '' : ' nx-examplecard--single';
     const rightCol = showTry ? `
-          <div style="padding:12px 14px">
-            <div style="font-weight:900;margin-bottom:8px">You try</div>
-            <div class="nx-examplecard-trybox" style="border:1px solid rgba(17,24,39,.35);border-radius:12px;padding:10px 12px;color:rgba(17,24,39,.82)">${youTry}</div>
+          <div class="nx-examplecard-right">
+            <div class="nx-examplecard-try-title">You try</div>
+            <div class="nx-trybox">
+              <div class="nx-examplecard-trybox">${youTry}</div>
+              <div class="nx-try-actions">
+                <div class="nx-try-actions-group">
+                  <button type="button" class="nx-try-action nx-try-action--italic">Italicise</button>
+                  <button type="button" class="nx-try-action">Copy</button>
+                </div>
+                <button type="button" class="nx-try-action">Email</button>
+              </div>
+            </div>
           </div>` : '';
     return `
-      <div class="nx-examplecard${extraClass}" style="display:grid;grid-template-columns:${showTry ? '1fr 1fr' : '1fr'};gap:10px;align-items:start;border:1px solid rgba(17,24,39,.18);border-radius:14px;overflow:hidden;background:#f9f9f7">
-        <div style="background:#e2e3e6;padding:12px 14px">
-          <div style="font-weight:900;margin-bottom:8px">${heading}</div>
+      <div class="nx-examplecard${extraClass}" style="grid-template-columns:${showTry ? 'minmax(0, 1fr) minmax(0, 1fr)' : '1fr'}">
+        <div class="nx-examplecard-left">
+          <div class="nx-examplecard-heading">${heading}</div>
           <div class="nx-examplecard-body">${body}</div>
         </div>
         ${rightCol}

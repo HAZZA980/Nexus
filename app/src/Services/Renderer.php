@@ -452,12 +452,18 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
   {
     $html = self::safeInlineHtml($html);
     if ($html === '') return '';
+    $html = preg_replace('/<(?:p|div|section|article)\b[^>]*>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:p|div|section|article)>/iu', "\n", $html) ?? $html;
+    $html = preg_replace('/<\/p>\s*<p\b[^>]*>/iu', "\n", $html) ?? $html;
+    $html = preg_replace('/<\/div>\s*<div\b[^>]*>/iu', "\n", $html) ?? $html;
+    $html = preg_replace('/<\/section>\s*<section\b[^>]*>/iu', "\n", $html) ?? $html;
+    $html = preg_replace('/<\/article>\s*<article\b[^>]*>/iu', "\n", $html) ?? $html;
     $html = preg_replace('/<\s*\/?(?:div|p|section|article)\b[^>]*>/iu', "\n", $html) ?? $html;
     $html = preg_replace('/<\s*li\b[^>]*>/iu', "\n• ", $html) ?? $html;
     $html = preg_replace('/<\s*\/li\s*>/iu', "\n", $html) ?? $html;
     $html = preg_replace('/<\s*\/?(?:ul|ol)\b[^>]*>/iu', "\n", $html) ?? $html;
     $html = preg_replace('/<br\s*\/?>/iu', "\n", $html) ?? $html;
-    $html = preg_replace("/\n{3,}/", "\n\n", $html) ?? $html;
+    $html = preg_replace("/[ \t]+\n/", "\n", $html) ?? $html;
+    $html = preg_replace("/\n{2,}/", "\n", $html) ?? $html;
     $html = trim($html, "\n");
     return str_replace("\n", '<br>', $html);
   }
@@ -743,6 +749,13 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
             . "<div class=\"nx-examplecard-try-title\">You try</div>"
             . "<div class=\"nx-trybox\">"
               . "<div id=\"{$uid}_input\" class=\"nx-try-input\" aria-label=\"Enter your citation\" contenteditable=\"true\">{$expectedHtml}</div>"
+              . "<div class=\"nx-try-actions\">"
+                . "<div class=\"nx-try-actions-group\">"
+                  . "<button type=\"button\" class=\"nx-try-action nx-try-action--italic\">Italicise</button>"
+                  . "<button type=\"button\" class=\"nx-try-action\">Copy</button>"
+                . "</div>"
+                . "<button type=\"button\" class=\"nx-try-action\">Email</button>"
+              . "</div>"
             . "</div>"
             . "</div>";
         }

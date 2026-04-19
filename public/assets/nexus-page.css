@@ -104,35 +104,38 @@
 
 .nexus-page .nx-examplecard{
   display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:14px;
-  border:1px solid var(--nexus-border);
-  border-top:6px solid #a78bc8;
-  border-radius:var(--nexus-radius, 0);
+  grid-template-columns:minmax(0, 1.18fr) minmax(340px, .82fr);
+  gap:0;
+  border:1px solid #d8d8dd;
+  border-top:5px solid #ad92ce;
+  border-radius:0;
   overflow:hidden;
-  background:#f9f9f7;
+  background:#ffffff;
 }
 .nexus-page .nx-examplecard.nx-examplecard--single{
   grid-template-columns:1fr;
 }
 .nexus-page .nx-examplecard-left{
-  background:#dfdfe3;
-  padding:18px;
-  color:#2d2d2d;
+  background:#e1e1e4;
+  padding:30px 28px 32px;
+  color:#38383d;
 }
 .nexus-page .nx-examplecard-right{
-  padding:18px;
-  background:#f5f5f5;
-  color:#1f2937;
+  padding:28px 36px 26px;
+  background:#ffffff;
+  color:#38383d;
 }
 .nexus-page .nx-examplecard-heading{
-  font-weight:900;
-  margin-bottom:10px;
+  font-weight:700;
+  margin-bottom:22px;
   font-size:17px;
+  line-height:1.28;
+  color:#37373c;
 }
 .nexus-page .nx-examplecard-body{
-  line-height:1.35;
-  color:#1f2937;
+  font-size:16px;
+  line-height:1.42;
+  color:#404046;
 }
 .nexus-page .nx-examplecard-body > *,
 .nexus-page .nx-examplecard-trybox > *{
@@ -148,12 +151,12 @@
 .nexus-page .nx-examplecard-trybox ul,
 .nexus-page .nx-examplecard-trybox ol{
   margin:0 0 8px;
-  line-height:1.35;
+  line-height:1.42;
 }
 .nexus-page .nx-examplecard-body li,
 .nexus-page .nx-examplecard-trybox li{
-  margin:0 0 4px;
-  line-height:1.35;
+  margin:0 0 6px;
+  line-height:1.42;
 }
 .nexus-page .nx-examplecard-body > :last-child,
 .nexus-page .nx-examplecard-body p:last-child,
@@ -169,44 +172,71 @@
 }
 .nexus-page .nx-examplecard-body br + br,
 .nexus-page .nx-examplecard-trybox br + br{
-  display:none;
+  display:inline;
+  content:none;
+  margin-top:0;
 }
 .nexus-page .nx-examplecard-try-title{
-  font-weight:900;
-  margin-bottom:10px;
+  font-weight:700;
+  margin-bottom:18px;
+  font-size:17px;
+  line-height:1.28;
+  color:#37373c;
 }
 .nexus-page .nx-examplecard-trybox{
-  border:1px solid rgba(17,24,39,.25);
-  border-radius:var(--nexus-radius, 0);
-  padding:12px;
-  line-height:1.5;
-  color:#1f2937;
+  border:1px solid #8f8f94;
+  border-radius:18px;
+  padding:18px 20px;
+  min-height:78px;
+  background:#ffffff;
+  font-size:16px;
+  line-height:1.42;
+  color:#404046;
 }
-.nexus-page .nx-trybox{display:flex;flex-direction:column;gap:8px;}
+.nexus-page .nx-trybox{display:flex;flex-direction:column;gap:14px;}
 .nexus-page .nx-try-input{
   width:100%;
-  min-height:90px;
-  border:1px solid rgba(17,24,39,.25);
-  border-radius:var(--nexus-radius, 0);
-  padding:10px 12px;
+  min-height:78px;
+  border:1px solid #8f8f94;
+  border-radius:18px;
+  padding:18px 20px;
   font:inherit;
-  line-height:1.5;
+  line-height:1.42;
   background:#fff;
   white-space:pre-wrap;
+  color:#404046;
 }
 .nexus-page .nx-try-input.ok{background:#ecfdf3;border-color:#22c55e;}
 .nexus-page .nx-try-input.no{background:#fef2f2;border-color:#ef4444;}
-.nexus-page .nx-try-actions{display:flex;align-items:center;gap:10px;}
-.nexus-page .nx-try-check{
-  padding:8px 12px;
-  border-radius:var(--nexus-radius, 0);
-  border:1px solid rgba(37,99,235,.4);
-  background:#2563eb;
-  color:#fff;
-  cursor:pointer;
-  font-weight:700;
+.nexus-page .nx-try-actions{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
 }
-.nexus-page .nx-try-check:hover{filter:brightness(1.05);}
+.nexus-page .nx-try-actions-group{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.nexus-page .nx-try-check,
+.nexus-page .nx-try-action{
+  padding:6px 16px;
+  border-radius:10px;
+  border:1px solid #8f8f94;
+  background:#ffffff;
+  color:#3b3b40;
+  cursor:pointer;
+  font-weight:500;
+  font-size:14px;
+  line-height:1.25;
+  text-decoration:none;
+}
+.nexus-page .nx-try-check:hover,
+.nexus-page .nx-try-action:hover{background:#f6f6f8;}
+.nexus-page .nx-try-action--italic{font-style:italic;}
 .nexus-page .nx-try-status{font-weight:700;}
 .nexus-page .nx-try-status.ok{color:#166534;}
 .nexus-page .nx-try-status.no{color:#b91c1c;}

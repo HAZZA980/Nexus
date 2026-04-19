@@ -1042,8 +1042,8 @@ body {
 .page-source-type .nx-examplecard-try-title,
 .template-source-type .nx-examplecard-try-title {
   font-size: 17px;
-  font-weight: 800;
-  line-height: 1.2;
+  font-weight: 700;
+  line-height: 1.28;
 }
 
 .page-source-type .nx-examplecard-body,
@@ -1051,7 +1051,7 @@ body {
 .page-source-type .nx-examplecard-trybox,
 .template-source-type .nx-examplecard-trybox {
   font-size: 16px;
-  line-height: 1.45;
+  line-height: 1.42;
 }
 
 .page-source-type .nx-examplecard-body br + br,
@@ -1059,6 +1059,103 @@ body {
 .page-source-type .nx-examplecard-trybox br + br,
 .template-source-type .nx-examplecard-trybox br + br {
   display: inline;
+  content: none;
+  margin-top: 0;
+}
+
+.page-source-type .nx-examplecard,
+.template-source-type .nx-examplecard {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(340px, .82fr);
+  border: 1px solid #d8d8dd;
+  border-top: 5px solid #ad92ce;
+  border-radius: 0;
+  background: #fff;
+}
+
+.page-source-type .nx-examplecard-left,
+.template-source-type .nx-examplecard-left {
+  background: #e1e1e4;
+  padding: 30px 28px 32px;
+  color: #38383d;
+}
+
+.page-source-type .nx-examplecard-right,
+.template-source-type .nx-examplecard-right {
+  background: #fff;
+  padding: 28px 36px 26px;
+  color: #38383d;
+}
+
+.page-source-type .nx-examplecard-heading,
+.template-source-type .nx-examplecard-heading {
+  margin-bottom: 22px;
+  color: #37373c;
+}
+
+.page-source-type .nx-examplecard-try-title,
+.template-source-type .nx-examplecard-try-title {
+  margin-bottom: 18px;
+  color: #37373c;
+}
+
+.page-source-type .nx-examplecard-body,
+.template-source-type .nx-examplecard-body {
+  color: #404046;
+}
+
+.page-source-type .nx-examplecard-trybox,
+.template-source-type .nx-examplecard-trybox,
+.page-source-type .nx-try-input,
+.template-source-type .nx-try-input {
+  border: 1px solid #8f8f94;
+  border-radius: 18px;
+  padding: 18px 20px;
+  min-height: 78px;
+  background: #fff;
+  color: #404046;
+}
+
+.page-source-type .nx-trybox,
+.template-source-type .nx-trybox {
+  gap: 14px;
+}
+
+.page-source-type .nx-try-actions,
+.template-source-type .nx-try-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.page-source-type .nx-try-actions-group,
+.template-source-type .nx-try-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.page-source-type .nx-try-check,
+.template-source-type .nx-try-check,
+.page-source-type .nx-try-action,
+.template-source-type .nx-try-action {
+  padding: 6px 16px;
+  border: 1px solid #8f8f94;
+  border-radius: 10px;
+  background: #fff;
+  color: #3b3b40;
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.page-source-type .nx-try-action--italic,
+.template-source-type .nx-try-action--italic {
+  font-style: italic;
 }
 
 /* Preview-only source type layout should mirror the CMS editor composition */
