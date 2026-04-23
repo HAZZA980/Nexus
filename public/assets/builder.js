@@ -1189,6 +1189,9 @@
   let dragBlueprintActive = false;
   let activeDragBlock = null;
   let activeCanvasDropBlock = null;
+  let activeBlueprintDrop = null;
+  let blueprintPointerDrag = null;
+  let lastAutoReorderKey = '';
   let canvasViewMode = 'content';
 
   const BLOCK_TYPE_LABELS = {
@@ -1273,24 +1276,132 @@
     return base;
   }
 
-  function setCustomDragPreview(e, label) {
+  function setCustomDragPreview(e, label, sourceEl) {
     if (!e?.dataTransfer) return;
     const ghost = document.createElement('div');
     ghost.className = 'nx-blueprint-drag-ghost';
-    ghost.textContent = label || 'Block';
+    if (sourceEl instanceof HTMLElement) {
+      const rect = sourceEl.getBoundingClientRect();
+      ghost.style.width = `${Math.max(180, Math.ceil(rect.width))}px`;
+      ghost.style.minHeight = `${Math.max(44, Math.ceil(rect.height))}px`;
+      ghost.innerHTML = sourceEl.innerHTML;
+    } else {
+      ghost.textContent = label || 'Block';
+    }
     document.body.appendChild(ghost);
-    e.dataTransfer.setDragImage(ghost, 18, 18);
+    e.dataTransfer.setDragImage(ghost, 24, 20);
     requestAnimationFrame(() => ghost.remove());
   }
 
   function setDragBlueprintMode(active) {
     dragBlueprintActive = !!active;
     if (!dragBlueprintActive) activeDragBlock = null;
+    if (!dragBlueprintActive && activeBlueprintDrop) {
+      activeBlueprintDrop.classList.remove('is-over');
+      activeBlueprintDrop = null;
+    }
     if (canvasViewMode === 'blueprint') render();
+  }
+
+  function clearBlueprintDropState() {
+    if (!activeBlueprintDrop) return;
+    activeBlueprintDrop.classList.remove('is-over');
+    activeBlueprintDrop = null;
+  }
+
+  function setBlueprintDropState(el) {
+    if (activeBlueprintDrop && activeBlueprintDrop !== el) activeBlueprintDrop.classList.remove('is-over');
+    activeBlueprintDrop = el || null;
+    activeBlueprintDrop?.classList.add('is-over');
+  }
+
+  function updateBlueprintPointerGhost(clientX, clientY) {
+    if (!blueprintPointerDrag?.ghost) return;
+    const x = Math.round(clientX - blueprintPointerDrag.offsetX);
+    const y = Math.round(clientY - blueprintPointerDrag.offsetY);
+    blueprintPointerDrag.ghost.style.transform = `translate(${x}px, ${y}px)`;
+  }
+
+  function getBlueprintDropTargetAt(clientX, clientY) {
+    const el = document.elementFromPoint(clientX, clientY);
+    return el?.closest?.('.nx-blueprint-drop[data-r][data-c][data-b]') || null;
+  }
+
+  function finishBlueprintPointerDrag(commit) {
+    if (!blueprintPointerDrag) return;
+    const drag = blueprintPointerDrag;
+    blueprintPointerDrag = null;
+    document.removeEventListener('pointermove', drag.onMove, true);
+    document.removeEventListener('pointerup', drag.onUp, true);
+    document.removeEventListener('pointercancel', drag.onCancel, true);
+    drag.ghost?.remove();
+
+    const dropEl = commit ? activeBlueprintDrop : null;
+    const source = drag.source;
+    clearBlueprintDropState();
+
+    if (commit && dropEl) {
+      const target = {
+        r: parseInt(dropEl.dataset.r || '-1', 10),
+        c: parseInt(dropEl.dataset.c || '-1', 10),
+        b: parseInt(dropEl.dataset.b || '-1', 10),
+      };
+      if (target.r >= 0 && target.c >= 0 && target.b >= 0) {
+        applyBlockDrop(target, JSON.stringify(source), '');
+      }
+    }
+
+    setDragBlueprintMode(false);
+  }
+
+  function startBlueprintPointerDrag(e, chip, source, label) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = chip.getBoundingClientRect();
+    const ghost = document.createElement('div');
+    ghost.className = 'nx-blueprint-drag-ghost';
+    ghost.style.width = `${Math.ceil(rect.width)}px`;
+    ghost.style.minHeight = `${Math.ceil(rect.height)}px`;
+    ghost.innerHTML = chip.innerHTML;
+    document.body.appendChild(ghost);
+
+    activeDragBlock = { ...source, label };
+    setDragBlueprintMode(true);
+
+    blueprintPointerDrag = {
+      source,
+      ghost,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+      onMove: null,
+      onUp: null,
+      onCancel: null,
+    };
+
+    const onMove = (evt) => {
+      if (!blueprintPointerDrag) return;
+      updateBlueprintPointerGhost(evt.clientX, evt.clientY);
+      setBlueprintDropState(getBlueprintDropTargetAt(evt.clientX, evt.clientY));
+    };
+    const onUp = () => finishBlueprintPointerDrag(true);
+    const onCancel = () => finishBlueprintPointerDrag(false);
+    blueprintPointerDrag.onMove = onMove;
+    blueprintPointerDrag.onUp = onUp;
+    blueprintPointerDrag.onCancel = onCancel;
+
+    document.addEventListener('pointermove', onMove, true);
+    document.addEventListener('pointerup', onUp, true);
+    document.addEventListener('pointercancel', onCancel, true);
+
+    updateBlueprintPointerGhost(e.clientX, e.clientY);
+    setBlueprintDropState(getBlueprintDropTargetAt(e.clientX, e.clientY));
   }
 
   function setBlockDragMode(active) {
     document.body.classList.toggle('dragging-blocks', !!active);
+    if (!active) lastAutoReorderKey = '';
     if (!activeCanvasDropBlock) return;
     activeCanvasDropBlock.classList.remove('block-drop-before', 'block-drop-after');
     delete activeCanvasDropBlock.dataset.dropPos;
@@ -1321,6 +1432,19 @@
     return dropPos;
   }
 
+  function getCurrentMoveSource(movePayload) {
+    if (activeDragBlock && Number.isInteger(activeDragBlock.r) && Number.isInteger(activeDragBlock.c) && Number.isInteger(activeDragBlock.b)) {
+      return { r: activeDragBlock.r, c: activeDragBlock.c, b: activeDragBlock.b };
+    }
+    try {
+      const parsed = JSON.parse(movePayload || '');
+      if (Number.isInteger(parsed?.r) && Number.isInteger(parsed?.c) && Number.isInteger(parsed?.b)) {
+        return parsed;
+      }
+    } catch (err) {}
+    return null;
+  }
+
   function syncCanvasViewToggle() {
     if (viewContentBtn) {
       const on = canvasViewMode === 'content';
@@ -1345,12 +1469,8 @@
     if (!destBlocks) return false;
 
     if (movePayload) {
-      let move;
-      try {
-        move = JSON.parse(movePayload);
-      } catch (err) {
-        return false;
-      }
+      const move = getCurrentMoveSource(movePayload);
+      if (!move) return false;
       const fromBlocks = doc.rows?.[move.r]?.cols?.[move.c]?.blocks;
       if (!fromBlocks || !fromBlocks[move.b]) return false;
       const movedBlk = fromBlocks[move.b];
@@ -1363,6 +1483,7 @@
       let insertAt = insertAtRaw;
       if (move.r === r && move.c === c && move.b < insertAt) insertAt -= 1;
       destBlocks.splice(insertAt, 0, movedBlk);
+      activeDragBlock = { r, c, b: insertAt, label: activeDragBlock?.label || getBlueprintBlockLabel(movedBlk, {}) };
       selected = { r, c, b: insertAt };
       selectedRow = null;
       persistUnsaved();
@@ -1385,12 +1506,8 @@
   }
 
   function applyCanvasBlockReorder(r, c, b, dropPos, movePayload) {
-    let move;
-    try {
-      move = JSON.parse(movePayload);
-    } catch (err) {
-      return false;
-    }
+    const move = getCurrentMoveSource(movePayload);
+    if (!move) return false;
     const fromBlocks = doc.rows?.[move.r]?.cols?.[move.c]?.blocks;
     const destBlocks = doc.rows?.[r]?.cols?.[c]?.blocks;
     if (!fromBlocks || !destBlocks || !fromBlocks[move.b]) return false;
@@ -1406,6 +1523,7 @@
     let insertAt = targetIndexRaw;
     if (move.r === r && move.c === c && move.b < insertAt) insertAt -= 1;
     destBlocks.splice(insertAt, 0, movedBlk);
+    activeDragBlock = { r, c, b: insertAt, label: activeDragBlock?.label || getBlueprintBlockLabel(movedBlk, {}) };
     selected = { r, c, b: insertAt };
     selectedRow = null;
     persistUnsaved();
@@ -1419,12 +1537,8 @@
     const insertAtClamped = Math.max(0, Math.min(insertAtRaw, destBlocks.length));
 
     if (movePayload) {
-      let move;
-      try {
-        move = JSON.parse(movePayload);
-      } catch (err) {
-        return false;
-      }
+      const move = getCurrentMoveSource(movePayload);
+      if (!move) return false;
       const fromBlocks = doc.rows?.[move.r]?.cols?.[move.c]?.blocks;
       if (!fromBlocks || !fromBlocks[move.b]) return false;
       if (move.r === r && move.c === c && (insertAtClamped === move.b || insertAtClamped === move.b + 1)) {
@@ -1436,6 +1550,7 @@
       let insertAt = insertAtClamped;
       if (move.r === r && move.c === c && move.b < insertAt) insertAt -= 1;
       destBlocks.splice(insertAt, 0, movedBlk);
+      activeDragBlock = { r, c, b: insertAt, label: activeDragBlock?.label || getBlueprintBlockLabel(movedBlk, {}) };
       selected = { r, c, b: insertAt };
       selectedRow = null;
       persistUnsaved();
@@ -1517,15 +1632,35 @@
 
   function bindBlueprintDropTarget(el, target) {
     if (!el) return;
-    const clear = () => el.classList.remove('is-over');
-    el.addEventListener('dragover', (e) => {
-      const types = Array.from(e.dataTransfer?.types || []);
-      if (!types.includes('nx/move') && !types.includes('nx/type')) return;
-      e.preventDefault();
+    el.dataset.r = String(target.r);
+    el.dataset.c = String(target.c);
+    el.dataset.b = String(target.b);
+    const clear = () => {
+      el.classList.remove('is-over');
+      if (activeBlueprintDrop === el) activeBlueprintDrop = null;
+    };
+    const markActive = () => {
+      if (activeBlueprintDrop && activeBlueprintDrop !== el) activeBlueprintDrop.classList.remove('is-over');
+      activeBlueprintDrop = el;
       el.classList.add('is-over');
+    };
+    const canAccept = (e) => {
+      const types = Array.from(e.dataTransfer?.types || []);
+      return types.includes('nx/move') || types.includes('nx/type');
+    };
+    el.addEventListener('dragenter', (e) => {
+      if (!canAccept(e)) return;
+      e.preventDefault();
+      markActive();
+    });
+    el.addEventListener('dragover', (e) => {
+      if (!canAccept(e)) return;
+      e.preventDefault();
+      markActive();
     });
     el.addEventListener('dragleave', clear);
     el.addEventListener('drop', (e) => {
+      if (!canAccept(e)) return;
       e.preventDefault();
       clear();
       const moving = e.dataTransfer.getData('nx/move');
@@ -1589,6 +1724,16 @@
           if (selected && selected.r === r && selected.c === c && selected.b === b) chip.classList.add('is-selected');
           if (isDragged) chip.classList.add('is-dragging');
           chip.textContent = blockLabel;
+          chip.title = 'Drag to reorder';
+          chip.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selected = { r, c, b };
+            selectedRow = null;
+            render();
+            renderInspector();
+            syncToolbarFromSelection();
+          });
+          chip.addEventListener('pointerdown', (e) => startBlueprintPointerDrag(e, chip, { r, c, b }, blockLabel));
           colEl.appendChild(chip);
 
           const betweenSlot = document.createElement('div');
@@ -6518,10 +6663,7 @@
           }
 
           el.innerHTML = `
-            <div class="nx-muted" style="display:flex;justify-content:space-between">
-              <span>${esc(blk.type)}${blk.effect ? ' <span class="nx-star">★</span>' : ''}</span>
-              <span>drag</span>
-            </div>
+            <div class="nx-muted">${esc(blk.type)}${blk.effect ? ' <span class="nx-star">★</span>' : ''}</div>
             <div class="nx-block-preview" style="margin-top:6px">${blockPreviewSafe(blk)}</div>
           `;
 
@@ -6532,8 +6674,16 @@
             if (hasMove || hasType) {
               e.preventDefault();
               e.stopPropagation();
-              updateCanvasDropBlockState(el, e.clientY);
+              const dropPos = updateCanvasDropBlockState(el, e.clientY);
               if (e.dataTransfer) e.dataTransfer.dropEffect = hasMove ? 'move' : 'copy';
+              if (hasMove && activeDragBlock) {
+                const autoKey = `${activeDragBlock.r}:${activeDragBlock.c}:${activeDragBlock.b}->${r}:${c}:${b}:${dropPos}`;
+                if (autoKey !== lastAutoReorderKey) {
+                  lastAutoReorderKey = autoKey;
+                  const insertAt = dropPos === 'after' ? (b + 1) : b;
+                  applyCanvasInsertAt(r, c, insertAt, JSON.stringify(activeDragBlock), '');
+                }
+              }
               return;
             }
             if (!types.includes('nx/effect')) return;
@@ -6555,10 +6705,12 @@
             if (moving || type) {
               e.preventDefault();
               e.stopPropagation();
-              const dropPos = el.dataset.dropPos === 'after' ? 'after' : 'before';
-              const insertAt = dropPos === 'after' ? (b + 1) : b;
               clearCanvasDropBlockState();
-              applyCanvasInsertAt(r, c, insertAt, moving, type);
+              if (!moving && type) {
+                const dropPos = el.dataset.dropPos === 'after' ? 'after' : 'before';
+                const insertAt = dropPos === 'after' ? (b + 1) : b;
+                applyCanvasInsertAt(r, c, insertAt, moving, type);
+              }
               return;
             }
             const eff = e.dataTransfer.getData('nx/effect');
@@ -6598,11 +6750,14 @@
             e.dataTransfer.setData('text/plain', blk.id || `${r}-${c}-${b}`);
             e.dataTransfer.effectAllowed = 'move';
             activeDragBlock = { r, c, b, label: getBlueprintBlockLabel(blk, {}) };
+            el.classList.add('is-drag-source');
             setDragBlueprintMode(true);
             setBlockDragMode(true);
             setCustomDragPreview(e, activeDragBlock.label);
           });
           el.addEventListener('dragend', () => {
+            el.classList.remove('is-drag-source');
+            activeDragBlock = null;
             setDragBlueprintMode(false);
             setBlockDragMode(false);
           });
