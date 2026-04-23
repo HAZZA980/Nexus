@@ -1015,9 +1015,16 @@ body {
 
 .page-source-type .nx-citation,
 .template-source-type .nx-citation {
-  background: #fff;
-  border-radius: 16px;
+  background: #f3f3f4;
+  border-radius: 20px;
   box-shadow: none;
+  width: 100%;
+  box-sizing: border-box;
+  display: block;
+  max-width: none;
+  align-self: stretch;
+  margin: 0;
+  padding: 26px 28px 28px;
 }
 
 .page-source-type .nx-citation-title,
@@ -1051,7 +1058,7 @@ body {
 .page-source-type .nx-examplecard-trybox,
 .template-source-type .nx-examplecard-trybox {
   font-size: 16px;
-  line-height: 1.42;
+  line-height: 1.34;
 }
 
 .page-source-type .nx-examplecard-body br + br,
@@ -1102,6 +1109,41 @@ body {
 .page-source-type .nx-examplecard-body,
 .template-source-type .nx-examplecard-body {
   color: #404046;
+}
+
+.page-source-type .nx-examplecard-body p,
+.template-source-type .nx-examplecard-body p,
+.page-source-type .nx-examplecard-body div,
+.template-source-type .nx-examplecard-body div,
+.page-source-type .nx-examplecard-body ul,
+.template-source-type .nx-examplecard-body ul,
+.page-source-type .nx-examplecard-body ol,
+.template-source-type .nx-examplecard-body ol,
+.page-source-type .nx-examplecard-trybox p,
+.template-source-type .nx-examplecard-trybox p,
+.page-source-type .nx-examplecard-trybox div,
+.template-source-type .nx-examplecard-trybox div,
+.page-source-type .nx-examplecard-trybox ul,
+.template-source-type .nx-examplecard-trybox ul,
+.page-source-type .nx-examplecard-trybox ol,
+.template-source-type .nx-examplecard-trybox ol {
+  margin: 0 0 14px;
+  line-height: 1.34;
+}
+
+.page-source-type .nx-examplecard-body li,
+.template-source-type .nx-examplecard-body li,
+.page-source-type .nx-examplecard-trybox li,
+.template-source-type .nx-examplecard-trybox li {
+  margin: 0 0 8px;
+  line-height: 1.34;
+}
+
+.page-source-type .nx-examplecard-body > :last-child,
+.template-source-type .nx-examplecard-body > :last-child,
+.page-source-type .nx-examplecard-trybox > :last-child,
+.template-source-type .nx-examplecard-trybox > :last-child {
+  margin-bottom: 0;
 }
 
 .page-source-type .nx-examplecard-trybox,

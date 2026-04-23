@@ -371,6 +371,15 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     return nl2br($withItalics);
   }
 
+  private static function formatMarkedInlineText(string $text): string
+  {
+    if ($text === '') return '';
+    $escaped = Security::e($text);
+    $withBold = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $escaped);
+    $withItalics = preg_replace('/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/', '<em>$1</em>', $withBold);
+    return nl2br($withItalics);
+  }
+
   private static function htmlToPlainText(string $html): string
   {
     if ($html === '') return '';
@@ -435,6 +444,45 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     $html = preg_replace('/(?:(?:<(?:div|p)>(?:\s|&nbsp;|<br\s*\/?>)*<\/(?:div|p)>)\s*){2,}/iu', '<br>', $html) ?? $html;
     $html = preg_replace('/(?:<br\s*\/?>\s*){3,}/iu', '<br>', $html) ?? $html;
     return $html;
+  }
+
+  private static function formatExampleText(string $text): string
+  {
+    $text = trim(str_replace("\r", '', $text));
+    if ($text === '') return '';
+
+    $parts = preg_split("/(?:\n[ \t]*){2,}/", $text) ?: [];
+    $parts = array_values(array_filter(array_map(static fn($part) => trim($part), $parts), static fn($part) => $part !== ''));
+    if ($parts === []) return '';
+
+    $html = '';
+    foreach ($parts as $part) {
+      $html .= '<p>' . self::formatMarkedInlineText($part) . '</p>';
+    }
+    return $html;
+  }
+
+  private static function normalizeExampleHtml(string $html): string
+  {
+    $html = self::safeInlineHtml(self::compactExampleHtml($html));
+    if ($html === '') return '';
+
+    if (preg_match('/<(?:p|div|section|article|ul|ol|li|h[1-6])\b/i', $html) === 1) {
+      return $html;
+    }
+
+    $parts = preg_split('/(?:<br\s*\/?>\s*){2,}/iu', $html) ?: [];
+    $parts = array_values(array_filter(array_map(static fn($part) => trim($part), $parts), static fn($part) => $part !== ''));
+    if ($parts === []) {
+      return '';
+    }
+
+    $normalized = '';
+    foreach ($parts as $part) {
+      $part = preg_replace('/(?:<br\s*\/?>\s*){2,}/iu', '<br>', $part) ?? $part;
+      $normalized .= '<p>' . $part . '</p>';
+    }
+    return $normalized;
   }
 
   private static function flattenExampleHtml(string $html): string
@@ -717,18 +765,18 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
           : (string)($p['bodyHtml'] ?? ($p['html'] ?? ''));
         if ($bodyRaw !== '') {
           if (self::hasHtml($bodyRaw)) {
-            $body = self::normalizeInlineBreakHtml($bodyRaw);
+            $body = self::normalizeExampleHtml($bodyRaw);
           } else {
-            $body = self::formatMarkedText(self::compactExampleText($bodyRaw));
+            $body = self::formatExampleText($bodyRaw);
           }
         } else {
-          $body = self::formatMarkedText(self::compactExampleText((string)($p['body'] ?? '')));
+          $body = self::formatExampleText((string)($p['body'] ?? ''));
         }
 
         $youTryRaw = $liveCitation ? (string)($liveCitation['you_try'] ?? '') : (string)($p['youTry'] ?? '');
         $youTry = self::hasHtml($youTryRaw)
-          ? self::normalizeInlineBreakHtml($youTryRaw)
-          : self::formatMarkedText(self::compactExampleText($youTryRaw));
+          ? self::normalizeExampleHtml($youTryRaw)
+          : self::formatExampleText($youTryRaw);
         $showTry = !array_key_exists('showYouTry', $p) || (bool)$p['showYouTry'];
         $extraClass = $showTry ? '' : ' nx-examplecard--single';
 
@@ -742,8 +790,8 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
           $uid = uniqid('yt_', false);
           $expected = $liveCitation ? (string)($liveCitation['you_try'] ?? '') : (string)($p['youTry'] ?? '');
           $expectedHtml = self::hasHtml($expected)
-            ? self::normalizeInlineBreakHtml($expected)
-            : self::formatMarkedText(self::compactExampleText($expected));
+            ? self::normalizeExampleHtml($expected)
+            : self::formatExampleText($expected);
 
           $html .= "<div class=\"nx-examplecard-right\">"
             . "<div class=\"nx-examplecard-try-title\">You try</div>"

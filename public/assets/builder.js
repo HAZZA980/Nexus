@@ -576,11 +576,15 @@
   };
   const applyCitationOrderToBlock = (blk, ex) => {
     if (!ex) return;
-    const formatted = formatCitationOrder(ex.citationOrder || ex.citationOrderHtml || ex.body || '');
+    const htmlSource = ex.citationOrderHtml || ex.citationOrder || '';
+    const textSource = ex.citationOrder || ex.citationOrderHtml || ex.body || '';
+    const formatted = formatCitationOrder(textSource);
     blk.props = blk.props || {};
     blk.props.exampleId = ex.id;
     blk.props.body = formatted;
-    blk.props.html = formatted.replace(/\n/g, '<br>');
+    blk.props.html = hasHtml(htmlSource)
+      ? htmlSource
+      : formatted.replace(/\n/g, '<br>');
   };
   const applyYouTryToBlock = (blk, ex) => {
     if (!ex) return;
@@ -1859,6 +1863,40 @@
     }
     return raw;
   };
+  const formatMarkedInline = (str) => {
+    if (!str) return '';
+    const escaped = String(str)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+    const withBold = escaped.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    return withBold
+      .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g,'<em>$1</em>')
+      .replace(/\r?\n/g,'<br>');
+  };
+  const formatExampleText = (raw) => {
+    const text = String(raw || '').replace(/\r/g, '').trim();
+    if (!text) return '';
+    return text
+      .split(/\n\s*\n+/)
+      .map(part => part.trim())
+      .filter(Boolean)
+      .map(part => `<p>${formatMarkedInline(part)}</p>`)
+      .join('');
+  };
+  const normalizeExampleHtml = (raw) => {
+    const html = compactExampleHtml(raw);
+    if (!html) return '';
+    if (/<(?:p|div|section|article|ul|ol|li|h[1-6])\b/i.test(html)) return html;
+    return html
+      .split(/(?:<br\s*\/?>\s*){2,}/i)
+      .map(part => part.trim())
+      .filter(Boolean)
+      .map(part => `<p>${part.replace(/(?:<br\s*\/?>\s*){2,}/gi, '<br>')}</p>`)
+      .join('');
+  };
   const normalizeInlineBreakHtml = (raw) => {
     if (!raw) return '';
     return String(raw)
@@ -1905,11 +1943,12 @@
   if (blk.type === 'youTry') {
     const liveCitation = getLiveCitationForBlock(blk);
     const title = esc(p.title || 'You try');
+    const liveBody = liveCitation ? String(liveCitation.youTryHtml || liveCitation.youTry || '').slice(0, 180) : '';
     const body = liveCitation
-      ? formatMarked(String(liveCitation.youTry || liveCitation.youTryHtml || '').slice(0, 180))
+      ? (hasHtml(liveBody) ? normalizeExampleHtml(liveBody) : formatExampleText(liveBody))
       : hasHtml(p.html)
-      ? p.html
-      : formatMarked((p.body || '').slice(0, 180));
+      ? normalizeExampleHtml(p.html)
+      : formatExampleText((p.body || '').slice(0, 180));
     return wrap(`<div><b>${title}</b><div style="margin-top:6px">${body}</div></div>`);
   }
 
@@ -2003,17 +2042,18 @@
   if (blk.type === 'citationOrder') {
     const liveCitation = getLiveCitationForBlock(blk);
     const title = esc(p.title || 'Citation order');
-    const citationSource = liveCitation
+    const citationHtmlSource = liveCitation
+      ? (liveCitation.citationOrderHtml || liveCitation.citationOrder || '')
+      : (p.html || '');
+    const citationTextSource = liveCitation
       ? (liveCitation.citationOrder || liveCitation.citationOrderHtml || liveCitation.body || '')
       : (p.body || '');
-    const normalized = formatCitationOrder(citationSource);
-    const body = liveCitation
-      ? formatMarked(normalized.slice(0, 320))
-      : p.html
-      ? renderMarkedHtml(p.html)
+    const normalized = formatCitationOrder(citationTextSource);
+    const body = hasHtml(citationHtmlSource)
+      ? normalizeExampleHtml(citationHtmlSource)
       : formatMarked(normalized.slice(0, 320));
     return wrap(`
-      <div style="border:0;border-radius:14px;padding:14px;background:#fff">
+      <div style="border:1px solid #dcdcdf;border-radius:20px;padding:26px 28px 28px;background:#f3f3f4;width:100%;box-sizing:border-box;display:block;max-width:none;align-self:stretch;margin:0">
         <div style="font-weight:900;margin-bottom:8px">${title}</div>
         <div>${body}</div>
       </div>
@@ -2026,17 +2066,17 @@
     const liveBody = liveCitation ? (liveCitation.bodyHtml || liveCitation.body || '') : '';
     const liveYouTry = liveCitation ? (liveCitation.youTryHtml || liveCitation.youTry || '') : '';
     const exampleBodyHtml = hasHtml(liveBody)
-      ? flattenExampleHtml(liveBody)
-      : hasHtml(p.bodyHtml) ? flattenExampleHtml(p.bodyHtml) : p.bodyHtml;
+      ? compactExampleHtml(liveBody)
+      : hasHtml(p.bodyHtml) ? compactExampleHtml(p.bodyHtml) : p.bodyHtml;
     const exampleTryHtml = hasHtml(liveYouTry)
-      ? flattenExampleHtml(liveYouTry)
-      : hasHtml(p.youTry) ? flattenExampleHtml(p.youTry) : p.youTry;
+      ? compactExampleHtml(liveYouTry)
+      : hasHtml(p.youTry) ? compactExampleHtml(p.youTry) : p.youTry;
     const body = hasHtml(exampleBodyHtml)
-      ? normalizeInlineBreakHtml(exampleBodyHtml)
-      : formatMarked(compactExampleText(String(liveCitation ? (liveCitation.body || '') : (p.body || '')).slice(0, 420)));
+      ? normalizeExampleHtml(exampleBodyHtml)
+      : formatExampleText(String(liveCitation ? (liveCitation.body || '') : (p.body || '')).slice(0, 420));
     const youTry = hasHtml(exampleTryHtml)
-      ? normalizeInlineBreakHtml(exampleTryHtml || '')
-      : formatMarked(compactExampleText(String(liveCitation ? (liveCitation.youTry || '') : (p.youTry || 'Your turn…')).slice(0, 180)));
+      ? normalizeExampleHtml(exampleTryHtml || '')
+      : formatExampleText(String(liveCitation ? (liveCitation.youTry || '') : (p.youTry || 'Your turn…')).slice(0, 180));
     const showTry = p.showYouTry !== false;
     const extraClass = showTry ? '' : ' nx-examplecard--single';
     const rightCol = showTry ? `

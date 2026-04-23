@@ -3536,11 +3536,11 @@ if (isset($_SESSION['user_id'])) {
             <section class="modal-section">
               <div class="section-head">
                 <div class="section-title">Citation order</div>
-                <div class="section-sub">Define the canonical sequence (one item per line)</div>
+                <div class="section-sub">Define the canonical sequence with the rich editor. Stored as limited HTML.</div>
               </div>
               <div id="citationToolbarAnchor"></div>
-              <textarea name="citation_order" id="citationOrderField" rows="5" placeholder="1. Author / editor&#10;2. Year of publication (round brackets)&#10;3. Title of work (italics)&#10;4. Publisher&#10;5. DOI or URL (Accessed: date)" style="width:100%;max-height:160px"></textarea>
-              <div class="helper">Tip: use bullets to list steps; drag handles may come later.</div>
+              <textarea name="citation_order" id="citationOrderField" rows="5" placeholder="Author / editor&#10;Year of publication (round brackets)&#10;Title of work&#10;Publisher&#10;DOI or URL (Accessed: date)" style="width:100%;max-height:160px"></textarea>
+              <div class="helper">Use the toolbar for bold, italics, and bullets. Saved output is sanitised HTML.</div>
             </section>
 
             <section class="modal-section example-panel">
@@ -3553,6 +3553,7 @@ if (isset($_SESSION['user_id'])) {
                 <input name="citation_heading" id="citationHeadingField" placeholder="Example: book with one author" required style="margin-top:6px;width:100%">
               </label>
               <textarea name="citation_body" id="citationBodyField" rows="4" placeholder="In-text citations&#10;Reference list..." required style="margin-top:6px;width:100%;max-height:160px"></textarea>
+              <div class="helper">Use paragraphs for sections and italics/bold from the toolbar. Saved output is sanitised HTML.</div>
             </section>
 
             <section class="modal-section">
@@ -3560,7 +3561,8 @@ if (isset($_SESSION['user_id'])) {
                 <div class="section-title">You try</div>
                 <div class="section-sub">Template shown to users</div>
               </div>
-              <textarea name="citation_youtry" id="citationYouTryField" rows="4" placeholder="Surname, Initial. (Year) *Title of book.* Publisher. Available at: DOI or URL (Accessed: date)." style="width:100%;max-height:160px"></textarea>
+              <textarea name="citation_youtry" id="citationYouTryField" rows="4" placeholder="Surname, Initial. (Year) Title of book. Publisher. Available at: DOI or URL (Accessed: date)." style="width:100%;max-height:160px"></textarea>
+              <div class="helper">Use italics from the toolbar instead of `*asterisks*`.</div>
             </section>
 
             <section class="modal-section">
@@ -4019,9 +4021,13 @@ if (isset($_SESSION['user_id'])) {
     const editCategoryField = document.getElementById('editCategoryField');
     const editSubCategoryField = document.getElementById('editSubCategoryField');
 
-    const mdToHtml = (str) => {
+    const richSourceToHtml = (str) => {
       if (!str) return '';
-      const escaped = String(str)
+      const raw = String(str);
+      if (/<[a-z][\s\S]*>/i.test(raw)) {
+        return raw;
+      }
+      const escaped = raw
         .replace(/&/g,'&amp;')
         .replace(/</g,'&lt;')
         .replace(/>/g,'&gt;')
@@ -4046,6 +4052,39 @@ if (isset($_SESSION['user_id'])) {
       });
       if (inList) html += '</ul>';
       return html;
+    };
+
+    const htmlToStorageHtml = (html, collapseToSingleBreak = false) => {
+      const escape = (str) => String(str ?? '')
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
+      const walk = (node) => {
+        if (node.nodeType === Node.TEXT_NODE) return escape(node.textContent || '');
+        if (node.nodeType !== Node.ELEMENT_NODE) return '';
+        const tag = node.tagName.toLowerCase();
+        const inner = Array.from(node.childNodes).map(walk).join('');
+        if (tag === 'br') return '<br>';
+        if (tag === 'strong' || tag === 'b') return inner ? `<strong>${inner}</strong>` : '';
+        if (tag === 'em' || tag === 'i') return inner ? `<em>${inner}</em>` : '';
+        if (tag === 'ul') return inner ? `<ul>${inner}</ul>` : '';
+        if (tag === 'ol') return inner ? `<ol>${inner}</ol>` : '';
+        if (tag === 'li') return inner.trim() ? `<li>${inner}</li>` : '';
+        if (tag === 'p' || tag === 'div' || tag === 'section' || tag === 'article') {
+          const compact = inner.replace(/(?:<br>\s*){2,}/g, '<br>').trim();
+          return compact ? `<p>${compact}</p>` : '';
+        }
+        return inner;
+      };
+
+      const container = document.createElement('div');
+      container.innerHTML = html || '';
+      let out = Array.from(container.childNodes).map(walk).join('');
+      out = out.replace(/<p><\/p>/g, '');
+      out = out.replace(/(?:<br>\s*){3,}/g, collapseToSingleBreak ? '<br>' : '<br><br>');
+      return out.trim();
     };
 
     const htmlToMd = (html, collapseToSingleBreak = false) => {
@@ -4087,6 +4126,14 @@ if (isset($_SESSION['user_id'])) {
       editYouTryField,
       editNotesField
     ].filter(Boolean);
+    const htmlStorageFieldIds = new Set([
+      'citationOrderField',
+      'citationBodyField',
+      'citationYouTryField',
+      'editOrderField',
+      'editBodyField',
+      'editYouTryField'
+    ]);
 
     let activeEditor = null;
 
@@ -4132,13 +4179,18 @@ if (isset($_SESSION['user_id'])) {
       editor.className = 'rich-editor';
       editor.contentEditable = 'true';
       editor.dataset.bind = textarea.id;
-      editor.innerHTML = mdToHtml(textarea.value);
+      editor.dataset.storage = htmlStorageFieldIds.has(textarea.id) ? 'html' : 'text';
+      editor.innerHTML = editor.dataset.storage === 'html' ? richSourceToHtml(textarea.value) : richSourceToHtml(textarea.value);
       textarea.style.display = 'none';
       textarea.insertAdjacentElement('afterend', wrapper);
       wrapper.appendChild(editor);
       if (withToolbar) wrapper.insertBefore(createToolbar(editor), editor);
 
-      const syncToTextarea = () => { textarea.value = htmlToMd(editor.innerHTML, useSoftBreaks); };
+      const syncToTextarea = () => {
+        textarea.value = editor.dataset.storage === 'html'
+          ? htmlToStorageHtml(editor.innerHTML, useSoftBreaks)
+          : htmlToMd(editor.innerHTML, useSoftBreaks);
+      };
       editor.addEventListener('input', syncToTextarea);
       editor.addEventListener('focus', () => { activeEditor = editor; });
       editor.addEventListener('blur', syncToTextarea);
@@ -4173,14 +4225,16 @@ if (isset($_SESSION['user_id'])) {
       const taId = ed.dataset.bind;
       const ta = document.getElementById(taId);
       if (!ta) return;
-      ta.value = htmlToMd(ed.innerHTML);
+      ta.value = ed.dataset.storage === 'html'
+        ? htmlToStorageHtml(ed.innerHTML)
+        : htmlToMd(ed.innerHTML);
     });
     const syncEditorFromTextarea = (taId) => {
       const ta = document.getElementById(taId);
       if (!ta) return;
       const ed = editors.find(e => e.dataset.bind === taId);
       if (!ed) return;
-      ed.innerHTML = mdToHtml(ta.value || '');
+      ed.innerHTML = richSourceToHtml(ta.value || '');
     };
 
     citationModalForm?.addEventListener('submit', () => {
@@ -4602,33 +4656,6 @@ if (isset($_SESSION['user_id'])) {
 
       const setView = (data) => {
         currentCitation = data;
-        const formatMarked = (str) => {
-          if (!str) return '—';
-          const escaped = String(str)
-            .replace(/&/g,'&amp;')
-          .replace(/</g,'&lt;')
-          .replace(/>/g,'&gt;')
-          .replace(/"/g,'&quot;')
-          .replace(/'/g,'&#39;');
-        const withBold = escaped.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-        const withItalics = withBold.replace(/\*(.+?)\*/g,'<em>$1</em>');
-        const lines = withItalics.split(/\r?\n/);
-        let html = '';
-        let inList = false;
-        lines.forEach((line, idx) => {
-          const m = line.match(/^\s*[-*•]\s+(.+)/);
-          if (m) {
-            if (!inList) { html += '<ul>'; inList = true; }
-            html += '<li>' + m[1] + '</li>';
-          } else {
-            if (inList) { html += '</ul>'; inList = false; }
-            html += line;
-            if (idx !== lines.length -1) html += '<br>';
-          }
-        });
-        if (inList) html += '</ul>';
-        return html;
-      };
         const fill = (id, val) => {
           const el = document.getElementById(id);
           if (!el) return;
@@ -4637,7 +4664,7 @@ if (isset($_SESSION['user_id'])) {
         const fillHtml = (id, val) => {
           const el = document.getElementById(id);
           if (!el) return;
-          el.innerHTML = formatMarked(val);
+          el.innerHTML = val ? richSourceToHtml(val) : '—';
         };
         const title = data.label && data.style ? `${data.label} — ${data.style}` : (data.label || 'Citation');
         fillHtml('viewLabel', title);
