@@ -49,6 +49,7 @@ $isAdmin = $sessionUserId > 0
   && (in_array('*', $sessionSiteAccess, true) || in_array($safeSlug, $sessionSiteAccess, true));
 $adminUserLabel = trim((string)($_SESSION['user_name'] ?? $_SESSION['display_name'] ?? $_SESSION['username'] ?? 'Administrator'));
 $adminEditUrl = $base . '/admin/site.php?id=' . (int)($site['id'] ?? 0);
+$adminSiteUrl = $base . '/admin/site.php?id=' . (int)($site['id'] ?? 0);
 $flagSubmitUrl = $base . '/report/page-flag';
 $flagCsrfToken = Security::csrfToken();
 $flagFlash = $_SESSION['page_flag_flash'] ?? null;
@@ -204,7 +205,11 @@ function snippet(string $text, string $q): string {
   <div class="nx-adminbar">
     <div class="nx-adminbar-inner">
       <div class="nx-adminbar-meta">
-        <div style="font-weight:900"><?= Security::e($site['name']) ?></div>
+        <div style="font-weight:900">
+          <a href="<?= Security::e($adminSiteUrl) ?>" style="color:inherit;text-decoration:none">
+            <?= Security::e($site['name']) ?>
+          </a>
+        </div>
         <span class="nx-adminbar-badge"><?= Security::e($adminUserLabel) ?></span>
       </div>
       <div class="nx-adminbar-actions">

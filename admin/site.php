@@ -1690,6 +1690,8 @@ if (isset($_SESSION['user_id'])) {
     .modal-backdrop{
       position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;z-index:1000;
       padding:14px;
+      overflow-y:auto;
+      overscroll-behavior:contain;
     }
     .modal{
       background:var(--card);
@@ -1699,9 +1701,12 @@ if (isset($_SESSION['user_id'])) {
       max-width:1020px;
       width:100%;
       height:85vh;
+      max-height:calc(100dvh - 28px);
+      min-height:0;
       display:flex;
       flex-direction:column;
       padding:18px;
+      overscroll-behavior:contain;
     }
     .modal header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
     .modal h3{margin:0;font-size:20px;}
@@ -1864,7 +1869,7 @@ if (isset($_SESSION['user_id'])) {
       background:rgba(255,255,255,0.03);
       border:1px solid rgba(255,255,255,0.14);
     }
-    .modal-body{flex:1;overflow:auto;padding-right:4px;}
+    .modal-body{flex:1;overflow:auto;padding-right:4px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
     .modal-footer{position:sticky;bottom:0;background:var(--card);padding-top:12px;margin-top:12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
     .modal-sections{display:grid;gap:24px;}
     .modal-section{padding:0;}
@@ -3747,7 +3752,35 @@ if (isset($_SESSION['user_id'])) {
     (function(){
     })();
     const basePath = <?= json_encode($base) ?>;
+    let adminScrollLockY = 0;
+    let adminScrollLocked = false;
     const updateDrawerScrollLock = () => {
+      const shouldLock = [
+        document.getElementById('citationViewer')?.classList.contains('active'),
+        document.getElementById('revisionViewer')?.classList.contains('active'),
+        (() => {
+          const el = document.getElementById('citationModalBackdrop');
+          return !!el && el.style.display !== 'none';
+        })(),
+        (() => {
+          const el = document.getElementById('exportBundleBackdrop');
+          return !!el && el.style.display !== 'none';
+        })(),
+      ].some(Boolean);
+      if (shouldLock) {
+        if (!adminScrollLocked) {
+          adminScrollLockY = window.scrollY || window.pageYOffset || 0;
+        }
+        document.documentElement.style.overflow = 'hidden';
+        document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${adminScrollLockY}px`;
+        document.body.style.left = '0';
+        document.body.style.right = '0';
+        document.body.style.width = '100%';
+        adminScrollLocked = true;
+        return;
+      }
       document.documentElement.style.overflow = '';
       document.body.style.overflow = '';
       document.body.style.position = '';
@@ -3755,6 +3788,10 @@ if (isset($_SESSION['user_id'])) {
       document.body.style.left = '';
       document.body.style.right = '';
       document.body.style.width = '';
+      if (adminScrollLocked) {
+        window.scrollTo(0, adminScrollLockY);
+      }
+      adminScrollLocked = false;
     };
     
     // tabs with hash support
@@ -3986,6 +4023,7 @@ if (isset($_SESSION['user_id'])) {
 
     // Citation modal
     const citationBackdrop = document.getElementById('citationModalBackdrop');
+    const citationModalBody = citationBackdrop?.querySelector('.modal-body') || null;
     const openCitationModal = document.getElementById('openCitationModal');
     const closeCitationModal = document.getElementById('closeCitationModal');
     const cancelCitationModal = document.getElementById('cancelCitationModal');
@@ -4301,20 +4339,52 @@ if (isset($_SESSION['user_id'])) {
       if (citationNotesField) citationNotesField.value = '';
       if (citationKeyField) citationKeyField.value = '';
     };
-    const showCitationModal = () => { if (citationBackdrop) citationBackdrop.style.display = 'flex'; };
-    const hideCitationModal = () => { if (citationBackdrop) citationBackdrop.style.display = 'none'; };
+    const showCitationModal = () => {
+      if (!citationBackdrop) return;
+      citationBackdrop.style.display = 'flex';
+      citationModalBody?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      updateDrawerScrollLock();
+    };
+    const hideCitationModal = () => {
+      if (!citationBackdrop) return;
+      citationBackdrop.style.display = 'none';
+      updateDrawerScrollLock();
+    };
     openCitationModal?.addEventListener('click', () => { resetCitationForm(); showCitationModal(); });
     closeCitationModal?.addEventListener('click', hideCitationModal);
     cancelCitationModal?.addEventListener('click', hideCitationModal);
     citationBackdrop?.addEventListener('click', (e) => { if (e.target === citationBackdrop) hideCitationModal(); });
+    citationBackdrop?.addEventListener('wheel', (e) => {
+      if (!citationBackdrop || citationBackdrop.style.display === 'none' || !citationModalBody) return;
+      const activeEditor = e.target.closest('.rich-editor');
+      if (activeEditor) return;
+      const maxScrollTop = Math.max(0, citationModalBody.scrollHeight - citationModalBody.clientHeight);
+      if (maxScrollTop <= 0) {
+        e.preventDefault();
+        return;
+      }
+      const nextScrollTop = Math.max(0, Math.min(maxScrollTop, citationModalBody.scrollTop + e.deltaY));
+      if (nextScrollTop !== citationModalBody.scrollTop || e.target === citationBackdrop || !e.target.closest('.modal-body')) {
+        citationModalBody.scrollTop = nextScrollTop;
+        e.preventDefault();
+      }
+    }, { passive: false });
 
     // Export bundle modal
     const exportBundleBackdrop = document.getElementById('exportBundleBackdrop');
     const openExportBundleModal = document.getElementById('openExportBundleModal');
     const closeExportBundleModal = document.getElementById('closeExportBundleModal');
     const closeExportBundleBtn = document.getElementById('closeExportBundleBtn');
-    const showExportBundle = () => { if (exportBundleBackdrop) exportBundleBackdrop.style.display = 'flex'; };
-    const hideExportBundle = () => { if (exportBundleBackdrop) exportBundleBackdrop.style.display = 'none'; };
+    const showExportBundle = () => {
+      if (!exportBundleBackdrop) return;
+      exportBundleBackdrop.style.display = 'flex';
+      updateDrawerScrollLock();
+    };
+    const hideExportBundle = () => {
+      if (!exportBundleBackdrop) return;
+      exportBundleBackdrop.style.display = 'none';
+      updateDrawerScrollLock();
+    };
     openExportBundleModal?.addEventListener('click', showExportBundle);
     closeExportBundleModal?.addEventListener('click', hideExportBundle);
     closeExportBundleBtn?.addEventListener('click', hideExportBundle);
