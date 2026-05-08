@@ -2,6 +2,9 @@
   const NUNITO_FONT_STACK = '"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif';
   const shell = document.querySelector('.nx-shell');
   const canvas = document.getElementById('canvas');
+  const canvasFrame = document.querySelector('.nx-canvas');
+  const canvasViewport = document.querySelector('.nx-canvas-viewport');
+  const canvasStage = document.querySelector('.nx-canvas-stage');
   const insp = document.getElementById('insp');
   const inspHint = document.getElementById('inspHint');
   const leftSidebar = document.querySelector('.nx-left');
@@ -21,6 +24,7 @@
   const tUnlink = document.getElementById('t_unlink');
 
   const apiRevPreviewToken = shell.dataset.apiRevPreviewToken;
+  const previewDocumentWidth = Math.max(parseInt(getComputedStyle(canvasFrame || document.documentElement).getPropertyValue('--nx-preview-document-width') || '1224', 10) || 1224, 320);
 
   const pageId = parseInt(shell?.dataset?.pageId || '0', 10);
   const csrf = shell?.dataset?.csrf || '';
@@ -78,6 +82,51 @@
   const tFontFamily = document.getElementById('t_fontFamily');
   const tFontSize = document.getElementById('t_fontSize');
   const sitePages = Array.isArray(window.NX_SITE_PAGES) ? window.NX_SITE_PAGES : [];
+  const siteForms = Array.isArray(window.NX_SITE_FORMS) ? window.NX_SITE_FORMS : [];
+
+  const getSiteFormById = (formId) => siteForms.find((form) => String(form.id) === String(formId)) || null;
+  const ensureFormProps = (blk) => {
+    blk.props = blk.props || {};
+    if (!Object.prototype.hasOwnProperty.call(blk.props, 'formId')) blk.props.formId = '';
+    if (!Object.prototype.hasOwnProperty.call(blk.props, 'title')) blk.props.title = '';
+    return blk.props;
+  };
+  const applyFormColumnDefaults = (r, c) => {
+    const row = doc.rows?.[r];
+    const col = row?.cols?.[c];
+    if (!row || !col) return;
+    if ((row.cols || []).length === 1) {
+      row.cols = [
+        { span: 8, blocks: Array.isArray(col.blocks) ? col.blocks : [] },
+        { span: 4, blocks: [] }
+      ];
+      return;
+    }
+    const currentSpan = Math.max(1, parseInt(col.span || 12, 10) || 12);
+    if (currentSpan >= 8) return;
+
+    let needed = 8 - currentSpan;
+    const minSiblingSpan = 2;
+    row.cols.forEach((sibling, idx) => {
+      if (idx === c || needed <= 0) return;
+      const siblingSpan = Math.max(minSiblingSpan, parseInt(sibling.span || 12, 10) || 12);
+      const reducible = Math.max(0, siblingSpan - minSiblingSpan);
+      if (reducible <= 0) return;
+      const reduceBy = Math.min(reducible, needed);
+      sibling.span = siblingSpan - reduceBy;
+      needed -= reduceBy;
+    });
+    col.span = currentSpan + (8 - currentSpan - needed);
+    if (col.span < currentSpan) col.span = currentSpan;
+    if (col.span > 12) col.span = 12;
+    const total = row.cols.reduce((sum, sibling) => sum + Math.max(1, parseInt(sibling.span || 12, 10) || 12), 0);
+    if (total > 12) {
+      row.cols.forEach((sibling, idx) => {
+        if (idx === c) return;
+        sibling.span = Math.max(1, parseInt(sibling.span || 12, 10) || 12);
+      });
+    }
+  };
 
   // --- Determine routing style (for debug only)
   const routingMode = apiSave.includes('/index.php/') ? 'non-clean' : 'clean';
@@ -183,6 +232,26 @@
 
     if (p.fontSize) el.style.setProperty("--nexus-font-size", p.fontSize + "px");
     else el.style.removeProperty("--nexus-font-size");
+  }
+
+  function updateCanvasScale() {
+    if (!canvas || !canvasFrame || !canvasViewport || !canvasStage) return;
+    if (canvasViewMode === 'blueprint') {
+      canvasStage.style.removeProperty('--nx-preview-scale');
+      canvasStage.style.setProperty('--nx-preview-stage-width', '100%');
+      canvasStage.style.setProperty('--nx-preview-stage-height', '70vh');
+      return;
+    }
+
+    const canvasFrameStyles = getComputedStyle(canvasFrame);
+    const framePaddingX = (parseFloat(canvasFrameStyles.paddingLeft) || 0) + (parseFloat(canvasFrameStyles.paddingRight) || 0);
+    const availableWidth = Math.max(canvasFrame.clientWidth - framePaddingX, 1);
+    const scale = Math.min(1, availableWidth / previewDocumentWidth);
+    const naturalHeight = Math.max(canvas.scrollHeight, 1);
+
+    canvasStage.style.setProperty('--nx-preview-scale', String(scale));
+    canvasStage.style.setProperty('--nx-preview-stage-width', `${previewDocumentWidth * scale}px`);
+    canvasStage.style.setProperty('--nx-preview-stage-height', `${naturalHeight * scale}px`);
   }
 
   function saveTextSelection() {
@@ -569,7 +638,7 @@
     if (!ex) return;
     blk.props = blk.props || {};
     blk.props.exampleId = ex.id;
-    blk.props.heading = ex.heading || '';
+    blk.props.heading = 'Example';
     blk.props.body = ex.body || ex.bodyHtml || '';
     blk.props.bodyHtml = ex.bodyHtml || ex.body || '';
     blk.props.youTry = ex.youTry || ex.youTryHtml || '';
@@ -679,6 +748,7 @@
         });
       }
       case 'heroCard': return withDefaultBlockStyle({ id: uuid(), type: 'heroCard', props: { title: 'Hero Title', body: 'Hero text', bgImage: '', bgColor: '#111827', overlayOpacity: 0.35 }, styleText:{ fontFamily: NUNITO_FONT_STACK } });
+      case 'form': return withDefaultBlockStyle({ id: uuid(), type: 'form', props: { formId: String(siteForms[0]?.id || ''), title: '' }, styleText:{} });
       case 'dragWords': return withDefaultBlockStyle({ id: uuid(), type: 'dragWords', props: {
         instruction: 'Drag or click the correct words into the blanks',
         sentence: 'The {1} sat on the {2}.',
@@ -1252,8 +1322,7 @@
     let detail = '';
 
     if (type === 'exampleCard') {
-      const liveCitation = getLiveCitationForBlock(blk);
-      detail = compactBlueprintLabel((liveCitation && (liveCitation.heading || liveCitation.label)) || p.heading || '');
+      detail = 'Example';
     } else if (type === 'citationOrder' || type === 'youTry' || type === 'linkList') {
       detail = compactBlueprintLabel(p.title || '');
     } else if (type === 'heroBanner') {
@@ -1495,6 +1564,7 @@
       pushHistory();
       const newBlk = defBlock(type);
       destBlocks.push(newBlk);
+      if (type === 'form') applyFormColumnDefaults(r, c);
       selected = { r, c, b: destBlocks.length - 1 };
       selectedRow = null;
       persistUnsaved();
@@ -1562,6 +1632,7 @@
       pushHistory();
       const newBlk = defBlock(type);
       destBlocks.splice(insertAtClamped, 0, newBlk);
+      if (type === 'form') applyFormColumnDefaults(r, c);
       selected = { r, c, b: insertAtClamped };
       selectedRow = null;
       persistUnsaved();
@@ -1579,6 +1650,7 @@
     pushHistory();
     const newBlk = defBlock(type);
     destBlocks.splice(insertAt, 0, newBlk);
+    if (type === 'form') applyFormColumnDefaults(r, c);
     selected = { r, c, b: insertAt };
     selectedRow = null;
     persistUnsaved();
@@ -1620,6 +1692,7 @@
       pushHistory();
       const newBlk = defBlock(type);
       destBlocks.splice(insertAt, 0, newBlk);
+      if (type === 'form') applyFormColumnDefaults(target.r, target.c);
       selected = { r: target.r, c: target.c, b: insertAt };
       selectedRow = null;
       persistUnsaved();
@@ -2184,6 +2257,40 @@
     return `<div><div style="font-weight:700;margin-bottom:6px">${label}</div><div style="padding:10px;border:1px dashed rgba(17,24,39,.25);border-radius:10px;min-height:${lines*16 + 20}px;color:rgba(17,24,39,.8);${bg}">${placeholder}</div></div>`;
   }
 
+  if (blk.type === 'form') {
+    ensureFormProps(blk);
+    const formDef = getSiteFormById(p.formId);
+    const title = esc((p.title || formDef?.name || 'Form'));
+    const questions = Array.isArray(formDef?.questions) ? formDef.questions : [];
+    const questionRows = questions.length
+      ? questions.map((question, idx) => {
+          const qLabel = esc(question.label || `Question ${idx + 1}`);
+          if (question.type === 'rating') {
+            return `
+              <div style="padding:10px 0;border-top:1px solid rgba(17,24,39,.08)">
+                <div style="font-weight:700;margin-bottom:8px">${qLabel}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">${Array.from({ length: 10 }).map((_, i) => `<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;border:1px solid rgba(17,24,39,.16);background:#fff">${i + 1}</span>`).join('')}</div>
+              </div>
+            `;
+          }
+          return `
+            <div style="padding:10px 0;border-top:1px solid rgba(17,24,39,.08)">
+              <div style="font-weight:700;margin-bottom:8px">${qLabel}</div>
+              <div style="padding:10px;border:1px dashed rgba(17,24,39,.25);border-radius:10px;background:rgba(255,255,255,.82);color:rgba(17,24,39,.55)">Text answer…</div>
+            </div>
+          `;
+        }).join('')
+      : `<div class="nx-muted" style="margin-top:8px">Select a form in the inspector.</div>`;
+    return wrap(`
+      <div style="padding:18px;border:1px solid rgba(17,24,39,.12);border-radius:16px;background:rgba(255,255,255,.92)">
+        <div style="font-weight:800;font-size:18px">${title}</div>
+        <div class="nx-muted" style="margin-top:6px">${formDef ? `${questions.length} question${questions.length === 1 ? '' : 's'}` : 'No form selected'}</div>
+        <div style="margin-top:10px">${questionRows}</div>
+        <button type="button" style="margin-top:14px;padding:10px 16px;border:0;border-radius:999px;background:#1f3b87;color:#fff;font-weight:800">Submit</button>
+      </div>
+    `);
+  }
+
   if (blk.type === 'citationOrder') {
     const liveCitation = getLiveCitationForBlock(blk);
     const title = esc(p.title || 'Citation order');
@@ -2207,7 +2314,8 @@
 
   if (blk.type === 'exampleCard') {
     const liveCitation = getLiveCitationForBlock(blk);
-    const heading = esc((liveCitation && (liveCitation.heading || liveCitation.label)) || p.heading || 'Example');
+    const headingRaw = String((liveCitation && liveCitation.heading) || p.heading || 'Example').trim() || 'Example';
+    const heading = esc(headingRaw);
     const liveBody = liveCitation ? (liveCitation.bodyHtml || liveCitation.body || '') : '';
     const liveYouTry = liveCitation ? (liveCitation.youTryHtml || liveCitation.youTry || '') : '';
     const exampleBodyHtml = hasHtml(liveBody)
@@ -2223,12 +2331,25 @@
       ? normalizeExampleHtml(exampleTryHtml || '')
       : formatExampleText(String(liveCitation ? (liveCitation.youTry || '') : (p.youTry || 'Your turn…')).slice(0, 180));
     const showTry = p.showYouTry !== false;
-    const extraClass = showTry ? '' : ' nx-examplecard--single';
+    const hasHeading = String(headingRaw || '').trim() !== '';
+    const bodySource = liveBody || p.bodyHtml || p.body || '';
+    const hasBody = String(bodySource || '').replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').trim() !== '';
+    const isTryOnly = showTry && !hasHeading && !hasBody;
+    const extraClass = showTry ? (isTryOnly ? ' nx-examplecard--try-only' : '') : ' nx-examplecard--single';
+    const cardStyle = isTryOnly
+      ? 'grid-template-columns:1fr;'
+      : 'grid-template-columns:50% 50%;';
+    const leftStyle = 'background:#e0e0e0;width:100%;padding:30px 20px 32px;';
+    const bodyStyle = 'font-size:15px;line-height:1.42;color:#333333;';
+    const rightStyle = isTryOnly
+      ? 'padding:24px 40px 22px;background:#ffffff;color:#38383d;width:100%;'
+      : 'padding:24px 28px 22px;background:#ffffff;color:#38383d;width:100%;';
+    const tryInputStyle = 'padding:10px 12px;font-size:14px;line-height:1.5;';
     const rightCol = showTry ? `
-          <div class="nx-examplecard-right">
+          <div class="nx-examplecard-right" style="${rightStyle}">
             <div class="nx-examplecard-try-title">You try</div>
             <div class="nx-trybox">
-              <div class="nx-examplecard-trybox">${youTry}</div>
+              <div class="nx-examplecard-trybox" style="${tryInputStyle}">${youTry}</div>
               <div class="nx-try-actions">
                 <div class="nx-try-actions-group">
                   <button type="button" class="nx-try-action nx-try-action--italic">Italicise</button>
@@ -2239,11 +2360,11 @@
             </div>
           </div>` : '';
     return `
-      <div class="nx-examplecard${extraClass}" style="grid-template-columns:${showTry ? 'minmax(0, 1fr) minmax(0, 1fr)' : '1fr'}">
-        <div class="nx-examplecard-left">
+      <div class="nx-examplecard${extraClass}" style="${cardStyle}">
+        ${isTryOnly ? '' : `<div class="nx-examplecard-left" style="${leftStyle}">
           <div class="nx-examplecard-heading">${heading}</div>
-          <div class="nx-examplecard-body">${body}</div>
-        </div>
+          <div class="nx-examplecard-body" style="${bodyStyle}">${body}</div>
+        </div>`}
         ${rightCol}
       </div>
     `;
@@ -4312,6 +4433,20 @@
           </label>
         </div>
       `;
+    } else if (blk.type === 'form') {
+      ensureFormProps(blk);
+      const currentForm = getSiteFormById(p.formId);
+      html += `
+        <label class="nx-muted">Form</label><br>
+        <select id="p_form_id" style="${inputStyle}">
+          <option value="">Select a form…</option>
+          ${siteForms.map((form) => `<option value="${esc(String(form.id))}" ${String(p.formId || '') === String(form.id) ? 'selected' : ''}>${esc(form.name || `Form ${form.id}`)}</option>`).join('')}
+        </select>
+        <br><br>
+        <label class="nx-muted">Optional heading override</label><br>
+        <input id="p_form_title" value="${esc(p.title || '')}" placeholder="${esc(currentForm?.name || 'Use the form name')}" style="${inputStyle}">
+        <div class="nx-muted" style="margin-top:8px">Rating answer uses a fixed 1 to 10 score.</div>
+      `;
     } else if (blk.type === 'video') {
       html += `
         <label class="nx-muted">Embed URL (iframe src)</label><br>
@@ -4617,7 +4752,10 @@
           <input id="acc_item_alt" value="${esc(activeItem?.headerAlt || '')}" style="${inputStyle}">
         </div>
         <br>
-        <label class="nx-muted">Body</label><br>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+          <label class="nx-muted" style="margin:0">Body</label>
+          ${isTitle ? '<button class="smallbtn" id="acc_item_tabularise" type="button">Tabularise</button>' : ''}
+        </div>
         <div id="acc_item_body" class="nx-rich" contenteditable="true" style="${inputStyle};min-height:160px;white-space:pre-wrap"></div>
         <br><br>
         <label class="nx-toggle" style="display:inline-flex;align-items:center;gap:8px">
@@ -5023,6 +5161,91 @@
       sel.addRange(range);
     };
 
+    const trimAccordionColumnHtml = (html) => String(html || '')
+      .replace(/^(?:\s|<br\s*\/?>)+/gi, '')
+      .replace(/(?:\s|<br\s*\/?>)+$/gi, '')
+      .trim();
+
+    const extractAccordionColumnItems = (html) => {
+      const raw = String(html || '').trim();
+      if (!raw) return [];
+      const container = document.createElement('div');
+      container.innerHTML = raw;
+      const cleanItems = (values) => values
+        .map((value) => trimAccordionColumnHtml(value))
+        .filter((value) => stripHtmlPreviewText(value));
+
+      const existingTable = container.querySelector('table');
+      if (existingTable) {
+        const rows = Array.from(existingTable.querySelectorAll('tr')).map((row) =>
+          Array.from(row.children).filter((cell) => /^(TD|TH)$/i.test(cell.tagName))
+        );
+        const columnMajor = [];
+        const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
+        for (let col = 0; col < columnCount; col += 1) {
+          for (let row = 0; row < rows.length; row += 1) {
+            const cell = rows[row]?.[col];
+            if (cell) columnMajor.push(cell.innerHTML);
+          }
+        }
+        const items = cleanItems(columnMajor);
+        if (items.length) return items;
+      }
+
+      const topLists = Array.from(container.children).filter((child) => /^(UL|OL)$/i.test(child.tagName));
+      if (topLists.length) {
+        const items = cleanItems(topLists.flatMap((list) =>
+          Array.from(list.children)
+            .filter((child) => child.tagName === 'LI')
+            .map((child) => child.innerHTML)
+        ));
+        if (items.length) return items;
+      }
+
+      const topBlocks = Array.from(container.children).filter((child) => /^(P|DIV)$/i.test(child.tagName));
+      if (topBlocks.length >= 2) {
+        const items = cleanItems(topBlocks.map((child) => child.innerHTML));
+        if (items.length >= 2) return items;
+      }
+
+      const normalized = raw
+        .replace(/<\/(?:p|div|li|tr|td|th)>/gi, '<br>')
+        .replace(/<(?:ul|ol|table|tbody|thead|tfoot|tr|td|th)\b[^>]*>/gi, '')
+        .replace(/<li\b[^>]*>/gi, '')
+        .replace(/(?:<br\s*\/?>\s*){2,}/gi, '<br>');
+      return cleanItems(normalized.split(/<br\s*\/?>/i));
+    };
+
+    const buildAccordionTwoColumnHtml = (html) => {
+      const items = extractAccordionColumnItems(html);
+      if (items.length < 2) return '';
+      const midpoint = Math.ceil(items.length / 2);
+      const left = items.slice(0, midpoint);
+      const right = items.slice(midpoint);
+      const rows = [];
+      const rowCount = Math.max(left.length, right.length);
+      for (let i = 0; i < rowCount; i += 1) {
+        rows.push(`<tr><td>${left[i] ? `<div>${left[i]}</div>` : ''}</td><td>${right[i] ? `<div>${right[i]}</div>` : ''}</td></tr>`);
+      }
+      return `<table><tbody>${rows.join('')}</tbody></table>`;
+    };
+
+    const handleRichShortcut = (e, el, handleInput) => {
+      if (!e || !el) return false;
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
+
+      const key = String(e.key || '').toLowerCase();
+      const cmd = key === 'b' ? 'bold' : key === 'i' ? 'italic' : '';
+      if (!cmd) return false;
+
+      e.preventDefault();
+      el.focus();
+      document.execCommand(cmd, false, null);
+      handleInput();
+      saveTextSelection();
+      return true;
+    };
+
     const initRichField = (id, initialVal, onChange) => {
       const el = document.getElementById(id);
       if (!el) return null;
@@ -5050,6 +5273,9 @@
       ['mouseup', 'keyup', 'touchend'].forEach((evt) => {
         el.addEventListener(evt, saveTextSelection, true);
       });
+      el.addEventListener('keydown', (e) => {
+        handleRichShortcut(e, el, handleInput);
+      }, true);
 
       // allow tab insertion for accordion body instead of focus change
       if (id === 'acc_item_body') {
@@ -5260,6 +5486,10 @@
       updateToggle('p_tbl_headerrow', 'headerRow');
       updateToggle('p_tbl_headercol', 'headerCol');
       updateToggle('p_tbl_resize', 'colResize');
+    }
+    if (blk.type === 'form') {
+      bind('p_form_id', 'formId');
+      bind('p_form_title', 'title');
     }
     if (blk.type === 'video')  bind('p_url', 'url');
     const imgFile = document.getElementById('p_src_file');
@@ -5765,11 +5995,24 @@
         });
       });
 
-      initRichField('acc_item_body', (activeItem?.bodyHtml ?? activeItem?.body ?? ''), (htmlVal, textVal) => {
+      const accItemBodyEditor = initRichField('acc_item_body', (activeItem?.bodyHtml ?? activeItem?.body ?? ''), (htmlVal, textVal) => {
         startEditSession();
         activeItem.bodyHtml = htmlVal;
         activeItem.body = textVal;
         refreshPreview();
+      });
+      document.getElementById('acc_item_tabularise')?.addEventListener('click', () => {
+        if (!accItemBodyEditor) return;
+        const tableHtml = buildAccordionTwoColumnHtml(accItemBodyEditor.innerHTML);
+        if (!tableHtml) {
+          alert('Add at least two lines or items before using Tabularise.');
+          return;
+        }
+        startEditSession();
+        accItemBodyEditor.innerHTML = tableHtml;
+        accItemBodyEditor.dispatchEvent(new Event('input', { bubbles: true }));
+        accItemBodyEditor.focus();
+        saveTextSelection();
       });
 
       const openChk = document.getElementById('acc_item_open');
@@ -6788,9 +7031,11 @@
     bindMCQPreviews();
     renderInspector();
     syncToolbarFromSelection();
+    requestAnimationFrame(updateCanvasScale);
     } catch (err) {
       console.error('Render error', err);
       canvas.innerHTML = `<div style="padding:20px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);border-radius:12px;color:#ef4444;">Editor render error. Reload the page to continue.</div>`;
+      requestAnimationFrame(updateCanvasScale);
     }
   }
 
@@ -6819,6 +7064,13 @@
   viewContentBtn?.addEventListener('click', () => setCanvasViewMode('content'));
   viewBlueprintBtn?.addEventListener('click', () => setCanvasViewMode('blueprint'));
   syncCanvasViewToggle();
+
+  if (canvasViewport && typeof ResizeObserver === 'function') {
+    const canvasResizeObserver = new ResizeObserver(() => updateCanvasScale());
+    canvasResizeObserver.observe(canvasViewport);
+  } else {
+    window.addEventListener('resize', updateCanvasScale);
+  }
 
   // Close revisions if user clicks empty canvas area
   canvas?.addEventListener('click', () => {

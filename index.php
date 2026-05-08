@@ -9,7 +9,9 @@ use NexusCMS\Models\Site;
 use NexusCMS\Models\Page;
 use NexusCMS\Models\PageFlag;
 use NexusCMS\Models\CitationExample;
+use NexusCMS\Models\FormResponse;
 use NexusCMS\Models\User;
+use NexusCMS\Models\SiteForm;
 use NexusCMS\Services\Renderer;
 use NexusCMS\Services\PageFlagNotifier;
 use NexusCMS\Core\Security;
@@ -152,6 +154,185 @@ function apply_source_type_breadcrumbs(array $doc, array $page, string $base, st
 
   $doc['rows'] = $rows;
   return $doc;
+}
+
+function ctr_normalize_search_text(string $value): string {
+  $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+  $value = strip_tags($value);
+  $value = preg_replace('/\[(.*?)\]\((.*?)\)/u', '$1', $value) ?? $value;
+  $value = preg_replace('/[*_`>#]+/u', ' ', $value) ?? $value;
+  $value = preg_replace('/\s+/u', ' ', $value) ?? $value;
+  return trim($value);
+}
+
+function ctr_make_search_snippet(string $text, string $query): string {
+  $text = ctr_normalize_search_text($text);
+  if ($text === '') return '';
+  if ($query === '') return mb_substr($text, 0, 220);
+
+  $haystack = mb_strtolower($text);
+  $query = trim($query);
+  $needle = mb_strtolower($query);
+  $pos = mb_strpos($haystack, $needle);
+  if ($pos === false) {
+    $tokens = preg_split('/\s+/u', $query) ?: [];
+    foreach ($tokens as $token) {
+      $token = trim($token);
+      if ($token === '') continue;
+      $pos = mb_strpos($haystack, mb_strtolower($token));
+      if ($pos !== false) break;
+    }
+  }
+  if ($pos === false) return mb_substr($text, 0, 220);
+
+  $start = max(0, $pos - 70);
+  $snippet = mb_substr($text, $start, 220);
+  if ($start > 0) $snippet = '...' . $snippet;
+  if ($start + 220 < mb_strlen($text)) $snippet .= '...';
+  return $snippet;
+}
+
+function ctr_build_citation_page_map(int $siteId, string $siteSlug, string $base): array {
+  $publishedPages = Page::listPublishedBySite($siteId);
+  $pageMap = [];
+
+  foreach ($publishedPages as $publishedPage) {
+    $doc = json_decode((string)($publishedPage['builder_json'] ?? '{}'), true);
+    if (!is_array($doc)) continue;
+
+    $refs = [];
+    $walk = static function ($node) use (&$walk, &$refs): void {
+      if (!is_array($node)) return;
+      foreach ($node as $key => $value) {
+        if (($key === 'exampleId' || $key === 'citationExampleId') && trim((string)$value) !== '') {
+          $refs[] = trim((string)$value);
+        }
+        if (is_array($value)) $walk($value);
+      }
+    };
+    $walk($doc);
+    $refs = array_values(array_unique($refs));
+    if (!$refs) continue;
+
+    $link = [
+      'url' => PagePath::publicUrl($base, $siteSlug, (string)($publishedPage['slug'] ?? '')),
+      'page_title' => (string)($publishedPage['title'] ?? ''),
+      'slug' => (string)($publishedPage['slug'] ?? ''),
+    ];
+    foreach ($refs as $ref) {
+      if (!isset($pageMap[$ref])) $pageMap[$ref] = $link;
+    }
+  }
+
+  return $pageMap;
+}
+
+function ctr_score_citation_example(array $row, string $query, string $pageTitle = ''): array {
+  $query = trim($query);
+  if ($query === '') return ['matched' => true, 'score' => 0];
+
+  $label = ctr_normalize_search_text((string)($row['label'] ?? ''));
+  $heading = ctr_normalize_search_text((string)($row['example_heading'] ?? ''));
+  $body = ctr_normalize_search_text((string)($row['example_body'] ?? ''));
+  $style = ctr_normalize_search_text((string)($row['referencing_style'] ?? ''));
+  $category = ctr_normalize_search_text((string)($row['category'] ?? ''));
+  $subCategory = ctr_normalize_search_text((string)($row['sub_category'] ?? ''));
+  $pageTitle = ctr_normalize_search_text($pageTitle);
+
+  $combined = trim(implode(' ', array_filter([$label, $heading, $body, $style, $category, $subCategory, $pageTitle], static fn($v) => $v !== '')));
+  if ($combined === '') return ['matched' => false, 'score' => 0];
+
+  $lowerCombined = mb_strtolower($combined);
+  $lowerLabel = mb_strtolower($label);
+  $lowerHeading = mb_strtolower($heading);
+  $lowerBody = mb_strtolower($body);
+  $lowerPageTitle = mb_strtolower($pageTitle);
+  $lowerQuery = mb_strtolower($query);
+
+  $score = 0;
+  $matched = false;
+  $phrasePattern = '/(?<!\pL)' . preg_quote($lowerQuery, '/') . '(?!\pL)/u';
+
+  if (preg_match($phrasePattern, $lowerCombined)) {
+    $score += 1200;
+    $matched = true;
+  } elseif (mb_strpos($lowerCombined, $lowerQuery) !== false) {
+    $score += 420;
+    $matched = true;
+  }
+
+  $tokens = preg_split('/\s+/u', $query) ?: [];
+  foreach ($tokens as $token) {
+    $token = trim($token);
+    if ($token === '') continue;
+    $lowerToken = mb_strtolower($token);
+    $wholePattern = '/(?<!\pL)' . preg_quote($lowerToken, '/') . '(?!\pL)/u';
+    $prefixPattern = '/(?<!\pL)' . preg_quote($lowerToken, '/') . '\pL+/u';
+
+    $counts = [
+      'label_whole' => preg_match_all($wholePattern, $lowerLabel, $matches) ?: 0,
+      'heading_whole' => preg_match_all($wholePattern, $lowerHeading, $matches) ?: 0,
+      'body_whole' => preg_match_all($wholePattern, $lowerBody, $matches) ?: 0,
+      'page_whole' => preg_match_all($wholePattern, $lowerPageTitle, $matches) ?: 0,
+      'label_prefix' => preg_match_all($prefixPattern, $lowerLabel, $matches) ?: 0,
+      'heading_prefix' => preg_match_all($prefixPattern, $lowerHeading, $matches) ?: 0,
+      'body_prefix' => preg_match_all($prefixPattern, $lowerBody, $matches) ?: 0,
+      'page_prefix' => preg_match_all($prefixPattern, $lowerPageTitle, $matches) ?: 0,
+      'label_substr' => substr_count($lowerLabel, $lowerToken),
+      'heading_substr' => substr_count($lowerHeading, $lowerToken),
+      'body_substr' => substr_count($lowerBody, $lowerToken),
+      'page_substr' => substr_count($lowerPageTitle, $lowerToken),
+    ];
+
+    $wholeCount = $counts['label_whole'] + $counts['heading_whole'] + $counts['body_whole'] + $counts['page_whole'];
+    $prefixCount = max(0, $counts['label_prefix'] + $counts['heading_prefix'] + $counts['body_prefix'] + $counts['page_prefix'] - $wholeCount);
+    $substrCount = max(0, $counts['label_substr'] + $counts['heading_substr'] + $counts['body_substr'] + $counts['page_substr'] - $wholeCount - $prefixCount);
+
+    if ($wholeCount > 0 || $prefixCount > 0 || $substrCount > 0) {
+      $matched = true;
+    }
+
+    $score += ($counts['page_whole'] * 260) + ($counts['label_whole'] * 240) + ($counts['heading_whole'] * 180) + ($counts['body_whole'] * 110);
+    $score += ($counts['page_prefix'] * 45) + ($counts['label_prefix'] * 40) + ($counts['heading_prefix'] * 30) + ($counts['body_prefix'] * 18);
+    $score += ($counts['page_substr'] * 10) + ($counts['label_substr'] * 9) + ($counts['heading_substr'] * 7) + ($counts['body_substr'] * 4);
+  }
+
+  return ['matched' => $matched, 'score' => $score];
+}
+
+function ctr_collect_search_matches(array $site, string $base, string $query): array {
+  $siteSlug = (string)($site['slug'] ?? '');
+  $siteId = (int)($site['id'] ?? 0);
+  if ($siteSlug === '' || $siteId <= 0) return [];
+
+  $contentTypeLabel = 'Examples of referencing';
+  $pageMap = ctr_build_citation_page_map($siteId, $siteSlug, $base);
+  $matched = [];
+
+  foreach (CitationExample::listForSiteSlug($siteSlug) as $row) {
+    $exampleId = trim((string)($row['id'] ?? ''));
+    $exampleKey = trim((string)($row['example_key'] ?? ''));
+    $pageLink = null;
+    if ($exampleId !== '' && isset($pageMap[$exampleId])) {
+      $pageLink = $pageMap[$exampleId];
+    } elseif ($exampleKey !== '' && isset($pageMap[$exampleKey])) {
+      $pageLink = $pageMap[$exampleKey];
+    }
+
+    $pageTitle = (string)($pageLink['page_title'] ?? '');
+    $rank = ctr_score_citation_example($row, $query, $pageTitle);
+    if (!$rank['matched']) continue;
+
+    $row['_score'] = (int)$rank['score'];
+    $row['_content_type'] = $contentTypeLabel;
+    $row['_topic'] = trim((string)($row['sub_category'] ?? ''));
+    $row['_snippet'] = ctr_make_search_snippet((string)($row['example_body'] ?? ''), $query);
+    $row['_url'] = (string)($pageLink['url'] ?? '');
+    $row['_page_title'] = $pageTitle;
+    $matched[] = $row;
+  }
+
+  return $matched;
 }
 
 /**
@@ -553,11 +734,166 @@ if ($method === 'GET' && preg_match('#^/s/([^/]+)/search/?$#', $uri, $m)) {
   if (!$site) { http_response_code(404); echo "Site not found"; exit; }
   $query = trim((string)($_GET['q'] ?? ''));
   $results = $query === '' ? [] : Page::searchPublished((int)$site['id'], $query);
+  $searchPayload = null;
+
+  if ($siteSlug === 'cite-them-right') {
+    $normalizeList = static function ($value): array {
+      $items = is_array($value) ? $value : ($value === null || $value === '' ? [] : [$value]);
+      $out = [];
+      foreach ($items as $item) {
+        $item = trim((string)$item);
+        if ($item !== '') $out[] = $item;
+      }
+      return array_values(array_unique($out));
+    };
+
+    $selectedStyles = $normalizeList($_GET['style'] ?? []);
+    $selectedCategories = $normalizeList($_GET['category'] ?? []);
+    $selectedTopics = $normalizeList($_GET['topic'] ?? []);
+    $selectedContentTypes = $normalizeList($_GET['content_type'] ?? []);
+
+    $sort = trim((string)($_GET['sort'] ?? 'relevance'));
+    if (!in_array($sort, ['relevance', 'title', 'style'], true)) $sort = 'relevance';
+
+    $perPage = (int)($_GET['per_page'] ?? 10);
+    if (!in_array($perPage, [10, 20, 50], true)) $perPage = 10;
+
+    $pageNum = max(1, (int)($_GET['page'] ?? 1));
+    $contentTypeLabel = 'Examples of referencing';
+    $matchedByQuery = ctr_collect_search_matches($site, $base, $query);
+
+    $facetCounts = [
+      'style' => [],
+      'category' => [],
+      'topic' => [],
+      'content_type' => [],
+    ];
+    foreach ($matchedByQuery as $row) {
+      $styleKey = (string)($row['referencing_style'] ?? '');
+      $categoryKey = (string)($row['category'] ?? '');
+      $topicKey = (string)($row['_topic'] ?? '');
+      $contentTypeKey = (string)($row['_content_type'] ?? '');
+      if ($styleKey !== '') $facetCounts['style'][$styleKey] = ($facetCounts['style'][$styleKey] ?? 0) + 1;
+      if ($categoryKey !== '') $facetCounts['category'][$categoryKey] = ($facetCounts['category'][$categoryKey] ?? 0) + 1;
+      if ($topicKey !== '') $facetCounts['topic'][$topicKey] = ($facetCounts['topic'][$topicKey] ?? 0) + 1;
+      if ($contentTypeKey !== '') $facetCounts['content_type'][$contentTypeKey] = ($facetCounts['content_type'][$contentTypeKey] ?? 0) + 1;
+    }
+    foreach ($facetCounts as &$groupCounts) {
+      uksort($groupCounts, static function (string $a, string $b) use ($groupCounts): int {
+        $countCompare = ($groupCounts[$b] ?? 0) <=> ($groupCounts[$a] ?? 0);
+        if ($countCompare !== 0) return $countCompare;
+        return strcasecmp($a, $b);
+      });
+    }
+    unset($groupCounts);
+
+    $filtered = array_values(array_filter($matchedByQuery, static function (array $row) use ($selectedStyles, $selectedCategories, $selectedTopics, $selectedContentTypes): bool {
+      if ($selectedStyles && !in_array((string)($row['referencing_style'] ?? ''), $selectedStyles, true)) return false;
+      if ($selectedCategories && !in_array((string)($row['category'] ?? ''), $selectedCategories, true)) return false;
+      if ($selectedTopics && !in_array((string)($row['_topic'] ?? ''), $selectedTopics, true)) return false;
+      if ($selectedContentTypes && !in_array((string)($row['_content_type'] ?? ''), $selectedContentTypes, true)) return false;
+      return true;
+    }));
+
+    usort($filtered, static function (array $a, array $b) use ($sort): int {
+      if ($sort === 'title') {
+        return strcasecmp((string)($a['label'] ?? ''), (string)($b['label'] ?? ''));
+      }
+      if ($sort === 'style') {
+        $styleCompare = strcasecmp((string)($a['referencing_style'] ?? ''), (string)($b['referencing_style'] ?? ''));
+        if ($styleCompare !== 0) return $styleCompare;
+        return strcasecmp((string)($a['label'] ?? ''), (string)($b['label'] ?? ''));
+      }
+      $scoreCompare = (int)($b['_score'] ?? 0) <=> (int)($a['_score'] ?? 0);
+      if ($scoreCompare !== 0) return $scoreCompare;
+      return strcasecmp((string)($a['label'] ?? ''), (string)($b['label'] ?? ''));
+    });
+
+    $totalResults = count($filtered);
+    $totalPages = max(1, (int)ceil($totalResults / $perPage));
+    if ($pageNum > $totalPages) $pageNum = $totalPages;
+    $offset = ($pageNum - 1) * $perPage;
+    $pagedResults = array_slice($filtered, $offset, $perPage);
+
+    $searchPayload = [
+      'mode' => 'cite-them-right',
+      'items' => $pagedResults,
+      'total' => $totalResults,
+      'page' => $pageNum,
+      'per_page' => $perPage,
+      'total_pages' => $totalPages,
+      'sort' => $sort,
+      'selected' => [
+        'style' => $selectedStyles,
+        'category' => $selectedCategories,
+        'topic' => $selectedTopics,
+        'content_type' => $selectedContentTypes,
+      ],
+      'facets' => $facetCounts,
+      'query_total' => count($matchedByQuery),
+      'content_type_label' => $contentTypeLabel,
+    ];
+  }
+
   view('site_search.php', [
     'site' => $site,
     'query' => $query,
     'results' => $results,
+    'searchPayload' => $searchPayload,
   ]);
+}
+
+if ($method === 'GET' && preg_match('#^/s/([^/]+)/search/suggest/?$#', $uri, $m)) {
+  $siteSlug = $m[1];
+  $site = Site::findBySlug($siteSlug);
+  if (!$site) json_response(['ok' => false, 'error' => 'Site not found'], 404);
+
+  $query = trim((string)($_GET['q'] ?? ''));
+  $limit = max(1, min(12, (int)($_GET['limit'] ?? 8)));
+  if ($siteSlug !== 'cite-them-right') {
+    json_response(['ok' => true, 'items' => [], 'query' => $query]);
+  }
+  if ($query === '') {
+    json_response(['ok' => true, 'items' => [], 'query' => $query]);
+  }
+
+  $matches = ctr_collect_search_matches($site, $base, $query);
+  $grouped = [];
+  foreach ($matches as $row) {
+    $url = trim((string)($row['_url'] ?? ''));
+    $pageTitle = trim((string)($row['_page_title'] ?? ''));
+    if ($url === '' || $pageTitle === '') continue;
+
+    $key = $url;
+    $item = [
+      'title' => $pageTitle,
+      'url' => $url,
+      'style' => trim((string)($row['referencing_style'] ?? '')),
+      'category' => trim((string)($row['category'] ?? '')),
+      'match_label' => trim((string)($row['label'] ?? '')),
+      'snippet' => trim((string)($row['_snippet'] ?? '')),
+      'score' => (int)($row['_score'] ?? 0),
+    ];
+
+    if (!isset($grouped[$key]) || $item['score'] > (int)$grouped[$key]['score']) {
+      $grouped[$key] = $item;
+    }
+  }
+
+  $items = array_values($grouped);
+  usort($items, static function (array $a, array $b): int {
+    $scoreCompare = (int)($b['score'] ?? 0) <=> (int)($a['score'] ?? 0);
+    if ($scoreCompare !== 0) return $scoreCompare;
+    return strcasecmp((string)($a['title'] ?? ''), (string)($b['title'] ?? ''));
+  });
+
+  $items = array_slice($items, 0, $limit);
+  $items = array_map(static function (array $item): array {
+    unset($item['score']);
+    return $item;
+  }, $items);
+
+  json_response(['ok' => true, 'items' => $items, 'query' => $query]);
 }
 
 // Homepage redirect: /s/{site}
@@ -574,6 +910,90 @@ if ($method === 'GET' && preg_match('#^/s/([^/]+)/?$#', $uri, $m)) {
   }
   header('Location: ' . $base . '/s/' . $siteSlug . '/' . $homeSlug);
   exit;
+}
+
+if ($method === 'POST' && preg_match('#^/s/([^/]+)/(.+)$#', $uri, $m) && isset($_POST['_nx_form_submit'])) {
+  $siteSlug = $m[1];
+  $pageSlug = PagePath::normalizePath(rawurldecode($m[2]));
+  $site = Site::findBySlug($siteSlug);
+  if (!$site) { http_response_code(404); echo "Site not found"; exit; }
+
+  $page = Page::findPublishedBySlug((int)$site['id'], $pageSlug);
+  if (!$page) {
+    $page = Page::findBySlugAnyStatus((int)$site['id'], $pageSlug);
+  }
+  if (!$page) { http_response_code(404); echo "Page not found"; exit; }
+
+  $formId = (int)($_POST['nx_form_id'] ?? 0);
+  $form = $formId > 0 ? SiteForm::find($formId) : null;
+  $redirectUrl = PagePath::publicUrl($base, $siteSlug, $pageSlug);
+  if (!$form || (int)($form['site_id'] ?? 0) !== (int)$site['id']) {
+    header('Location: ' . $redirectUrl . '?nx_form_error=failed&nx_form=' . $formId);
+    exit;
+  }
+
+  $responsesIn = is_array($_POST['responses'] ?? null) ? $_POST['responses'] : [];
+  $questions = is_array($form['questions'] ?? null) ? $form['questions'] : [];
+  $responses = [];
+  $hasInvalid = false;
+  foreach ($questions as $question) {
+    if (!is_array($question)) continue;
+    $qid = preg_replace('/[^a-z0-9_\-]/i', '_', (string)($question['id'] ?? ''));
+    if ($qid === '') continue;
+    $type = strtolower(trim((string)($question['type'] ?? 'text')));
+    $rawValue = $responsesIn[$qid] ?? null;
+    if ($type === 'rating') {
+      $score = (int)$rawValue;
+      if ($score < 1 || $score > 10) {
+        $hasInvalid = true;
+        break;
+      }
+      $responses[] = [
+        'id' => $qid,
+        'label' => trim((string)($question['label'] ?? '')),
+        'type' => 'rating',
+        'value' => $score,
+      ];
+    } else {
+      $text = trim((string)$rawValue);
+      if ($text === '') {
+        $hasInvalid = true;
+        break;
+      }
+      $responses[] = [
+        'id' => $qid,
+        'label' => trim((string)($question['label'] ?? '')),
+        'type' => 'text',
+        'value' => mb_substr($text, 0, 5000),
+      ];
+    }
+  }
+
+  if ($hasInvalid || !$responses) {
+    header('Location: ' . $redirectUrl . '?nx_form_error=invalid&nx_form=' . $formId);
+    exit;
+  }
+
+  try {
+    $currentUser = isset($_SESSION['user_id']) ? User::findById((int)$_SESSION['user_id']) : null;
+    $responseUserName = trim((string)($currentUser['display_name'] ?? $currentUser['email'] ?? $_SESSION['user_name'] ?? $_SESSION['username'] ?? ''));
+    $responseInstitution = trim((string)($currentUser['institution_name'] ?? ''));
+    FormResponse::create(
+      (int)$site['id'],
+      $formId,
+      (int)($page['id'] ?? 0),
+      $pageSlug,
+      $responses,
+      isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null,
+      $responseUserName,
+      $responseInstitution
+    );
+    header('Location: ' . $redirectUrl . '?nx_form_submitted=' . $formId);
+    exit;
+  } catch (\Throwable $e) {
+    header('Location: ' . $redirectUrl . '?nx_form_error=failed&nx_form=' . $formId);
+    exit;
+  }
 }
 
 // Public page: /s/{site}/{page...}

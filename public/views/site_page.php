@@ -107,6 +107,10 @@ $footerTemplate = __DIR__ . '/footers/' . $footerKey . '.php';
 
 // Optional CSS/JS per header + site assets
 $headerCssPath = __DIR__ . '/../assets/headers/' . $headerKey . '.css';
+$publicSiteCssPath = __DIR__ . '/../assets/site.css';
+$publicNexusCssPath = __DIR__ . '/../assets/nexus-page.css';
+$publicSiteCssVersion = is_file($publicSiteCssPath) ? (string)@filemtime($publicSiteCssPath) : '';
+$publicNexusCssVersion = is_file($publicNexusCssPath) ? (string)@filemtime($publicNexusCssPath) : '';
 $headerCssUrl  = $base . '/public/assets/headers/' . $headerKey . '.css';
 
 $safeSlug = PartialsManager::safeSlug($site['slug'] ?? '');
@@ -176,8 +180,8 @@ function safe_include(string $path, string $root): bool {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="<?= $base ?>/public/assets/site.css">
-  <link rel="stylesheet" href="<?= $base ?>/public/assets/nexus-page.css">
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/site.css<?= $publicSiteCssVersion !== '' ? '?v=' . Security::e($publicSiteCssVersion) : '' ?>">
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/nexus-page.css<?= $publicNexusCssVersion !== '' ? '?v=' . Security::e($publicNexusCssVersion) : '' ?>">
 
   <?php if (is_file($headerCssPath)): ?>
     <link rel="stylesheet" href="<?= $headerCssUrl ?>">
@@ -430,6 +434,37 @@ function safe_include(string $path, string $root): bool {
       background:#1d4ed8;
       border-color:#1d4ed8;
       color:#fff;
+    }
+    .nx-form-rating-option{
+      position:relative;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:38px;
+      height:38px;
+      padding:0 10px;
+      border:1px solid rgba(17,24,39,.16);
+      border-radius:999px;
+      background:#fff;
+      color:#111827;
+      font-weight:700;
+      cursor:pointer;
+      transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease;
+      user-select:none;
+    }
+    .nx-form-rating-option.is-active{
+      background:var(--nexus-primary,#2563eb);
+      border-color:var(--nexus-primary,#2563eb);
+      color:#fff;
+      box-shadow:0 8px 20px rgba(37,99,235,.18);
+    }
+    .nx-form-rating-option:hover{
+      border-color:var(--nexus-primary,#2563eb);
+    }
+    .nx-form-rating-input{
+      position:absolute;
+      opacity:0;
+      pointer-events:none;
     }
     .nx-row{
       display:grid;
@@ -783,6 +818,30 @@ if (!$usedPartialFooter) {
 })();
 </script>
 <?php endif; ?>
+
+<script>
+(function () {
+  function syncRatingGroup(group) {
+    if (!group) return;
+    const checked = group.querySelector('.nx-form-rating-input:checked');
+    const activeScore = checked ? parseInt(checked.value || '0', 10) : 0;
+    group.querySelectorAll('.nx-form-rating-option').forEach((option) => {
+      const score = parseInt(option.dataset.score || '0', 10);
+      option.classList.toggle('is-active', score > 0 && score <= activeScore);
+    });
+  }
+
+  document.addEventListener('change', function (event) {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || !input.classList.contains('nx-form-rating-input')) return;
+    syncRatingGroup(input.closest('[data-rating-group]'));
+  });
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-rating-group]').forEach(syncRatingGroup);
+  });
+})();
+</script>
 
 </body>
 </html>

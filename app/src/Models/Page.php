@@ -48,6 +48,13 @@ final class Page {
     return $st->fetchAll();
   }
 
+  public static function listPublishedBySite(int $siteId): array {
+    self::ensureSchema();
+    $st = DB::pdo()->prepare("SELECT * FROM pages WHERE site_id=? AND status='published' ORDER BY updated_at DESC");
+    $st->execute([$siteId]);
+    return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+  }
+
   public static function create(int $siteId, string $title, string $slug, array $doc, string $templateKey = 'landing', ?array $shellOverride = null, ?int $collectionId = null): int {
     self::ensureSchema();
     $slug = PagePath::normalizePath($slug);

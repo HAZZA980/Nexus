@@ -72,3 +72,127 @@
     true
   );
 })();
+
+(function () {
+  function buildSuggestion(item) {
+    const link = document.createElement('a');
+    link.className = 'ctr-search-suggestion';
+    link.href = item.url || '#';
+
+    const title = document.createElement('span');
+    title.className = 'ctr-search-suggestion-title';
+    title.textContent = item.title || '';
+    link.appendChild(title);
+
+    const metaParts = [item.style, item.category].filter(Boolean);
+    if (metaParts.length) {
+      const meta = document.createElement('span');
+      meta.className = 'ctr-search-suggestion-meta';
+      meta.textContent = metaParts.join(' • ');
+      link.appendChild(meta);
+    }
+
+    if (item.match_label) {
+      const match = document.createElement('span');
+      match.className = 'ctr-search-suggestion-match';
+      match.textContent = 'Matched on: ' + item.match_label;
+      link.appendChild(match);
+    }
+
+    if (item.snippet) {
+      const snippet = document.createElement('span');
+      snippet.className = 'ctr-search-suggestion-snippet';
+      snippet.textContent = item.snippet;
+      link.appendChild(snippet);
+    }
+
+    return link;
+  }
+
+  function initCtrAutocomplete() {
+    const form = document.querySelector('.ctr-search-form[data-autocomplete-endpoint]');
+    if (!form) return;
+
+    const input = form.querySelector('.ctr-search-input[name="q"]');
+    const panel = form.querySelector('.ctr-search-suggestions');
+    const endpoint = form.getAttribute('data-autocomplete-endpoint') || '';
+    if (!input || !panel || !endpoint) return;
+
+    let aborter = null;
+    let debounceId = 0;
+    let requestId = 0;
+
+    function closePanel() {
+      panel.hidden = true;
+      panel.innerHTML = '';
+      input.setAttribute('aria-expanded', 'false');
+    }
+
+    function openPanel() {
+      panel.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+    }
+
+    function renderItems(items) {
+      panel.innerHTML = '';
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'ctr-search-empty';
+        empty.textContent = 'No matching citation pages found.';
+        panel.appendChild(empty);
+        openPanel();
+        return;
+      }
+
+      items.forEach((item) => panel.appendChild(buildSuggestion(item)));
+      openPanel();
+    }
+
+    function loadSuggestions(query) {
+      const trimmed = query.trim();
+      if (trimmed.length < 2) {
+        closePanel();
+        return;
+      }
+
+      if (aborter) aborter.abort();
+      aborter = new AbortController();
+      const currentRequest = ++requestId;
+
+      fetch(endpoint + '?q=' + encodeURIComponent(trimmed) + '&limit=8', {
+        headers: { Accept: 'application/json' },
+        signal: aborter.signal,
+      })
+        .then((response) => (response.ok ? response.json() : Promise.reject(new Error('Request failed'))))
+        .then((payload) => {
+          if (currentRequest !== requestId) return;
+          renderItems(Array.isArray(payload.items) ? payload.items : []);
+        })
+        .catch((error) => {
+          if (error && error.name === 'AbortError') return;
+          closePanel();
+        });
+    }
+
+    input.addEventListener('input', function () {
+      window.clearTimeout(debounceId);
+      debounceId = window.setTimeout(function () {
+        loadSuggestions(input.value);
+      }, 140);
+    });
+
+    input.addEventListener('focus', function () {
+      if (input.value.trim().length >= 2) loadSuggestions(input.value);
+    });
+
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') closePanel();
+    });
+
+    document.addEventListener('click', function (event) {
+      if (!form.contains(event.target)) closePanel();
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', initCtrAutocomplete);
+})();

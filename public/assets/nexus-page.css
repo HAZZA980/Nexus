@@ -90,7 +90,7 @@
   border:1px solid #dcdcdf;
   border-radius:20px;
   padding:26px 28px 28px;
-  background:#f3f3f4;
+  background:#f8f8f8;
   width:100%;
   box-sizing:border-box;
   display:block;
@@ -110,7 +110,7 @@
 
 .nexus-page .nx-examplecard{
   display:grid;
-  grid-template-columns:minmax(0, 1.18fr) minmax(340px, .82fr);
+  grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);
   gap:0;
   border:1px solid #d8d8dd;
   border-top:5px solid #ad92ce;
@@ -121,15 +121,21 @@
 .nexus-page .nx-examplecard.nx-examplecard--single{
   grid-template-columns:1fr;
 }
+.nexus-page .nx-examplecard.nx-examplecard--try-only{
+  grid-template-columns:1fr;
+}
 .nexus-page .nx-examplecard-left{
-  background:#e1e1e4;
-  padding:30px 28px 32px;
+  background:#e0e0e0;
+  padding:30px 20px 32px;
   color:#38383d;
 }
 .nexus-page .nx-examplecard-right{
   padding:28px 36px 26px;
   background:#ffffff;
   color:#38383d;
+}
+.nexus-page .nx-examplecard.nx-examplecard--try-only .nx-examplecard-right{
+  padding:28px 44px 26px;
 }
 .nexus-page .nx-examplecard-heading{
   font-weight:700;
@@ -139,9 +145,9 @@
   color:#37373c;
 }
 .nexus-page .nx-examplecard-body{
-  font-size:16px;
-  line-height:1.34;
-  color:#404046;
+  font-size:15px;
+  line-height:1.42;
+  color:#333333;
 }
 .nexus-page .nx-examplecard-body > *,
 .nexus-page .nx-examplecard-trybox > *{
@@ -157,12 +163,12 @@
 .nexus-page .nx-examplecard-trybox ul,
 .nexus-page .nx-examplecard-trybox ol{
   margin:0 0 14px;
-  line-height:1.34;
+  line-height:1.42;
 }
 .nexus-page .nx-examplecard-body li,
 .nexus-page .nx-examplecard-trybox li{
   margin:0 0 8px;
-  line-height:1.34;
+  line-height:1.42;
 }
 .nexus-page .nx-examplecard-body > :last-child,
 .nexus-page .nx-examplecard-body p:last-child,
@@ -192,10 +198,10 @@
 .nexus-page .nx-examplecard-trybox{
   border:1px solid #8f8f94;
   border-radius:18px;
-  padding:18px 20px;
+  padding:14px 16px;
   min-height:78px;
   background:#ffffff;
-  font-size:16px;
+  font-size:15px;
   line-height:1.42;
   color:#404046;
 }
@@ -205,12 +211,34 @@
   min-height:78px;
   border:1px solid #8f8f94;
   border-radius:18px;
-  padding:18px 20px;
+  padding:14px 16px;
   font:inherit;
   line-height:1.42;
   background:#fff;
   white-space:pre-wrap;
   color:#404046;
+}
+.nexus-page .nx-try-input > *{
+  margin-top:0;
+  margin-bottom:0;
+}
+.nexus-page .nx-try-input p,
+.nexus-page .nx-try-input div,
+.nexus-page .nx-try-input ul,
+.nexus-page .nx-try-input ol{
+  margin:0 0 10px;
+  line-height:1.42;
+}
+.nexus-page .nx-try-input li{
+  margin:0 0 6px;
+  line-height:1.42;
+}
+.nexus-page .nx-try-input > :last-child,
+.nexus-page .nx-try-input p:last-child,
+.nexus-page .nx-try-input div:last-child,
+.nexus-page .nx-try-input ul:last-child,
+.nexus-page .nx-try-input ol:last-child{
+  margin-bottom:0;
 }
 .nexus-page .nx-try-input.ok{background:#ecfdf3;border-color:#22c55e;}
 .nexus-page .nx-try-input.no{background:#fef2f2;border-color:#ef4444;}
@@ -929,10 +957,11 @@
 }
 .nexus-page .nx-accordion--title .nx-accordion-parent .nx-accordion-head{
   background:#f2f2f1;
-  color:#2f3137;
+  color:#333333;
   padding:10px 14px;
-  font-size:15px;
+  font-size:17px;
   font-weight:500;
+  font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
 }
 .nexus-page .nx-accordion--title .nx-accordion-parent .nx-accordion-plus{
   display:inline-flex;
@@ -952,11 +981,69 @@
   padding:0;
   white-space:normal;
 }
+.nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  table-layout:fixed;
+  margin:0;
+}
+.nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body td,
+.nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body th{
+  width:50%;
+  vertical-align:top;
+  padding:0 18px 8px;
+  border:0;
+}
+.nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body td:first-child,
+.nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body th:first-child{
+  padding-left:0;
+  padding-right:26px;
+}
+.nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body td:last-child,
+.nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body th:last-child{
+  padding-right:0;
+  padding-left:26px;
+}
+.nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body td > *,
+.nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body th > *{
+  margin:0;
+}
+.nexus-page .nx-title-accordion-intro table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  table-layout:fixed;
+  margin:0;
+}
+.nexus-page .nx-title-accordion-intro td,
+.nexus-page .nx-title-accordion-intro th{
+  width:50%;
+  vertical-align:top;
+  padding:0 18px 8px;
+  border:0;
+}
+.nexus-page .nx-title-accordion-intro td:first-child,
+.nexus-page .nx-title-accordion-intro th:first-child{
+  padding-left:0;
+  padding-right:26px;
+}
+.nexus-page .nx-title-accordion-intro td:last-child,
+.nexus-page .nx-title-accordion-intro th:last-child{
+  padding-right:0;
+  padding-left:26px;
+}
+.nexus-page .nx-title-accordion-intro td > *,
+.nexus-page .nx-title-accordion-intro th > *{
+  margin:0;
+}
 .nexus-page .nx-title-accordion-intro{
   padding:10px 14px 8px;
   line-height:1.5;
-  color:#1f3b82;
-  font-size:13px;
+  color:#28468c;
+  font-size:16px;
+  font-weight:400;
+  font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
 }
 .nexus-page .nx-title-accordion-intro > :first-child{
   margin-top:0;
@@ -967,6 +1054,16 @@
 .nexus-page .nx-title-accordion-intro > *{
   margin-top:0;
   margin-bottom:0;
+}
+.nexus-page .nx-title-accordion-intro a{
+  color:#28468c;
+  text-decoration:none;
+  font-family:inherit;
+  font-size:inherit;
+  font-weight:500;
+}
+.nexus-page .nx-title-accordion-intro a:hover{
+  text-decoration:underline;
 }
 .nexus-page .nx-title-accordion-children{
   padding:0;
@@ -980,24 +1077,25 @@
 .nexus-page .nx-title-accordion-item .nx-accordion-head{
   width:100%;
   background:transparent;
-  color:#232833;
+  color:#333333;
   padding:8px 14px;
-  font-weight:700;
+  font-weight:600;
   border-radius:0;
   border-top:0;
-  font-size:13px;
+  font-size:16px;
+  font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   box-shadow:none;
 }
 .nexus-page .nx-accordion--title .nx-title-accordion-item .nx-accordion-head,
 .nexus-page .nx-accordion--title .nx-title-accordion-item.is-open .nx-accordion-head,
 .nexus-page .nx-accordion--title .nx-title-accordion-item .nx-accordion-head:hover{
   background:transparent !important;
-  color:#232833;
+  color:#333333;
   box-shadow:none;
 }
 .nexus-page .nx-title-accordion-item.is-open .nx-accordion-head{
   background:transparent;
-  color:#232833;
+  color:#333333;
 }
 .nexus-page .nx-title-accordion-item .nx-accordion-panel{
   background:#fff;
@@ -1005,9 +1103,11 @@
 .nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body{
   padding:2px 14px 10px;
   white-space:normal;
-  line-height:1.45;
-  color:#1f3b82;
-  font-size:13px;
+  line-height:1.5;
+  color:#28468c;
+  font-size:16px;
+  font-weight:400;
+  font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
 }
 .nexus-page .nx-title-accordion-item .nx-accordion-plus{
   display:inline-flex;
@@ -1030,8 +1130,11 @@
   margin-bottom:0;
 }
 .nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body a{
-  color:#1f3b82;
+  color:#28468c;
   text-decoration:none;
+  font-family:inherit;
+  font-size:inherit;
+  font-weight:500;
 }
 .nexus-page .nx-title-accordion-item > .nx-accordion-panel > .nx-accordion-body a:hover{
   text-decoration:underline;

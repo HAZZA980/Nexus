@@ -33,6 +33,10 @@ $footerPreset = ShellPreset::findByKey((int)$site['id'], 'footer', $footerKey);
 $headerTemplate = __DIR__ . '/headers/' . $headerKey . '.php';
 $footerTemplate = __DIR__ . '/footers/' . $footerKey . '.php';
 $headerCssPath = __DIR__ . '/../assets/headers/' . $headerKey . '.css';
+$publicSiteCssPath = __DIR__ . '/../assets/site.css';
+$publicNexusCssPath = __DIR__ . '/../assets/nexus-page.css';
+$publicSiteCssVersion = is_file($publicSiteCssPath) ? (string)@filemtime($publicSiteCssPath) : '';
+$publicNexusCssVersion = is_file($publicNexusCssPath) ? (string)@filemtime($publicNexusCssPath) : '';
 $headerCssUrl  = $base . '/public/assets/headers/' . $headerKey . '.css';
 
 $safeSlug = PartialsManager::safeSlug($site['slug'] ?? '');
@@ -61,8 +65,8 @@ $partialHeader = $sitePaths['header'];
 $partialFooter = $sitePaths['footer'];
 $siteCssVersion = is_file($sitePaths['css'] ?? '') ? (string)@filemtime($sitePaths['css']) : '';
 $siteJsVersion = is_file($sitePaths['js'] ?? '') ? (string)@filemtime($sitePaths['js']) : '';
-$siteCssUrl = '/sites/' . $safeSlug . '/assets/site.css' . ($siteCssVersion !== '' ? '?v=' . rawurlencode($siteCssVersion) : '');
-$siteJsUrl  = '/sites/' . $safeSlug . '/assets/site.js' . ($siteJsVersion !== '' ? '?v=' . rawurlencode($siteJsVersion) : '');
+$siteCssUrl = $base . '/sites/' . $safeSlug . '/assets/site.css' . ($siteCssVersion !== '' ? '?v=' . rawurlencode($siteCssVersion) : '');
+$siteJsUrl  = $base . '/sites/' . $safeSlug . '/assets/site.js' . ($siteJsVersion !== '' ? '?v=' . rawurlencode($siteJsVersion) : '');
 
 $headerConfig = $headerPreset ? json_decode($headerPreset['config_json'] ?? '', true) ?: [] : [];
 $siteHeaderConfig = json_decode($site['header_json'] ?? '', true) ?: [];
@@ -94,6 +98,32 @@ function snippet(string $text, string $q): string {
   $start = max(0, $pos - 40);
   return substr($text, $start, 160);
 }
+
+$searchPayload = is_array($searchPayload ?? null) ? $searchPayload : null;
+$isCtrSearch = ($site['slug'] ?? '') === 'cite-them-right' && is_array($searchPayload) && (($searchPayload['mode'] ?? '') === 'cite-them-right');
+
+$buildSearchUrl = static function (array $overrides = []) use ($base, $safeSlug, $query, $searchPayload): string {
+  $params = ['q' => $query];
+  if ($searchPayload) {
+    $selected = is_array($searchPayload['selected'] ?? null) ? $searchPayload['selected'] : [];
+    foreach (['style', 'category', 'topic', 'content_type'] as $key) {
+      $values = array_values(array_filter(array_map('strval', (array)($selected[$key] ?? [])), static fn($v) => $v !== ''));
+      if ($values) $params[$key] = $values;
+    }
+    $params['sort'] = (string)($searchPayload['sort'] ?? 'relevance');
+    $params['per_page'] = (int)($searchPayload['per_page'] ?? 10);
+    $params['page'] = (int)($searchPayload['page'] ?? 1);
+  }
+  foreach ($overrides as $key => $value) {
+    if ($value === null || $value === '' || $value === []) {
+      unset($params[$key]);
+      continue;
+    }
+    $params[$key] = $value;
+  }
+  $queryString = http_build_query($params);
+  return $base . '/s/' . rawurlencode($safeSlug) . '/search' . ($queryString !== '' ? '?' . $queryString : '');
+};
 ?>
 <!doctype html>
 <html lang="en">
@@ -101,8 +131,8 @@ function snippet(string $text, string $q): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Search — <?= Security::e($site['name']) ?></title>
-  <link rel="stylesheet" href="<?= $base ?>/public/assets/site.css">
-  <link rel="stylesheet" href="<?= $base ?>/public/assets/nexus-page.css">
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/site.css<?= $publicSiteCssVersion !== '' ? '?v=' . Security::e($publicSiteCssVersion) : '' ?>">
+  <link rel="stylesheet" href="<?= $base ?>/public/assets/nexus-page.css<?= $publicNexusCssVersion !== '' ? '?v=' . Security::e($publicNexusCssVersion) : '' ?>">
   <?php if (is_file($headerCssPath)): ?>
     <link rel="stylesheet" href="<?= $headerCssUrl ?>">
   <?php endif; ?>
@@ -111,7 +141,7 @@ function snippet(string $text, string $q): string {
   <?php endif; ?>
   <style>
     :root{
-      --nexus-page-bg: <?= Security::e($pageBg) ?>;
+      --nexus-page-bg: <?= Security::e($isCtrSearch ? '#ffffff' : $pageBg) ?>;
       --nexus-text: <?= Security::e($text) ?>;
       --nexus-primary: <?= Security::e($primary) ?>;
       --nexus-muted: <?= Security::e($muted) ?>;
@@ -122,6 +152,12 @@ function snippet(string $text, string $q): string {
       --nexus-font-size: <?= (int)$baseSize ?>px;
     }
     body{margin:0;background:var(--nexus-page-bg);color:var(--nexus-text);font-family:var(--nexus-font);font-size:var(--nexus-font-size);}
+    body.page-site-search-ctr{background:#ffffff !important;}
+    .ctr-search-surface{background:#ffffff;}
+    body.page-site-search-ctr .ctr-search-page,
+    body.page-site-search-ctr .ctr-footer,
+    body.page-site-search-ctr .ctr-footer-top,
+    body.page-site-search-ctr .ctr-footer-bottom{background:#ffffff;}
     .nx-adminbar{
       position:sticky;
       top:0;
@@ -198,9 +234,58 @@ function snippet(string $text, string $q): string {
     .result-url{color:var(--primary);font-size:14px;}
     .result-snippet{color:var(--muted);font-size:14px;}
     .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+    .ctr-search-page{max-width:1120px;margin:0 auto;padding:22px 24px 36px;font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#ffffff;}
+    .ctr-search-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:30px;align-items:start;}
+    .ctr-filter-title{font-size:16px;font-weight:700;letter-spacing:.01em;color:#333;margin:0 0 12px;text-transform:uppercase;}
+    .ctr-filter-toggle{display:inline-block;margin-bottom:14px;background:none;border:0;padding:0;color:#294a97;font:inherit;cursor:pointer;}
+    .ctr-filter-group{padding:0 0 18px;margin:0 0 18px;border-bottom:1px solid #e5e7eb;}
+    .ctr-filter-group:last-child{border-bottom:0;}
+    .ctr-filter-group summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;font-size:14px;font-weight:700;color:#294a97;}
+    .ctr-filter-group summary::-webkit-details-marker{display:none;}
+    .ctr-filter-icon{width:18px;height:18px;border:1px solid #111;border-radius:999px;position:relative;flex:0 0 auto;}
+    .ctr-filter-icon::before{content:"";position:absolute;left:4px;right:4px;top:8px;height:1px;background:#111;}
+    details[open] .ctr-filter-icon::after{content:"";position:absolute;top:4px;bottom:4px;left:8px;width:1px;background:#111;}
+    .ctr-filter-list{display:grid;gap:8px;padding-top:14px;}
+    .ctr-filter-option{display:flex;align-items:flex-start;gap:8px;font-size:14px;line-height:1.35;color:#1f3f84;}
+    .ctr-filter-option input{margin-top:2px;}
+    .ctr-filter-option span{color:#1f3f84;}
+    .ctr-search-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px;}
+    .ctr-search-heading{font-size:19px;font-weight:700;color:#333;text-transform:uppercase;margin:0;}
+    .ctr-search-count{font-size:14px;color:#555;margin-top:18px;}
+    .ctr-save-search{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 18px;border:1px solid #294a97;border-radius:999px;background:#fff;color:#294a97;font:inherit;text-decoration:none;}
+    .ctr-search-controls{display:flex;justify-content:space-between;align-items:center;gap:14px;background:#f3f4f6;padding:10px 12px;margin-bottom:18px;}
+    .ctr-search-controls form{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+    .ctr-search-controls label{font-size:14px;color:#444;}
+    .ctr-search-controls select{min-width:168px;padding:7px 34px 7px 10px;border:1px solid #d7dbe4;border-radius:8px;background:#fff;font:inherit;color:#333;}
+    .ctr-search-hide-details{background:none;border:0;padding:0;color:#294a97;font:inherit;cursor:pointer;}
+    .ctr-search-results{border-top:1px solid #e5e7eb;}
+    .ctr-search-result{padding:18px 0;border-bottom:1px solid #e5e7eb;}
+    .ctr-search-result-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;}
+    .ctr-search-result-title{font-size:22px;font-weight:700;line-height:1.2;margin:0 0 8px;}
+    .ctr-search-result-title a{color:#294a97;text-decoration:none;}
+    .ctr-search-result-meta{display:grid;gap:2px;font-size:14px;color:#555;margin-bottom:10px;}
+    .ctr-search-result-type{font-size:14px;color:#666;}
+    .ctr-search-result-snippet{font-size:15px;line-height:1.7;color:#333;margin:0;max-width:100%;}
+    .ctr-search-result-page{font-size:13px;color:#6b7280;margin-top:10px;}
+    .ctr-search-expand{width:20px;height:20px;border:1px solid #111;border-radius:999px;background:#fff;position:relative;flex:0 0 auto;}
+    .ctr-search-expand::before{content:"";position:absolute;left:4px;right:4px;top:9px;height:1px;background:#111;}
+    .ctr-search-result.is-collapsed .ctr-search-result-snippet,
+    .ctr-search-result.is-collapsed .ctr-search-result-page{display:none;}
+    .ctr-search-pagination{display:flex;justify-content:center;align-items:center;gap:12px;padding:18px 0 0;color:#333;font-size:15px;flex-wrap:wrap;}
+    .ctr-search-pages{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+    .ctr-search-pages a,.ctr-search-pages span{color:#294a97;text-decoration:none;}
+    .ctr-search-pages .is-current{color:#111;}
+    .ctr-search-summary{text-align:center;font-size:14px;color:#555;margin-top:10px;}
+    .ctr-no-results{font-size:15px;color:#555;padding:18px 0;}
+    .ctr-search-layout.filters-hidden{grid-template-columns:minmax(0,1fr);}
+    .ctr-search-layout.filters-hidden .ctr-search-sidebar{display:none;}
+    @media (max-width: 980px){
+      .ctr-search-layout{grid-template-columns:1fr;}
+      .ctr-search-head,.ctr-search-controls{flex-direction:column;align-items:flex-start;}
+    }
   </style>
 </head>
-<body>
+<body class="<?= $isCtrSearch ? 'page-site-search-ctr' : '' ?>">
 <?php if ($canFlagUser): ?>
   <div class="nx-adminbar">
     <div class="nx-adminbar-inner">
@@ -242,6 +327,193 @@ if (!$usedPartialHeader) {
   }
 }
 ?>
+<?php if ($isCtrSearch): ?>
+<div class="ctr-search-surface">
+<?php endif; ?>
+<?php if ($isCtrSearch): ?>
+<?php
+  $selected = is_array($searchPayload['selected'] ?? null) ? $searchPayload['selected'] : [];
+  $items = is_array($searchPayload['items'] ?? null) ? $searchPayload['items'] : [];
+  $facets = is_array($searchPayload['facets'] ?? null) ? $searchPayload['facets'] : [];
+  $sort = (string)($searchPayload['sort'] ?? 'relevance');
+  $pageNum = (int)($searchPayload['page'] ?? 1);
+  $perPage = (int)($searchPayload['per_page'] ?? 10);
+  $total = (int)($searchPayload['total'] ?? 0);
+  $totalPages = (int)($searchPayload['total_pages'] ?? 1);
+  $showingFrom = $total > 0 ? (($pageNum - 1) * $perPage) + 1 : 0;
+  $showingTo = min($total, $pageNum * $perPage);
+  $selectedStyleCount = count((array)($selected['style'] ?? []));
+  $selectedCategoryCount = count((array)($selected['category'] ?? []));
+  $selectedTopicCount = count((array)($selected['topic'] ?? []));
+  $selectedContentTypeCount = count((array)($selected['content_type'] ?? []));
+?>
+<main class="ctr-search-page">
+  <div class="ctr-search-layout" id="ctrSearchLayout">
+    <aside class="ctr-search-sidebar">
+      <div class="ctr-filter-title">Refine Results:</div>
+      <button type="button" class="ctr-filter-toggle" id="ctrFilterToggle">Hide All Filters</button>
+
+      <form method="get" action="<?= Security::e($base . '/s/' . $safeSlug . '/search') ?>" id="ctrFacetForm">
+        <input type="hidden" name="q" value="<?= Security::e($query) ?>">
+        <input type="hidden" name="sort" value="<?= Security::e($sort) ?>">
+        <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
+        <input type="hidden" name="page" value="1">
+
+        <details class="ctr-filter-group" open>
+          <summary>
+            <span>Referencing Style<?= $selectedStyleCount ? ' (' . $selectedStyleCount . ')' : '' ?></span>
+            <span class="ctr-filter-icon" aria-hidden="true"></span>
+          </summary>
+          <div class="ctr-filter-list">
+            <?php foreach ((array)($facets['style'] ?? []) as $label => $count): ?>
+              <label class="ctr-filter-option">
+                <input type="checkbox" name="style[]" value="<?= Security::e((string)$label) ?>" <?= in_array((string)$label, (array)($selected['style'] ?? []), true) ? 'checked' : '' ?>>
+                <span><?= Security::e((string)$label) ?> (<?= (int)$count ?>)</span>
+              </label>
+            <?php endforeach; ?>
+          </div>
+        </details>
+
+        <details class="ctr-filter-group" open>
+          <summary>
+            <span>Category<?= $selectedCategoryCount ? ' (' . $selectedCategoryCount . ')' : '' ?></span>
+            <span class="ctr-filter-icon" aria-hidden="true"></span>
+          </summary>
+          <div class="ctr-filter-list">
+            <?php foreach ((array)($facets['category'] ?? []) as $label => $count): ?>
+              <label class="ctr-filter-option">
+                <input type="checkbox" name="category[]" value="<?= Security::e((string)$label) ?>" <?= in_array((string)$label, (array)($selected['category'] ?? []), true) ? 'checked' : '' ?>>
+                <span><?= Security::e((string)$label) ?> (<?= (int)$count ?>)</span>
+              </label>
+            <?php endforeach; ?>
+          </div>
+        </details>
+
+        <details class="ctr-filter-group" open>
+          <summary>
+            <span>Referencing Topic<?= $selectedTopicCount ? ' (' . $selectedTopicCount . ')' : '' ?></span>
+            <span class="ctr-filter-icon" aria-hidden="true"></span>
+          </summary>
+          <div class="ctr-filter-list">
+            <?php foreach ((array)($facets['topic'] ?? []) as $label => $count): ?>
+              <label class="ctr-filter-option">
+                <input type="checkbox" name="topic[]" value="<?= Security::e((string)$label) ?>" <?= in_array((string)$label, (array)($selected['topic'] ?? []), true) ? 'checked' : '' ?>>
+                <span><?= Security::e((string)$label) ?> (<?= (int)$count ?>)</span>
+              </label>
+            <?php endforeach; ?>
+          </div>
+        </details>
+
+        <details class="ctr-filter-group" open>
+          <summary>
+            <span>Content Type<?= $selectedContentTypeCount ? ' (' . $selectedContentTypeCount . ')' : '' ?></span>
+            <span class="ctr-filter-icon" aria-hidden="true"></span>
+          </summary>
+          <div class="ctr-filter-list">
+            <?php foreach ((array)($facets['content_type'] ?? []) as $label => $count): ?>
+              <label class="ctr-filter-option">
+                <input type="checkbox" name="content_type[]" value="<?= Security::e((string)$label) ?>" <?= in_array((string)$label, (array)($selected['content_type'] ?? []), true) ? 'checked' : '' ?>>
+                <span><?= Security::e((string)$label) ?> (<?= (int)$count ?>)</span>
+              </label>
+            <?php endforeach; ?>
+          </div>
+        </details>
+      </form>
+    </aside>
+
+    <section class="ctr-search-main">
+      <div class="ctr-search-head">
+        <div>
+          <h1 class="ctr-search-heading">Search Results</h1>
+          <div class="ctr-search-count">
+            Showing results <?= $showingFrom ?>-<?= $showingTo ?> of <?= $total ?>
+          </div>
+        </div>
+        <button type="button" class="ctr-save-search">Save this Search</button>
+      </div>
+
+      <div class="ctr-search-controls">
+        <form method="get" action="<?= Security::e($base . '/s/' . $safeSlug . '/search') ?>">
+          <input type="hidden" name="q" value="<?= Security::e($query) ?>">
+          <?php foreach ((array)($selected['style'] ?? []) as $value): ?><input type="hidden" name="style[]" value="<?= Security::e((string)$value) ?>"><?php endforeach; ?>
+          <?php foreach ((array)($selected['category'] ?? []) as $value): ?><input type="hidden" name="category[]" value="<?= Security::e((string)$value) ?>"><?php endforeach; ?>
+          <?php foreach ((array)($selected['topic'] ?? []) as $value): ?><input type="hidden" name="topic[]" value="<?= Security::e((string)$value) ?>"><?php endforeach; ?>
+          <?php foreach ((array)($selected['content_type'] ?? []) as $value): ?><input type="hidden" name="content_type[]" value="<?= Security::e((string)$value) ?>"><?php endforeach; ?>
+          <input type="hidden" name="page" value="1">
+          <label>Sort By:
+            <select name="sort" onchange="this.form.submit()">
+              <option value="relevance" <?= $sort === 'relevance' ? 'selected' : '' ?>>Relevance</option>
+              <option value="title" <?= $sort === 'title' ? 'selected' : '' ?>>Title</option>
+              <option value="style" <?= $sort === 'style' ? 'selected' : '' ?>>Referencing Style</option>
+            </select>
+          </label>
+          <label>Results Per Page:
+            <select name="per_page" onchange="this.form.submit()">
+              <option value="10" <?= $perPage === 10 ? 'selected' : '' ?>>10</option>
+              <option value="20" <?= $perPage === 20 ? 'selected' : '' ?>>20</option>
+              <option value="50" <?= $perPage === 50 ? 'selected' : '' ?>>50</option>
+            </select>
+          </label>
+        </form>
+        <button type="button" class="ctr-search-hide-details" id="ctrDetailToggle">Hide all content details</button>
+      </div>
+
+      <?php if (!$items): ?>
+        <div class="ctr-no-results">
+          No search results found<?= $query !== '' ? ' for "' . Security::e($query) . '"' : '' ?>.
+        </div>
+      <?php else: ?>
+        <div class="ctr-search-results" id="ctrSearchResults">
+          <?php foreach ($items as $row): ?>
+            <article class="ctr-search-result">
+              <div class="ctr-search-result-top">
+                <div>
+                  <h2 class="ctr-search-result-title">
+                    <?php if (trim((string)($row['_url'] ?? '')) !== ''): ?>
+                      <a href="<?= Security::e((string)$row['_url']) ?>"><?= Security::e((string)($row['label'] ?? 'Untitled result')) ?></a>
+                    <?php else: ?>
+                      <span><?= Security::e((string)($row['label'] ?? 'Untitled result')) ?></span>
+                    <?php endif; ?>
+                  </h2>
+                  <div class="ctr-search-result-meta">
+                    <div><?= Security::e((string)($row['referencing_style'] ?? '')) ?></div>
+                    <div><?= Security::e((string)($row['_content_type'] ?? '')) ?></div>
+                  </div>
+                  <p class="ctr-search-result-snippet"><?= Security::e((string)($row['_snippet'] ?? '')) ?></p>
+                  <?php if (trim((string)($row['_page_title'] ?? '')) !== ''): ?>
+                    <div class="ctr-search-result-page">Page: <?= Security::e((string)$row['_page_title']) ?></div>
+                  <?php endif; ?>
+                </div>
+                <button type="button" class="ctr-search-expand" aria-label="Toggle result details"></button>
+              </div>
+            </article>
+          <?php endforeach; ?>
+        </div>
+
+        <?php if ($totalPages > 1): ?>
+          <nav class="ctr-search-pagination" aria-label="Pagination">
+            <span>Page <?= $pageNum ?></span>
+            <div class="ctr-search-pages">
+              <?php for ($i = max(1, $pageNum - 2); $i <= min($totalPages, $pageNum + 2); $i++): ?>
+                <?php if ($i === $pageNum): ?>
+                  <span class="is-current"><?= $i ?></span>
+                <?php else: ?>
+                  <a href="<?= Security::e($buildSearchUrl(['page' => $i])) ?>"><?= $i ?></a>
+                <?php endif; ?>
+              <?php endfor; ?>
+              <?php if ($pageNum + 2 < $totalPages): ?>
+                <span>...</span>
+                <a href="<?= Security::e($buildSearchUrl(['page' => $totalPages])) ?>"><?= $totalPages ?></a>
+              <?php endif; ?>
+            </div>
+          </nav>
+        <?php endif; ?>
+        <div class="ctr-search-summary"><?= $showingFrom ?> - <?= $showingTo ?> of <?= $total ?> results</div>
+      <?php endif; ?>
+    </section>
+  </div>
+</main>
+<?php else: ?>
 <main class="wrap">
   <h1>Search results</h1>
   <form action="<?= $base ?>/s/<?= Security::e($safeSlug) ?>/search" method="get" role="search" style="margin:10px 0 20px">
@@ -265,6 +537,7 @@ if (!$usedPartialHeader) {
     </div>
   <?php endif; ?>
 </main>
+<?php endif; ?>
 <?php
 $usedPartialFooter = false;
 if (is_file($partialFooter) && safe_include($partialFooter, $root)) {
@@ -272,8 +545,49 @@ if (is_file($partialFooter) && safe_include($partialFooter, $root)) {
 }
 if (!$usedPartialFooter && is_file($footerTemplate)) require $footerTemplate;
 ?>
+<?php if ($isCtrSearch): ?>
+</div>
+<?php endif; ?>
 <?php if (is_file($sitePaths['js'] ?? '')): ?>
   <script src="<?= Security::e($siteJsUrl) ?>" defer></script>
+<?php endif; ?>
+
+<?php if ($isCtrSearch): ?>
+<script>
+(function(){
+  const facetForm = document.getElementById('ctrFacetForm');
+  facetForm?.addEventListener('change', function () {
+    facetForm.submit();
+  });
+
+  const layout = document.getElementById('ctrSearchLayout');
+  const filterToggle = document.getElementById('ctrFilterToggle');
+  filterToggle?.addEventListener('click', function () {
+    if (!layout) return;
+    const hidden = layout.classList.toggle('filters-hidden');
+    filterToggle.textContent = hidden ? 'Show All Filters' : 'Hide All Filters';
+  });
+
+  const resultsWrap = document.getElementById('ctrSearchResults');
+  const detailToggle = document.getElementById('ctrDetailToggle');
+  let collapsed = false;
+
+  detailToggle?.addEventListener('click', function () {
+    collapsed = !collapsed;
+    resultsWrap?.querySelectorAll('.ctr-search-result').forEach(function (item) {
+      item.classList.toggle('is-collapsed', collapsed);
+    });
+    detailToggle.textContent = collapsed ? 'Show all content details' : 'Hide all content details';
+  });
+
+  resultsWrap?.addEventListener('click', function (event) {
+    const btn = event.target.closest('.ctr-search-expand');
+    if (!btn) return;
+    const item = btn.closest('.ctr-search-result');
+    item?.classList.toggle('is-collapsed');
+  });
+})();
+</script>
 <?php endif; ?>
 
 <?php if ($canFlagUser): ?>

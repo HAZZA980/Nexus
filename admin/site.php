@@ -5,6 +5,8 @@ require_admin();
 use NexusCMS\Models\Site;
 use NexusCMS\Models\Page;
 use NexusCMS\Models\DeletedPage;
+use NexusCMS\Models\SiteForm;
+use NexusCMS\Models\FormResponse;
 use NexusCMS\Models\User;
 use NexusCMS\Core\Security;
 use NexusCMS\Core\DB;
@@ -105,6 +107,27 @@ function nx_page_path_tree(array $pages): array {
   };
   $sortTree($tree);
   return $tree;
+}
+
+function nx_site_form_questions_from_post(array $post): array {
+  $labels = array_values((array)($post['question_label'] ?? []));
+  $types = array_values((array)($post['question_type'] ?? []));
+  $ids = array_values((array)($post['question_id'] ?? []));
+  $questions = [];
+  $count = max(count($labels), count($types), count($ids));
+  for ($i = 0; $i < $count; $i++) {
+    $label = trim((string)($labels[$i] ?? ''));
+    $type = strtolower(trim((string)($types[$i] ?? 'text')));
+    $id = trim((string)($ids[$i] ?? ''));
+    if ($label === '') continue;
+    if (!in_array($type, ['text', 'rating'], true)) $type = 'text';
+    $questions[] = [
+      'id' => $id,
+      'label' => $label,
+      'type' => $type,
+    ];
+  }
+  return $questions;
 }
 
 // -----------------------------
@@ -570,6 +593,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$idMap[(int)$orig['homepage_page_id']], $newSiteId]);
       }
 
+      try {
+        $forms = SiteForm::listBySite($siteId);
+        foreach ($forms as $formRow) {
+          SiteForm::create(
+            $newSiteId,
+            (string)($formRow['name'] ?? ''),
+            (string)($formRow['description'] ?? ''),
+            (array)($formRow['questions'] ?? [])
+          );
+        }
+      } catch (\Throwable $e) {}
+
       $pdo->commit();
       header('Location: ' . rtrim(base_path(), '/') . '/admin/site.php?id=' . $newSiteId);
       exit;
@@ -592,6 +627,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $pdo->prepare("DELETE FROM pages WHERE site_id=?")->execute([$siteId]);
       try {
         $pdo->prepare("DELETE FROM deleted_pages WHERE site_id=?")->execute([$siteId]);
+      } catch (\Throwable $e) {}
+      try {
+        $pdo->prepare("DELETE FROM form_responses WHERE site_id=?")->execute([$siteId]);
+      } catch (\Throwable $e) {}
+      try {
+        $pdo->prepare("DELETE FROM site_forms WHERE site_id=?")->execute([$siteId]);
       } catch (\Throwable $e) {}
       try {
         $pdo->prepare("DELETE FROM shell_presets WHERE site_id=?")->execute([$siteId]);
@@ -732,6 +773,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $notice = 'Page not found for this site.';
     } catch (\Throwable $e) {
       $notice = 'Lock update failed. Please try again.';
+    }
+  }
+
+  if (isset($_POST['save_site_form'])) {
+    $formId = (int)($_POST['form_id'] ?? 0);
+    $name = trim((string)($_POST['form_name'] ?? ''));
+    $description = trim((string)($_POST['form_description'] ?? ''));
+    $questions = nx_site_form_questions_from_post($_POST);
+    $editingSiteForm = [
+      'id' => $formId,
+      'site_id' => $siteId,
+      'name' => $name,
+      'description' => $description,
+      'questions' => $questions,
+    ];
+
+    try {
+      if ($name === '') {
+        $notice = 'Form name is required.';
+      } elseif (!$questions) {
+        $notice = 'Add at least one question before saving the form.';
+      } else {
+        if ($formId > 0) {
+          $existingForm = SiteForm::find($formId);
+          if (!$existingForm || (int)($existingForm['site_id'] ?? 0) !== $siteId) {
+            $notice = 'Form not found for this site.';
+          } else {
+            SiteForm::update($formId, $siteId, $name, $description, $questions);
+            header('Location: site.php?id=' . $siteId . '&saved=form#forms');
+            exit;
+          }
+        } else {
+          SiteForm::create($siteId, $name, $description, $questions);
+          header('Location: site.php?id=' . $siteId . '&saved=form#forms');
+          exit;
+        }
+      }
+    } catch (\Throwable $e) {
+      $notice = 'Form save failed. Please try again.';
+    }
+  }
+
+  if (isset($_POST['delete_site_form'])) {
+    $formId = (int)($_POST['form_id'] ?? 0);
+    try {
+      $existingForm = SiteForm::find($formId);
+      if (!$existingForm || (int)($existingForm['site_id'] ?? 0) !== $siteId) {
+        $notice = 'Form not found for this site.';
+      } else {
+        SiteForm::delete($formId, $siteId);
+        try {
+          nx_db()->prepare("DELETE FROM form_responses WHERE form_id=? AND site_id=?")->execute([$formId, $siteId]);
+        } catch (\Throwable $e) {}
+        header('Location: site.php?id=' . $siteId . '&saved=form#forms');
+        exit;
+      }
+    } catch (\Throwable $e) {
+      $notice = 'Form delete failed. Please try again.';
     }
   }
 
@@ -1348,6 +1447,9 @@ if (!empty($_GET['saved'])) {
     case 'restored':
       $notice = 'Deleted page restored to the active pages list.';
       break;
+    case 'form':
+      $notice = 'Form saved.';
+      break;
     default:
       $notice = 'Saved.';
       break;
@@ -1356,7 +1458,33 @@ if (!empty($_GET['saved'])) {
 
 DeletedPage::purgeExpired();
 $pages = Page::listBySite($siteId);
+$siteForms = SiteForm::listBySite($siteId);
+$siteFormResponses = [];
+foreach ($siteForms as $siteFormRow) {
+  $formRowId = (int)($siteFormRow['id'] ?? 0);
+  if ($formRowId > 0) {
+    $siteFormResponses[$formRowId] = FormResponse::listByForm($siteId, $formRowId);
+  }
+}
 $deletedPages = $isSuperAdmin ? DeletedPage::listBySite($siteId) : [];
+$editingSiteFormId = (int)($_GET['edit_form'] ?? 0);
+$editingSiteForm = $editingSiteForm ?? null;
+if (!$editingSiteForm && $editingSiteFormId > 0) {
+  $candidateForm = SiteForm::find($editingSiteFormId);
+  if ($candidateForm && (int)($candidateForm['site_id'] ?? 0) === $siteId) {
+    $editingSiteForm = $candidateForm;
+  }
+}
+if (!$editingSiteForm) {
+  $editingSiteForm = [
+    'id' => 0,
+    'name' => '',
+    'description' => '',
+    'questions' => [
+      ['id' => '', 'label' => '', 'type' => 'text'],
+    ],
+  ];
+}
 
 // Ensure a default Home page exists (blank draft)
 $homeExisting = Page::findBySlugAnyStatus($siteId, 'home');
@@ -1912,7 +2040,7 @@ if (isset($_SESSION['user_id'])) {
       font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
       font-size:16px;
       line-height:1.45;
-      font-weight:500;
+      font-weight:400;
       color:#1f2937;
     }
     .rich-editor:focus{box-shadow:0 0 0 2px rgba(37,99,235,0.25);border-color:rgba(37,99,235,0.45);}
@@ -2011,18 +2139,152 @@ if (isset($_SESSION['user_id'])) {
   .chart-line span{flex:1;border-radius:6px;background:linear-gradient(180deg, rgba(37,99,235,.65), rgba(37,99,235,.28));min-height:2px;}
   .trend-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:4px;border:1px solid var(--border);background:var(--field-bg);font-weight:700;font-size:12px;}
   .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:var(--field-bg);font-weight:700;font-size:12px;}
-  .cite-viewer{position:fixed;inset:0 0 0 auto;width:520px;max-width:90vw;height:100dvh;max-height:100dvh;background:var(--panel);border-left:1px solid var(--border);box-shadow:none;transition:transform 0.25s ease;z-index:2600;display:flex;flex-direction:column;transform:translateX(100%);overflow:hidden;}
+  .cite-viewer{position:fixed;inset:0 0 0 auto;width:520px;max-width:90vw;height:100dvh;max-height:100dvh;background:linear-gradient(180deg, rgba(17,24,39,0.98), rgba(15,23,42,1));border-left:1px solid rgba(148,163,184,0.18);box-shadow:-18px 0 40px rgba(2,6,23,0.38);transition:transform 0.25s ease;z-index:2600;display:flex;flex-direction:column;transform:translateX(100%);overflow:hidden;}
   .cite-viewer.active{transform:translateX(0);}
-  .cite-viewer header{padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;}
-  .cite-viewer .actions-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border);padding:12px 16px;}
+  .cite-viewer header{padding:18px 18px 14px;border-bottom:1px solid rgba(148,163,184,0.14);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));}
+  .cite-viewer .actions-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid rgba(148,163,184,0.12);padding:12px 18px;background:rgba(15,23,42,0.72);}
   .cite-viewer main{padding:14px;overflow:auto;flex:1;display:grid;gap:10px;max-width:100%;margin:0;width:100%;}
   .cite-viewer .section{margin:0;}
   .cite-viewer footer{padding:12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
   .cite-viewer main.viewer-body{display:flex;flex-direction:column;align-items:stretch;}
-  .cite-viewer .viewer-body{padding:16px;overflow-y:auto;overflow-x:hidden;flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;background:var(--panel);align-items:stretch;}
+  .cite-viewer .viewer-body{padding:12px 14px 16px;overflow-y:auto;overflow-x:hidden;flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;background:transparent;align-items:stretch;}
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body){gap:8px;}
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body){
+    justify-content:flex-start;
+    align-content:flex-start;
+  }
+  .cite-viewer,
+  .cite-viewer header,
+  .cite-viewer main,
+  .cite-viewer footer,
+  .cite-viewer .section,
+  .cite-viewer .citation-field,
+  .cite-viewer .citation-field strong,
+  .cite-viewer .collection-name,
+  .cite-viewer .meta-value{
+    color:var(--text);
+  }
+  .cite-viewer .muted,
+  .cite-viewer #viewOrder,
+  .cite-viewer #viewExampleBody,
+  .cite-viewer #viewYouTry,
+  .cite-viewer #viewNotes,
+  .cite-viewer #citationRevisionsHint{
+    color:#cbd5e1;
+  }
+  .cite-viewer .viewer-body p,
+  .cite-viewer .viewer-body div,
+  .cite-viewer .viewer-body span,
+  .cite-viewer .viewer-body li,
+  .cite-viewer .viewer-body ul,
+  .cite-viewer .viewer-body ol,
+  .cite-viewer .viewer-body a,
+  .cite-viewer .viewer-body em,
+  .cite-viewer .viewer-body i,
+  .cite-viewer .viewer-body b,
+  .cite-viewer .viewer-body strong{
+    color:inherit;
+  }
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) p,
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) ul,
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) ol{
+    margin:0;
+  }
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) h1,
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) h2,
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) h3,
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) h4,
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) h5,
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) h6{
+    margin:0;
+  }
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) ul,
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) ol{
+    padding-left:18px;
+  }
   .cite-viewer .viewer-body > *{width:100%;max-width:none;}
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) > *{
+    flex:0 0 auto;
+    min-height:0;
+  }
   .cite-viewer .viewer-body .citation-field{width:100%;max-width:none;}
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) .citation-field{
+    display:grid;
+    gap:4px;
+    padding:10px 12px;
+    margin:0;
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(148,163,184,0.12);
+    border-radius:14px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) .citation-field > :first-child{
+    margin-top:0;
+  }
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) .citation-field > :last-child{
+    margin-bottom:0;
+  }
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) > .view-meta-grid,
+  .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) > .citation-field{
+    align-self:stretch;
+  }
   .cite-viewer .viewer-body .callout{width:100%;max-width:none;}
+  .cite-viewer .viewer-body,
+  .cite-viewer #viewOrder,
+  .cite-viewer #viewExampleBody,
+  .cite-viewer #viewYouTry,
+  .cite-viewer #viewNotes{
+    font-weight:400;
+  }
+  .cite-viewer .citation-field > strong,
+  .cite-viewer .view-meta-item strong,
+  .cite-viewer .collection-name{
+    font-weight:700;
+  }
+  .cite-viewer .citation-label{
+    font-size:18px;
+    line-height:1.15;
+    letter-spacing:-0.02em;
+    margin:0 0 2px 0;
+  }
+  .cite-viewer #viewSubtitle{
+    font-size:12px;
+    line-height:1.25;
+  }
+  .cite-viewer .citation-field > strong{
+    font-size:11px;
+    line-height:1.15;
+    letter-spacing:.02em;
+    text-transform:uppercase;
+    color:var(--text);
+    opacity:.95;
+  }
+  .cite-viewer .collection-name{
+    font-size:13px;
+    line-height:1.2;
+    letter-spacing:-0.01em;
+  }
+  .cite-viewer #viewExampleHeading{
+    font-size:13px;
+    text-transform:none;
+  }
+  .cite-viewer #viewOrder strong,
+  .cite-viewer #viewExampleBody strong,
+  .cite-viewer #viewYouTry strong,
+  .cite-viewer #viewNotes strong,
+  .cite-viewer #viewOrder b,
+  .cite-viewer #viewExampleBody b,
+  .cite-viewer #viewYouTry b,
+  .cite-viewer #viewNotes b{
+    font-weight:700;
+  }
+  .cite-viewer #viewOrder,
+  .cite-viewer #viewExampleBody,
+  .cite-viewer #viewYouTry,
+  .cite-viewer #viewNotes,
+  .cite-viewer .viewer-body li{
+    color:#dbe4f0;
+  }
   .cite-viewer .edit-body{gap:12px;}
   .cite-viewer .revisions-body{gap:10px;align-content:start;}
   .cite-viewer.edit-mode{background:var(--panel);}
@@ -2147,7 +2409,7 @@ if (isset($_SESSION['user_id'])) {
   .citation-rev-after strong{font-weight:800;}
   html.theme-light #revTimelineSelect{background:#fff;}
   html.theme-light .rev-after-added{background:rgba(37,99,235,0.12);}
-  .cite-readonly-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;}
+  .cite-readonly-badge{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:999px;border:1px solid rgba(148,163,184,0.16);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;backdrop-filter:blur(8px);}
   .citation-edit-field input,
   .citation-edit-field textarea{
     background:var(--card);
@@ -2185,11 +2447,11 @@ if (isset($_SESSION['user_id'])) {
   .rev-no-results{margin-top:8px;color:var(--muted);}
   .revision-row{cursor:pointer;}
   .revision-row:hover{background:rgba(255,255,255,0.04);}
-  .cite-viewer .callout{padding:10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,0.03);width:100%;}
-  .view-meta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,0.02);}
+  .cite-viewer .callout{padding:4px 6px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,0.03);width:100%;}
+  .view-meta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:12px 14px;border:1px solid rgba(148,163,184,0.14);border-radius:16px;background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));align-self:stretch;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);}
   .view-meta-item{min-width:0;}
-  .view-meta-item strong{display:block;font-size:11px;letter-spacing:0.3px;text-transform:uppercase;color:var(--muted);}
-  .view-meta-item .meta-value{margin-top:4px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .view-meta-item strong{display:block;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);}
+  .view-meta-item .meta-value{margin-top:3px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.05;font-size:13px;color:var(--text);}
   @media(max-width:720px){.view-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
   </style>
   <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css?v=20260322">
@@ -2223,6 +2485,7 @@ if (isset($_SESSION['user_id'])) {
           <button class="tab" data-tab="appearance" type="button">Appearance</button>
           <button class="tab" data-tab="analytics" type="button">Analytics</button>
           <button class="tab" data-tab="settings" type="button">Settings</button>
+          <button class="tab" data-tab="forms" type="button">Forms</button>
           <?php if ($isSuperAdmin): ?>
             <button class="tab" data-tab="deleted-pages" type="button">Deleted pages</button>
           <?php endif; ?>
@@ -2263,7 +2526,6 @@ if (isset($_SESSION['user_id'])) {
             <thead>
               <tr style="text-align:left;color:var(--muted);font-size:14px">
                 <th>Title</th>
-                <th>Path</th>
                 <th>Status</th>
                 <th>Updated</th>
                 <th>Actions</th>
@@ -2295,7 +2557,6 @@ if (isset($_SESSION['user_id'])) {
                     </div>
                     <div class="title-path">/<?= Security::e($p['slug']) ?></div>
                   </td>
-                  <td class="muted title-path">/<?= Security::e($p['slug']) ?></td>
                   <td>
                     <?php $st = strtolower($p['status']); ?>
                     <span class="status-badge <?= $st === 'published' ? 'published' : 'draft' ?>">
@@ -2352,6 +2613,74 @@ if (isset($_SESSION['user_id'])) {
         </div>
       </div>
     </div>
+
+      <div class="panel" id="panel-forms">
+        <div class="card" style="margin-top:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <div>
+              <h2 style="margin:0">Forms</h2>
+              <div class="muted">Create reusable forms for this site and attach them to pages through the builder. Click a form to view or edit it.</div>
+            </div>
+            <button class="btn primary" type="button" id="openCreateFormModal">Create new form</button>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <div>
+              <label class="muted">Search</label>
+              <input id="formSearch" placeholder="Search by form name…">
+            </div>
+          </div>
+          <?php if (!$siteForms): ?>
+            <div style="margin-top:14px">
+              <p>No forms yet.</p>
+            </div>
+          <?php else: ?>
+            <table class="page-table">
+              <thead>
+                <tr style="text-align:left;color:var(--muted);font-size:14px">
+                  <th>Name</th>
+                  <th>Questions</th>
+                  <th>Updated</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="formTable">
+                <?php foreach ($siteForms as $formRow): ?>
+                  <?php $questionCount = count((array)($formRow['questions'] ?? [])); ?>
+                  <?php $responseCount = count((array)($siteFormResponses[(int)($formRow['id'] ?? 0)] ?? [])); ?>
+                  <tr
+                    data-name="<?= Security::e(strtolower((string)($formRow['name'] ?? ''))) ?>"
+                    data-form-row
+                    data-form-id="<?= (int)($formRow['id'] ?? 0) ?>"
+                    style="cursor:pointer"
+                  >
+                    <td>
+                      <div class="title-main"><?= Security::e((string)($formRow['name'] ?? 'Untitled form')) ?></div>
+                      <?php if (trim((string)($formRow['description'] ?? '')) !== ''): ?>
+                        <div class="title-path"><?= Security::e((string)$formRow['description']) ?></div>
+                      <?php endif; ?>
+                    </td>
+                    <td class="muted"><?= (int)$questionCount ?> question<?= $questionCount === 1 ? '' : 's' ?></td>
+                    <td class="muted updated-cell" data-updated="<?= Security::e((string)($formRow['updated_at'] ?? '')) ?>"><?= Security::e((string)($formRow['updated_at'] ?? '')) ?></td>
+                    <td>
+                      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                        <button class="btn small" type="button" data-open-form-feedback data-form-id="<?= (int)($formRow['id'] ?? 0) ?>">Feedback<?= $responseCount > 0 ? ' (' . $responseCount . ')' : '' ?></button>
+                        <button class="btn small" type="button" data-open-form-modal data-form-id="<?= (int)($formRow['id'] ?? 0) ?>">View</button>
+                        <form method="post" action="site.php?id=<?= (int)$site['id'] ?>#forms" style="margin:0" onsubmit="return confirm('Delete this form?');">
+                          <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+                          <input type="hidden" name="delete_site_form" value="1">
+                          <input type="hidden" name="form_id" value="<?= (int)$formRow['id'] ?>">
+                          <button class="btn small" type="submit" style="border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.12);color:#fecaca">Delete</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+            <div id="formEmpty" style="margin-top:10px;display:none" class="muted">No forms match your search.</div>
+          <?php endif; ?>
+        </div>
+      </div>
 
       <?php if ($isSuperAdmin): ?>
       <div class="panel" id="panel-deleted-pages">
@@ -3486,6 +3815,111 @@ if (isset($_SESSION['user_id'])) {
     <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
     <input type="hidden" name="delete_site" value="1">
   </form>
+  <form id="deleteFormModalActionForm" method="post" action="site.php?id=<?= (int)$site['id'] ?>#forms" style="display:none">
+    <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+    <input type="hidden" name="delete_site_form" value="1">
+    <input type="hidden" name="form_id" id="deleteFormModalActionId" value="0">
+  </form>
+
+  <div class="modal-backdrop" id="formModalBackdrop" style="display:none">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="formModalTitle" style="max-width:860px;width:100%">
+      <header>
+        <div>
+          <h3 id="formModalTitle" style="margin:0">Create form</h3>
+          <div class="muted" style="font-size:13px">Add text-answer or 1-10 rating questions. The live block always shows a submit button.</div>
+        </div>
+        <button class="close-btn" type="button" id="closeFormModal" aria-label="Close">×</button>
+      </header>
+      <div id="formPreviewToolbar" style="display:none;padding:0 24px 0;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;">
+        <button class="btn" type="button" id="editFormPreviewBtn">Edit</button>
+        <button class="btn" type="button" id="deleteFormPreviewBtn" style="border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.12);color:#fecaca">Delete</button>
+      </div>
+      <div class="modal-body">
+        <div id="formPreviewPanel" style="display:none"></div>
+        <form method="post" action="site.php?id=<?= (int)$site['id'] ?>#forms" id="formModalForm">
+          <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+          <input type="hidden" name="save_site_form" value="1">
+          <input type="hidden" name="form_id" id="form_modal_id" value="0">
+          <div class="row">
+            <div>
+              <label class="muted">Form name</label>
+              <input id="form_modal_name" name="form_name" value="" placeholder="Course feedback">
+            </div>
+            <div>
+              <label class="muted">Description</label>
+              <input id="form_modal_description" name="form_description" value="" placeholder="Optional short description">
+            </div>
+          </div>
+
+          <div style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <div class="muted" style="font-weight:700">Questions</div>
+            <button class="btn" type="button" id="addFormQuestionBtn">Add question</button>
+          </div>
+          <div id="formQuestionsList" style="display:grid;gap:12px;margin-top:12px"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn text" type="button" id="cancelFormModalBtn">Cancel</button>
+        <button class="btn primary" type="submit" form="formModalForm" id="saveFormModalBtn">Create form</button>
+      </div>
+    </div>
+  </div>
+
+  <script id="siteFormsData" type="application/json"><?= json_encode(array_map(static function (array $row): array {
+    return [
+      'id' => (int)($row['id'] ?? 0),
+      'name' => (string)($row['name'] ?? ''),
+      'description' => (string)($row['description'] ?? ''),
+      'questions' => array_values(array_map(static function (array $question): array {
+        return [
+          'id' => (string)($question['id'] ?? ''),
+          'label' => (string)($question['label'] ?? ''),
+          'type' => (string)($question['type'] ?? 'text'),
+        ];
+      }, (array)($row['questions'] ?? []))),
+    ];
+  }, $siteForms), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+  <script id="siteFormResponsesData" type="application/json"><?= json_encode(array_map(static function (array $responses): array {
+    return array_values(array_map(static function (array $response): array {
+      return [
+        'id' => (int)($response['id'] ?? 0),
+        'site_id' => (int)($response['site_id'] ?? 0),
+        'form_id' => (int)($response['form_id'] ?? 0),
+        'user_id' => isset($response['user_id']) ? (int)$response['user_id'] : null,
+        'user_name' => (string)($response['user_name'] ?? ''),
+        'institution_name' => (string)($response['institution_name'] ?? ''),
+        'page_id' => isset($response['page_id']) ? (int)$response['page_id'] : null,
+        'page_slug' => (string)($response['page_slug'] ?? ''),
+        'created_at' => (string)($response['created_at'] ?? ''),
+        'responses' => array_values(array_map(static function (array $item): array {
+          return [
+            'id' => (string)($item['id'] ?? ''),
+            'label' => (string)($item['label'] ?? ''),
+            'type' => (string)($item['type'] ?? 'text'),
+            'value' => $item['value'] ?? '',
+          ];
+        }, (array)($response['responses'] ?? []))),
+      ];
+    }, $responses));
+  }, $siteFormResponses), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+
+  <div class="modal-backdrop" id="formFeedbackModalBackdrop" style="display:none">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="formFeedbackModalTitle" style="max-width:980px;width:100%">
+      <header>
+        <div>
+          <h3 id="formFeedbackModalTitle" style="margin:0">Form feedback</h3>
+          <div class="muted" id="formFeedbackModalMeta" style="font-size:13px">Submitted responses for this form.</div>
+        </div>
+        <button class="close-btn" type="button" id="closeFormFeedbackModal" aria-label="Close">×</button>
+      </header>
+      <div class="modal-body">
+        <div id="formFeedbackModalBody"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn text" type="button" id="closeFormFeedbackModalBtn">Close</button>
+      </div>
+    </div>
+  </div>
 
   <div class="modal-backdrop" id="citationModalBackdrop" style="display:none">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="citationModalTitle">
@@ -3836,6 +4270,443 @@ if (isset($_SESSION['user_id'])) {
     });
     applyPageFilters();
 
+    const formSearchInput = document.getElementById('formSearch');
+    const formRows = Array.from(document.querySelectorAll('#formTable tr'));
+    const formEmpty = document.getElementById('formEmpty');
+    const formModalBackdrop = document.getElementById('formModalBackdrop');
+    const formModalTitle = document.getElementById('formModalTitle');
+    const formModalForm = document.getElementById('formModalForm');
+    const formModalId = document.getElementById('form_modal_id');
+    const formModalName = document.getElementById('form_modal_name');
+    const formModalDescription = document.getElementById('form_modal_description');
+    const formPreviewToolbar = document.getElementById('formPreviewToolbar');
+    const formPreviewPanel = document.getElementById('formPreviewPanel');
+    const editFormPreviewBtn = document.getElementById('editFormPreviewBtn');
+    const deleteFormPreviewBtn = document.getElementById('deleteFormPreviewBtn');
+    const deleteFormModalActionForm = document.getElementById('deleteFormModalActionForm');
+    const deleteFormModalActionId = document.getElementById('deleteFormModalActionId');
+    const cancelFormModalBtn = document.getElementById('cancelFormModalBtn');
+    const saveFormModalBtn = document.getElementById('saveFormModalBtn');
+    const siteFormsData = (() => {
+      const el = document.getElementById('siteFormsData');
+      if (!el) return [];
+      try { return JSON.parse(el.textContent || '[]'); } catch (err) { return []; }
+    })();
+    const siteFormResponsesData = (() => {
+      const el = document.getElementById('siteFormResponsesData');
+      if (!el) return {};
+      try { return JSON.parse(el.textContent || '{}'); } catch (err) { return {}; }
+    })();
+    const formFeedbackModalBackdrop = document.getElementById('formFeedbackModalBackdrop');
+    const formFeedbackModalTitle = document.getElementById('formFeedbackModalTitle');
+    const formFeedbackModalMeta = document.getElementById('formFeedbackModalMeta');
+    const formFeedbackModalBody = document.getElementById('formFeedbackModalBody');
+    const pendingEditingForm = <?= json_encode([
+      'id' => (int)($editingSiteForm['id'] ?? 0),
+      'name' => (string)($editingSiteForm['name'] ?? ''),
+      'description' => (string)($editingSiteForm['description'] ?? ''),
+      'questions' => array_values(array_map(static function (array $question): array {
+        return [
+          'id' => (string)($question['id'] ?? ''),
+          'label' => (string)($question['label'] ?? ''),
+          'type' => (string)($question['type'] ?? 'text'),
+        ];
+      }, (array)($editingSiteForm['questions'] ?? []))),
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const shouldOpenFormModalOnLoad = <?= (!empty($_POST['save_site_form']) || $editingSiteFormId > 0) ? 'true' : 'false' ?>;
+    let activeFormModalData = null;
+    const closeFormFeedbackModal = () => {
+      if (formFeedbackModalBackdrop) formFeedbackModalBackdrop.style.display = 'none';
+      document.body.style.overflow = '';
+    };
+    function applyFormFilters() {
+      const q = (formSearchInput?.value || '').toLowerCase();
+      let visible = 0;
+      formRows.forEach((row) => {
+        const match = !q || (row.dataset.name || '').includes(q);
+        row.style.display = match ? '' : 'none';
+        if (match) visible++;
+      });
+      if (formEmpty) formEmpty.style.display = visible ? 'none' : '';
+    }
+    formSearchInput?.addEventListener('input', applyFormFilters);
+    applyFormFilters();
+
+    const formQuestionsList = document.getElementById('formQuestionsList');
+    const addFormQuestionBtn = document.getElementById('addFormQuestionBtn');
+    const simpleEscapeHtml = (str) => String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    let draggedQuestionRow = null;
+    const renumberFormQuestions = () => {
+      formQuestionsList?.querySelectorAll('[data-question-row]').forEach((row, index) => {
+        const numberEl = row.querySelector('[data-question-number]');
+        if (numberEl) numberEl.textContent = `Question ${index + 1}`;
+      });
+    };
+    const findDropTargetRow = (event) => {
+      const rows = [...(formQuestionsList?.querySelectorAll('[data-question-row]') || [])];
+      const candidates = rows.filter((row) => row !== draggedQuestionRow);
+      return candidates.find((row) => {
+        const rect = row.getBoundingClientRect();
+        return event.clientY >= rect.top && event.clientY <= rect.bottom;
+      }) || null;
+    };
+    const bindQuestionDragAndDrop = () => {
+      formQuestionsList?.querySelectorAll('[data-question-row]').forEach((row) => {
+        row.draggable = false;
+        const handle = row.querySelector('[data-drag-handle]');
+        if (!handle) return;
+        handle.draggable = true;
+        handle.ondragstart = (event) => {
+          draggedQuestionRow = row;
+          row.style.opacity = '0.55';
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', 'question-row');
+        };
+        handle.ondragend = () => {
+          if (draggedQuestionRow) draggedQuestionRow.style.opacity = '';
+          draggedQuestionRow = null;
+          renumberFormQuestions();
+        };
+      });
+      formQuestionsList.ondragover = (event) => {
+        if (!draggedQuestionRow) return;
+        event.preventDefault();
+        const targetRow = findDropTargetRow(event);
+        if (!targetRow || !formQuestionsList) return;
+        const rect = targetRow.getBoundingClientRect();
+        const insertBefore = event.clientY < rect.top + (rect.height / 2);
+        formQuestionsList.insertBefore(draggedQuestionRow, insertBefore ? targetRow : targetRow.nextSibling);
+      };
+      formQuestionsList.ondrop = (event) => {
+        if (!draggedQuestionRow) return;
+        event.preventDefault();
+        renumberFormQuestions();
+      };
+    };
+    const renderQuestionRow = (question = {}) => {
+      const row = document.createElement('div');
+      row.className = 'card form-question-row';
+      row.setAttribute('data-question-row', '');
+      row.style.padding = '14px';
+      row.innerHTML = `
+        <input type="hidden" name="question_id[]" value="${simpleEscapeHtml(question.id || '')}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+          <div class="muted" data-question-number style="font-weight:700;">Question</div>
+          <div class="muted" data-drag-handle aria-hidden="true" title="Drag to reorder" style="font-size:18px;letter-spacing:1px;cursor:grab;user-select:none;">&#8942;&#8942;</div>
+        </div>
+        <div class="row">
+          <div>
+            <label class="muted">Question</label>
+            <input name="question_label[]" value="${simpleEscapeHtml(question.label || '')}" placeholder="What did you think of this page?">
+          </div>
+          <div>
+            <label class="muted">Answer type</label>
+            <select name="question_type[]">
+              <option value="text" ${(question.type || 'text') === 'text' ? 'selected' : ''}>Text answer</option>
+              <option value="rating" ${(question.type || '') === 'rating' ? 'selected' : ''}>Rating answer</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;justify-content:flex-end">
+          <button class="btn text" type="button" data-remove-question>Remove</button>
+        </div>
+      `;
+      return row;
+    };
+    const bindQuestionRemoval = () => {
+      formQuestionsList?.querySelectorAll('[data-remove-question]').forEach((btn) => {
+        btn.onclick = () => {
+          const rows = formQuestionsList.querySelectorAll('[data-question-row]');
+          if (rows.length <= 1) return;
+          btn.closest('[data-question-row]')?.remove();
+          renumberFormQuestions();
+        };
+      });
+    };
+    const syncQuestionEditorUi = () => {
+      bindQuestionRemoval();
+      bindQuestionDragAndDrop();
+      renumberFormQuestions();
+    };
+    const renderFormPreview = (formData = {}) => {
+      const title = (formData?.name || '').trim() || 'Form';
+      const description = (formData?.description || '').trim();
+      const questions = Array.isArray(formData?.questions) ? formData.questions : [];
+      const questionsHtml = questions.length
+        ? questions.map((question, index) => {
+          const label = (question?.label || '').trim() || `Question ${index + 1}`;
+          const type = (question?.type || 'text').toLowerCase();
+          const inputHtml = type === 'rating'
+            ? `
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                ${Array.from({ length: 10 }, (_, scoreIndex) => `
+                  <span style="display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:42px;padding:0 12px;border-radius:999px;border:1px solid rgba(17,24,39,.16);background:#fff;color:#111827;font-weight:700;">${scoreIndex + 1}</span>
+                `).join('')}
+              </div>
+              <div style="margin-top:8px;font-size:13px;color:#6b7280;">1 is low, 10 is high.</div>
+            `
+            : '<textarea rows="4" placeholder="Type your answer" disabled style="width:100%;margin-top:10px;padding:12px 14px;border:1px solid rgba(17,24,39,.16);border-radius:12px;background:#fff;color:#111827;font:inherit;resize:vertical;"></textarea>';
+          return `
+            <div style="padding:16px 0;border-top:1px solid rgba(17,24,39,.1);">
+              <label style="display:block;font-weight:700;color:#111827;">${index + 1}. ${simpleEscapeHtml(label)}</label>
+              ${inputHtml}
+            </div>
+          `;
+        }).join('')
+        : '<div style="margin-top:12px;color:#6b7280;">This form has no questions yet.</div>';
+      return `
+        <form style="padding:20px;border:1px solid rgba(17,24,39,.12);border-radius:18px;background:rgba(255,255,255,.94);box-shadow:0 16px 40px rgba(15,23,42,.08);">
+          <div style="font-size:1.2em;font-weight:800;color:#111827;">${simpleEscapeHtml(title)}</div>
+          ${description ? `<div style="margin-top:8px;color:#4b5563;">${simpleEscapeHtml(description)}</div>` : ''}
+          <div style="margin-top:16px;">${questionsHtml}</div>
+          <button type="button" style="margin-top:16px;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border:0;border-radius:999px;background:var(--nexus-primary,#2563eb);color:#fff;font:inherit;font-weight:800;cursor:pointer;">Submit</button>
+        </form>
+      `;
+    };
+    const formatFeedbackValue = (item = {}) => (
+      item?.type === 'rating'
+        ? `${Number(item?.value || 0)}/10`
+        : String(item?.value || '')
+    );
+    const renderFormFeedbackSubmissions = (responses = []) => {
+      if (!responses.length) {
+        return '<div class="muted">No feedback has been submitted for this form yet.</div>';
+      }
+      return responses.map((response, index) => {
+        const submittedAt = simpleEscapeHtml(response?.created_at || '');
+        const pageSlug = simpleEscapeHtml(response?.page_slug || '');
+        const userName = simpleEscapeHtml((response?.user_name || '').trim() || 'Anonymous');
+        const institutionName = simpleEscapeHtml((response?.institution_name || '').trim() || '—');
+        const items = Array.isArray(response?.responses) ? response.responses : [];
+        const responsesHtml = items.length
+          ? items.map((item, itemIndex) => {
+            const label = (item?.label || '').trim() || `Question ${itemIndex + 1}`;
+            return `
+              <div style="padding:12px 0;border-top:1px solid rgba(17,24,39,.08);">
+                <div style="font-weight:700;color:#111827;">${simpleEscapeHtml(label)}</div>
+                <div style="margin-top:6px;color:#374151;white-space:pre-wrap;word-break:break-word;">${simpleEscapeHtml(formatFeedbackValue(item))}</div>
+              </div>
+            `;
+          }).join('')
+          : '<div class="muted" style="margin-top:12px;">No answers stored for this submission.</div>';
+        return `
+          <section class="card" style="padding:16px;margin-top:${index === 0 ? '0' : '12px'};">
+            <div style="display:grid;gap:10px;">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                <div>
+                  <div style="font-weight:800;color:#111827;">Submission #${index + 1}</div>
+                  <div class="muted" style="margin-top:4px;font-size:13px;">${submittedAt || 'Unknown date'}${pageSlug ? ` • Page: ${pageSlug}` : ''}</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+                <div style="padding:12px;border-radius:12px;background:rgba(17,24,39,.04);">
+                  <div class="muted" style="font-size:12px;">User</div>
+                  <div style="margin-top:4px;font-weight:700;color:#111827;">${userName}</div>
+                </div>
+                <div style="padding:12px;border-radius:12px;background:rgba(17,24,39,.04);">
+                  <div class="muted" style="font-size:12px;">Institution</div>
+                  <div style="margin-top:4px;font-weight:700;color:#111827;">${institutionName}</div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:10px;">${responsesHtml}</div>
+          </section>
+        `;
+      }).join('');
+    };
+    const renderFormFeedbackByQuestion = (formData = {}, responses = []) => {
+      const questions = Array.isArray(formData?.questions) ? formData.questions : [];
+      if (!responses.length) {
+        return '<div class="muted">No feedback has been submitted for this form yet.</div>';
+      }
+      const grouped = questions.map((question, index) => {
+        const qid = String(question?.id || '');
+        const label = (question?.label || '').trim() || `Question ${index + 1}`;
+        const answers = responses.flatMap((response) => {
+          const items = Array.isArray(response?.responses) ? response.responses : [];
+          return items
+            .filter((item) => String(item?.id || '') === qid)
+            .map((item) => ({
+              created_at: response?.created_at || '',
+              page_slug: response?.page_slug || '',
+              value: formatFeedbackValue(item),
+            }));
+        });
+        return { label, answers };
+      });
+      return grouped.map((group, index) => {
+        const answersHtml = group.answers.length
+          ? group.answers.map((answer) => `
+            <div style="padding:12px 0;border-top:1px solid rgba(17,24,39,.08);">
+              <div style="color:#374151;white-space:pre-wrap;word-break:break-word;">${simpleEscapeHtml(answer.value)}</div>
+              <div class="muted" style="margin-top:6px;font-size:12px;">${simpleEscapeHtml(answer.created_at || 'Unknown date')}${answer.page_slug ? ` • Page: ${simpleEscapeHtml(answer.page_slug)}` : ''}</div>
+            </div>
+          `).join('')
+          : '<div class="muted" style="margin-top:12px;">No answers recorded for this question yet.</div>';
+        return `
+          <section class="card" style="padding:16px;margin-top:${index === 0 ? '0' : '12px'};">
+            <div style="font-weight:800;color:#111827;">${index + 1}. ${simpleEscapeHtml(group.label)}</div>
+            <div style="margin-top:4px" class="muted">${group.answers.length} answer${group.answers.length === 1 ? '' : 's'}</div>
+            <div style="margin-top:10px;">${answersHtml}</div>
+          </section>
+        `;
+      }).join('');
+    };
+    const openFormFeedbackModal = (formData = null) => {
+      const formId = String(formData?.id || '');
+      const responses = Array.isArray(siteFormResponsesData[formId]) ? siteFormResponsesData[formId] : [];
+      if (formFeedbackModalTitle) formFeedbackModalTitle.textContent = `${formData?.name || 'Form'} feedback`;
+      if (formFeedbackModalMeta) {
+        formFeedbackModalMeta.textContent = responses.length
+          ? `${responses.length} submission${responses.length === 1 ? '' : 's'} received.`
+          : 'No submissions yet.';
+      }
+      if (formFeedbackModalBody) {
+        formFeedbackModalBody.innerHTML = `
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+            <button class="btn small" type="button" data-feedback-tab="submissions" style="background:#111827;color:#fff;border-color:#111827;">Submissions</button>
+            <button class="btn small" type="button" data-feedback-tab="questions">By question</button>
+          </div>
+          <div data-feedback-panel="submissions">${renderFormFeedbackSubmissions(responses)}</div>
+          <div data-feedback-panel="questions" style="display:none">${renderFormFeedbackByQuestion(formData || {}, responses)}</div>
+        `;
+        const tabButtons = Array.from(formFeedbackModalBody.querySelectorAll('[data-feedback-tab]'));
+        const tabPanels = Array.from(formFeedbackModalBody.querySelectorAll('[data-feedback-panel]'));
+        tabButtons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const activeTab = btn.getAttribute('data-feedback-tab') || 'submissions';
+            tabButtons.forEach((candidate) => {
+              const isActive = candidate.getAttribute('data-feedback-tab') === activeTab;
+              candidate.style.background = isActive ? '#111827' : '';
+              candidate.style.color = isActive ? '#fff' : '';
+              candidate.style.borderColor = isActive ? '#111827' : '';
+            });
+            tabPanels.forEach((panel) => {
+              panel.style.display = panel.getAttribute('data-feedback-panel') === activeTab ? '' : 'none';
+            });
+          });
+        });
+      }
+      if (formFeedbackModalBackdrop) formFeedbackModalBackdrop.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    };
+    const setFormModalMode = (mode, formData = null) => {
+      activeFormModalData = formData ? { ...formData } : null;
+      const isPreview = mode === 'preview';
+      const isEdit = mode === 'edit';
+      if (formModalTitle) formModalTitle.textContent = isPreview ? 'Form preview' : (isEdit ? 'Edit form' : 'Create form');
+      if (saveFormModalBtn) {
+        saveFormModalBtn.textContent = isEdit ? 'Save form' : 'Create form';
+        saveFormModalBtn.style.display = isPreview ? 'none' : '';
+      }
+      if (cancelFormModalBtn) cancelFormModalBtn.textContent = isPreview ? 'Close' : 'Cancel';
+      if (formPreviewToolbar) formPreviewToolbar.style.display = isPreview ? 'flex' : 'none';
+      if (formPreviewPanel) {
+        formPreviewPanel.style.display = isPreview ? 'block' : 'none';
+        formPreviewPanel.innerHTML = isPreview ? renderFormPreview(formData) : '';
+      }
+      if (formModalForm) formModalForm.style.display = isPreview ? 'none' : '';
+      if (deleteFormModalActionId) deleteFormModalActionId.value = String(formData?.id || 0);
+      if (isPreview) return;
+      if (formModalId) formModalId.value = String(formData?.id || 0);
+      if (formModalName) formModalName.value = formData?.name || '';
+      if (formModalDescription) formModalDescription.value = formData?.description || '';
+      if (formQuestionsList) {
+        formQuestionsList.innerHTML = '';
+        const questions = Array.isArray(formData?.questions) && formData.questions.length
+          ? formData.questions
+          : [{ id: '', label: '', type: 'text' }];
+        questions.forEach((question) => formQuestionsList.appendChild(renderQuestionRow(question)));
+      }
+      syncQuestionEditorUi();
+    };
+    const openFormModal = (mode, formData = null) => {
+      setFormModalMode(mode, formData);
+      if (formModalBackdrop) formModalBackdrop.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+      if (mode !== 'preview') formModalName?.focus();
+    };
+    const closeFormModal = () => {
+      if (formModalBackdrop) formModalBackdrop.style.display = 'none';
+      document.body.style.overflow = '';
+    };
+    document.getElementById('openCreateFormModal')?.addEventListener('click', () => {
+      openFormModal('create');
+      activate('forms');
+    });
+    addFormQuestionBtn?.addEventListener('click', () => {
+      if (!formQuestionsList) return;
+      formQuestionsList.appendChild(renderQuestionRow({ type: 'text' }));
+      syncQuestionEditorUi();
+    });
+    syncQuestionEditorUi();
+    document.querySelectorAll('[data-form-row]').forEach((row) => {
+      row.addEventListener('click', (event) => {
+        if (event.target.closest('form') || event.target.closest('button')) return;
+        const formId = String(row.dataset.formId || '');
+        const formData = siteFormsData.find((item) => String(item.id) === formId);
+        if (formData) {
+          openFormModal('preview', formData);
+          activate('forms');
+        }
+      });
+    });
+    document.querySelectorAll('[data-open-form-modal]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const formId = String(btn.dataset.formId || '');
+        const formData = siteFormsData.find((item) => String(item.id) === formId);
+        if (formData) {
+          openFormModal('preview', formData);
+          activate('forms');
+        }
+      });
+    });
+    document.querySelectorAll('[data-open-form-feedback]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const formId = String(btn.dataset.formId || '');
+        const formData = siteFormsData.find((item) => String(item.id) === formId);
+        if (formData) {
+          openFormFeedbackModal(formData);
+          activate('forms');
+        }
+      });
+    });
+    editFormPreviewBtn?.addEventListener('click', () => {
+      if (activeFormModalData) setFormModalMode('edit', activeFormModalData);
+    });
+    deleteFormPreviewBtn?.addEventListener('click', () => {
+      const formId = Number(activeFormModalData?.id || 0);
+      if (!formId || !deleteFormModalActionId || !deleteFormModalActionForm) return;
+      if (!window.confirm('Delete this form?')) return;
+      deleteFormModalActionId.value = String(formId);
+      deleteFormModalActionForm.submit();
+    });
+    document.getElementById('closeFormModal')?.addEventListener('click', closeFormModal);
+    cancelFormModalBtn?.addEventListener('click', closeFormModal);
+    document.getElementById('closeFormFeedbackModal')?.addEventListener('click', closeFormFeedbackModal);
+    document.getElementById('closeFormFeedbackModalBtn')?.addEventListener('click', closeFormFeedbackModal);
+    formModalBackdrop?.addEventListener('click', (event) => {
+      if (event.target === formModalBackdrop) closeFormModal();
+    });
+    formFeedbackModalBackdrop?.addEventListener('click', (event) => {
+      if (event.target === formFeedbackModalBackdrop) closeFormFeedbackModal();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && formModalBackdrop?.style.display === 'flex') closeFormModal();
+      if (event.key === 'Escape' && formFeedbackModalBackdrop?.style.display === 'flex') closeFormFeedbackModal();
+    });
+    if (shouldOpenFormModalOnLoad) {
+      openFormModal((pendingEditingForm?.id || 0) > 0 ? 'edit' : 'create', pendingEditingForm);
+      activate('forms');
+    }
+
     // Analytics dashboard
     const analyticsSiteId = <?= (int)$site['id'] ?>;
     const analyticsStatus = document.getElementById('analyticsStatus');
@@ -4099,14 +4970,47 @@ if (isset($_SESSION['user_id'])) {
         .replace(/>/g,'&gt;')
         .replace(/"/g,'&quot;')
         .replace(/'/g,'&#39;');
-      const walk = (node) => {
-        if (node.nodeType === Node.TEXT_NODE) return escape(node.textContent || '');
+      const parseInlineState = (node, state) => {
+        const next = { bold: !!state.bold, italic: !!state.italic };
+        if (!node || node.nodeType !== Node.ELEMENT_NODE) return next;
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'strong' || tag === 'b') next.bold = true;
+        if (tag === 'em' || tag === 'i') next.italic = true;
+        const style = String(node.getAttribute('style') || '').toLowerCase();
+        const weightMatch = style.match(/font-weight\s*:\s*([^;]+)/);
+        if (weightMatch) {
+          const weightRaw = weightMatch[1].trim();
+          const weightNum = parseInt(weightRaw, 10);
+          if (!Number.isNaN(weightNum)) {
+            next.bold = weightNum >= 600;
+          } else if (weightRaw === 'normal') {
+            next.bold = false;
+          } else if (weightRaw === 'bold' || weightRaw === 'bolder') {
+            next.bold = true;
+          }
+        }
+        const styleMatch = style.match(/font-style\s*:\s*([^;]+)/);
+        if (styleMatch) {
+          const fontStyle = styleMatch[1].trim();
+          if (fontStyle === 'normal') next.italic = false;
+          if (fontStyle === 'italic' || fontStyle === 'oblique') next.italic = true;
+        }
+        return next;
+      };
+      const wrapInline = (text, state) => {
+        let out = escape(text);
+        if (out === '') return '';
+        if (state.italic) out = `<em>${out}</em>`;
+        if (state.bold) out = `<strong>${out}</strong>`;
+        return out;
+      };
+      const walk = (node, state = { bold: false, italic: false }) => {
+        if (node.nodeType === Node.TEXT_NODE) return wrapInline(node.textContent || '', state);
         if (node.nodeType !== Node.ELEMENT_NODE) return '';
         const tag = node.tagName.toLowerCase();
-        const inner = Array.from(node.childNodes).map(walk).join('');
+        const nextState = parseInlineState(node, state);
+        const inner = Array.from(node.childNodes).map((child) => walk(child, nextState)).join('');
         if (tag === 'br') return '<br>';
-        if (tag === 'strong' || tag === 'b') return inner ? `<strong>${inner}</strong>` : '';
-        if (tag === 'em' || tag === 'i') return inner ? `<em>${inner}</em>` : '';
         if (tag === 'ul') return inner ? `<ul>${inner}</ul>` : '';
         if (tag === 'ol') return inner ? `<ol>${inner}</ol>` : '';
         if (tag === 'li') return inner.trim() ? `<li>${inner}</li>` : '';
@@ -4119,7 +5023,7 @@ if (isset($_SESSION['user_id'])) {
 
       const container = document.createElement('div');
       container.innerHTML = html || '';
-      let out = Array.from(container.childNodes).map(walk).join('');
+      let out = Array.from(container.childNodes).map((child) => walk(child)).join('');
       out = out.replace(/<p><\/p>/g, '');
       out = out.replace(/(?:<br>\s*){3,}/g, collapseToSingleBreak ? '<br>' : '<br><br>');
       return out.trim();
@@ -4232,18 +5136,26 @@ if (isset($_SESSION['user_id'])) {
       editor.addEventListener('input', syncToTextarea);
       editor.addEventListener('focus', () => { activeEditor = editor; });
       editor.addEventListener('blur', syncToTextarea);
-      if (useSoftBreaks) {
-        editor.addEventListener('keydown', (e) => {
-          if (e.key !== 'Enter') return;
-          e.preventDefault();
-          if (document.queryCommandSupported && document.queryCommandSupported('insertLineBreak')) {
-            document.execCommand('insertLineBreak');
-          } else if (document.queryCommandSupported && document.queryCommandSupported('insertHTML')) {
-            document.execCommand('insertHTML', false, '<br>');
+      editor.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+          const key = String(e.key || '').toLowerCase();
+          if (key === 'b' || key === 'i') {
+            e.preventDefault();
+            editor.focus();
+            document.execCommand(key === 'b' ? 'bold' : 'italic');
+            syncToTextarea();
+            return;
           }
-          syncToTextarea();
-        });
-      }
+        }
+        if (!useSoftBreaks || e.key !== 'Enter') return;
+        e.preventDefault();
+        if (document.queryCommandSupported && document.queryCommandSupported('insertLineBreak')) {
+          document.execCommand('insertLineBreak');
+        } else if (document.queryCommandSupported && document.queryCommandSupported('insertHTML')) {
+          document.execCommand('insertHTML', false, '<br>');
+        }
+        syncToTextarea();
+      });
       return editor;
     };
 

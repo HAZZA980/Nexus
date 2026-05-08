@@ -4,6 +4,7 @@ require_admin();
 
 use NexusCMS\Models\Page;
 use NexusCMS\Models\Site;
+use NexusCMS\Models\SiteForm;
 use NexusCMS\Core\Security;
 use NexusCMS\Core\DB;
 use NexusCMS\Support\PagePath;
@@ -26,6 +27,47 @@ $pageSlug = strtolower((string)($page['slug'] ?? ''));
 $theme = json_decode($site['theme_json'] ?? '', true) ?: [];
 $shape = is_array($theme['shape'] ?? null) ? $theme['shape'] : [];
 $themeRadius = (int)($shape['radius'] ?? ($theme['radius'] ?? 16));
+$colors = is_array($theme['colors'] ?? null) ? $theme['colors'] : [];
+$typo = is_array($theme['typography'] ?? null) ? $theme['typography'] : [];
+$layout = is_array($theme['layout'] ?? null) ? $theme['layout'] : [];
+
+$previewPageBg = $colors['pageBg'] ?? '#f7f7f3';
+$previewText = $colors['text'] ?? '#111827';
+$previewSurface = $colors['surface'] ?? '#ffffff';
+$previewBorder = $colors['border'] ?? 'rgba(17,24,39,.12)';
+$previewMuted = $colors['muted'] ?? '#6b7280';
+$previewPrimary = $colors['primary'] ?? '#2563eb';
+$previewSecondary = $colors['secondary'] ?? '#14b8a6';
+$previewFocus = $colors['focus'] ?? $previewPrimary;
+$previewDivider = $colors['divider'] ?? $previewBorder;
+$previewHover = $colors['hover'] ?? 'rgba(0,0,0,.06)';
+$previewShadow = $shape['shadow'] ?? '0 10px 30px rgba(0,0,0,.18)';
+$previewFontFamily = $typo['fontFamily'] ?? (($site['slug'] ?? '') === 'cite-them-right' ? 'Georgia,"Times New Roman",serif' : 'system-ui,-apple-system,Segoe UI,Roboto,Arial');
+$previewBaseSize = (int)($typo['baseSize'] ?? 16);
+$previewHeadingScale = (float)($typo['headingScale'] ?? 1.35);
+$previewFontWeight = (int)($typo['fontWeight'] ?? 500);
+$previewLineHeight = (float)($typo['lineHeight'] ?? 1.55);
+$previewLetterSpacing = (string)($typo['letterSpacing'] ?? '0px');
+$previewPaddingPreset = $layout['padding'] ?? 'medium';
+$previewMaxWidthPreset = $layout['maxWidth'] ?? 'standard';
+$previewPaddingMap = ['small' => '12px 14px', 'medium' => '18px 22px', 'large' => '26px 28px'];
+$previewWidthMap = ['narrow' => '1024px', 'standard' => '1180px', 'wide' => '1280px'];
+$previewPagePadding = $previewPaddingMap[$previewPaddingPreset] ?? $previewPaddingMap['medium'];
+$previewMaxWidth = $previewWidthMap[$previewMaxWidthPreset] ?? $previewWidthMap['standard'];
+$previewSectionSpacing = (int)($layout['sectionSpacing'] ?? 20);
+$previewGridGapRaw = (int)($layout['gridGap'] ?? 16);
+$previewGridGapMap = [10 => 18, 16 => 30, 24 => 42];
+$previewGridGap = $previewGridGapMap[$previewGridGapRaw] ?? max(18, $previewGridGapRaw);
+$previewAlignment = $layout['alignment'] ?? 'left';
+$previewAlignValue = $previewAlignment === 'center' ? 'center' : 'flex-start';
+$previewPagePaddingParts = preg_split('/\s+/', trim($previewPagePadding)) ?: [];
+$previewPadX = 0;
+if (isset($previewPagePaddingParts[1])) {
+  $previewPadX = (int)$previewPagePaddingParts[1];
+} elseif (isset($previewPagePaddingParts[0])) {
+  $previewPadX = (int)$previewPagePaddingParts[0];
+}
+$previewDocumentWidth = ((int)$previewMaxWidth) + ($previewPadX * 2);
 
 $pageCollection = null;
 $pageCollectionStyle = '';
@@ -123,6 +165,14 @@ $sitePages = array_map(static function(array $row) use ($base, $site): array {
     'slug' => $slug,
   ];
 }, Page::listBySite((int)$site['id']));
+$siteForms = array_map(static function(array $row): array {
+  return [
+    'id' => (int)($row['id'] ?? 0),
+    'name' => (string)($row['name'] ?? ''),
+    'description' => (string)($row['description'] ?? ''),
+    'questions' => array_values((array)($row['questions'] ?? [])),
+  ];
+}, SiteForm::listBySite((int)$site['id']));
 $uiTheme = ui_theme_mode();
 $builderCssPath = __DIR__ . '/../public/assets/builder.css';
 $builderJsPath = __DIR__ . '/../public/assets/builder.js';
@@ -162,6 +212,36 @@ $builderBodyClasses = [
   </style>
   <link rel="stylesheet" href="<?= $base ?>/public/assets/builder.css?v=<?= Security::e($builderCssVer) ?>">
   <link rel="stylesheet" href="<?= $base ?>/public/assets/nexus-page.css?v=<?= Security::e($nexusCssVer) ?>">
+  <style>
+    .nx-canvas{
+      --nx-preview-document-width: <?= (int)$previewDocumentWidth ?>px;
+    }
+
+    .nx-canvas .nexus-page{
+      --nexus-page-bg: <?= Security::e($previewPageBg) ?>;
+      --nexus-text: <?= Security::e($previewText) ?>;
+      --nexus-primary: <?= Security::e($previewPrimary) ?>;
+      --nexus-secondary: <?= Security::e($previewSecondary) ?>;
+      --nexus-muted: <?= Security::e($previewMuted) ?>;
+      --nexus-surface: <?= Security::e($previewSurface) ?>;
+      --nexus-border: <?= Security::e($previewBorder) ?>;
+      --nexus-divider: <?= Security::e($previewDivider) ?>;
+      --nexus-focus: <?= Security::e($previewFocus) ?>;
+      --nexus-hover: <?= Security::e($previewHover) ?>;
+      --nexus-shadow: <?= Security::e($previewShadow) ?>;
+      --nexus-font: <?= Security::e($previewFontFamily) ?>;
+      --nexus-font-size: <?= (int)$previewBaseSize ?>px;
+      --nexus-font-weight: <?= (int)$previewFontWeight ?>;
+      --nexus-line-height: <?= Security::e($previewLineHeight) ?>;
+      --nexus-letter-spacing: <?= Security::e($previewLetterSpacing) ?>;
+      --nexus-heading-scale: <?= Security::e($previewHeadingScale) ?>;
+      --nexus-padding: <?= Security::e($previewPagePadding) ?>;
+      --nexus-max-width: <?= Security::e($previewMaxWidth) ?>;
+      --nexus-section-spacing: <?= (int)$previewSectionSpacing ?>px;
+      --nexus-grid-gap: <?= (int)$previewGridGap ?>px;
+      --nexus-align: <?= Security::e($previewAlignValue) ?>;
+    }
+  </style>
 
 </head>
 <body class="<?= Security::e(implode(' ', array_filter($builderBodyClasses))) ?>">
@@ -283,6 +363,12 @@ $builderBodyClasses = [
         </span>
         <span class="nx-item-label">Divider</span>
       </div>
+      <div class="nx-item" draggable="true" data-type="form" tabindex="0" title="Form">
+        <span class="nx-item-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/><circle cx="17" cy="16" r="1"/></svg>
+        </span>
+        <span class="nx-item-label">Form</span>
+      </div>
     </div>
   </div>
 
@@ -388,9 +474,6 @@ $builderBodyClasses = [
     <main class="nx-main">
       <header class="nx-top">
         <div class="nx-top-left">
-          <div class="nx-page-heading">
-            <div class="nx-strong"><?= Security::e($page['title']) ?></div>
-          </div>
           <span id="statusBadge" class="nx-status nx-status-<?= Security::e($page['status']) ?>"><?= ucfirst(Security::e($page['status'])) ?></span>
         </div>
 
@@ -535,7 +618,11 @@ $builderBodyClasses = [
   </div>
 
 <div class="nx-canvas">
-  <div id="canvas" class="nexus-page"></div>
+  <div class="nx-canvas-viewport">
+    <div class="nx-canvas-stage">
+      <div id="canvas" class="nexus-page"></div>
+    </div>
+  </div>
 </div>
 <!-- Save revision modal -->
 <div id="revModal" class="nx-modal" style="display:none;">
@@ -634,6 +721,7 @@ $builderBodyClasses = [
 
   <script>window.NX_DOC = <?= json_encode($doc, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
   <script>window.NX_SITE_PAGES = <?= json_encode($sitePages, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
+  <script>window.NX_SITE_FORMS = <?= json_encode($siteForms, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
   <script src="<?= $base ?>/public/assets/builder.js?v=<?= Security::e($builderJsVer) ?>"></script>
   <script>
     (function() {

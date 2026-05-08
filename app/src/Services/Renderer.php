@@ -4,6 +4,7 @@ namespace NexusCMS\Services;
 
 use NexusCMS\Core\Security;
 use NexusCMS\Models\CitationExample;
+use NexusCMS\Models\SiteForm;
 
 final class Renderer
 {
@@ -311,7 +312,7 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     $html = preg_replace("/\son\w+='[^']*'/i", '', $html);
 
     // allow only these tags
-    $allowed = '<div><p><a><b><strong><i><em><u><br><span><ul><ol><li><h1><h2><h3><h4><h5><h6><small>';
+    $allowed = '<div><p><a><b><strong><i><em><u><br><span><ul><ol><li><h1><h2><h3><h4><h5><h6><small><table><tbody><thead><tfoot><tr><td><th>';
     $html = strip_tags($html, $allowed);
 
     // normalize <a> tags with href and force target/rel
@@ -735,6 +736,83 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         return self::wrapWithStyles($textarea, $blk, false);
       }
 
+      case 'form': {
+        $formId = (int)($p['formId'] ?? 0);
+        $form = $formId > 0 ? SiteForm::find($formId) : null;
+        if (!$form || (string)($form['site_id'] ?? '') === '' || (string)($form['site_id'] ?? '') === '0') {
+          return self::wrapWithStyles('<div class="nx-text">Select a form in the builder inspector.</div>', $blk, true);
+        }
+        if ((string)($form['site_id'] ?? '') !== '' && self::$currentSiteSlug === '') {
+          return self::wrapWithStyles('<div class="nx-text">Form unavailable.</div>', $blk, true);
+        }
+
+        $title = trim((string)($p['title'] ?? ''));
+        if ($title === '') $title = trim((string)($form['name'] ?? 'Form'));
+        if ($title === '') $title = 'Form';
+
+        $description = trim((string)($form['description'] ?? ''));
+        $questions = is_array($form['questions'] ?? null) ? $form['questions'] : [];
+        $successFormId = (int)($_GET['nx_form_submitted'] ?? 0);
+        $errorFormId = (int)($_GET['nx_form'] ?? 0);
+        $errorCode = trim((string)($_GET['nx_form_error'] ?? ''));
+        $feedbackHtml = '';
+        if ($successFormId === $formId) {
+          $feedbackHtml = '<div style="margin:0 0 14px;padding:12px 14px;border-radius:12px;background:rgba(34,197,94,.12);color:#166534;font-weight:700;">Thanks. Your response has been submitted.</div>';
+        } elseif ($errorFormId === $formId) {
+          $message = $errorCode === 'invalid'
+            ? 'Please complete every question before submitting.'
+            : 'Unable to submit the form. Please try again.';
+          $feedbackHtml = '<div style="margin:0 0 14px;padding:12px 14px;border-radius:12px;background:rgba(239,68,68,.12);color:#991b1b;font-weight:700;">' . Security::e($message) . '</div>';
+        }
+
+        $questionsHtml = '';
+        foreach ($questions as $idx => $question) {
+          if (!is_array($question)) continue;
+          $questionNumber = $idx + 1;
+          $qid = preg_replace('/[^a-z0-9_\-]/i', '_', (string)($question['id'] ?? ('q_' . ($idx + 1))));
+          $label = trim((string)($question['label'] ?? ''));
+          if ($label === '') $label = 'Question ' . $questionNumber;
+          $type = strtolower(trim((string)($question['type'] ?? 'text')));
+
+          if ($type === 'rating') {
+            $options = '';
+            for ($score = 1; $score <= 10; $score++) {
+              $options .= '<label class="nx-form-rating-option" data-score="' . $score . '">'
+                . '<input class="nx-form-rating-input" type="radio" name="responses[' . Security::e($qid) . ']" value="' . $score . '" required>'
+                . '<span>' . $score . '</span>'
+                . '</label>';
+            }
+            $inputHtml = '<div class="nx-form-rating-group" data-rating-group style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">' . $options . '</div>'
+              . '<div style="margin-top:8px;font-size:13px;color:#6b7280;">1 is low, 10 is high.</div>';
+          } else {
+            $inputHtml = '<textarea name="responses[' . Security::e($qid) . ']" rows="4" required placeholder="Type your answer" style="width:100%;margin-top:10px;padding:12px 14px;border:1px solid rgba(17,24,39,.16);border-radius:12px;background:#fff;color:#111827;font:inherit;resize:vertical;"></textarea>';
+          }
+
+          $questionsHtml .= '<div style="padding:16px 0;border-top:1px solid rgba(17,24,39,.1);">'
+            . '<label style="display:block;font-weight:700;color:#111827;">' . $questionNumber . '. ' . Security::e($label) . '</label>'
+            . $inputHtml
+            . '</div>';
+        }
+
+        if ($questionsHtml === '') {
+          $questionsHtml = '<div style="margin-top:12px;color:#6b7280;">This form has no questions yet.</div>';
+        }
+
+        $html = '<form method="post" style="padding:20px;border:1px solid rgba(17,24,39,.12);border-radius:18px;background:rgba(255,255,255,.94);box-shadow:0 16px 40px rgba(15,23,42,.08);">'
+          . $feedbackHtml
+          . '<input type="hidden" name="_nx_form_submit" value="1">'
+          . '<input type="hidden" name="nx_form_id" value="' . $formId . '">'
+          . '<div style="font-size:1.2em;font-weight:800;color:#111827;">' . Security::e($title) . '</div>';
+        if ($description !== '') {
+          $html .= '<div style="margin-top:8px;color:#4b5563;">' . Security::e($description) . '</div>';
+        }
+        $html .= '<div style="margin-top:16px;">' . $questionsHtml . '</div>'
+          . '<button type="submit" style="margin-top:16px;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border:0;border-radius:999px;background:var(--nexus-primary,#2563eb);color:#fff;font:inherit;font-weight:800;cursor:pointer;">Submit</button>'
+          . '</form>';
+
+        return self::wrapWithStyles($html, $blk, false);
+      }
+
       case 'citationOrder': {
         $liveCitation = self::resolveCitationRecord($blk);
         $title = Security::e((string)($p['title'] ?? 'Citation order'));
@@ -758,7 +836,11 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
       case 'exampleCard': {
         $liveCitation = self::resolveCitationRecord($blk);
-        $heading = Security::e((string)($liveCitation['example_heading'] ?? ($p['heading'] ?? 'Example')));
+        $headingRaw = trim((string)($liveCitation['example_heading'] ?? ($p['heading'] ?? 'Example')));
+        if ($headingRaw === '') {
+          $headingRaw = 'Example';
+        }
+        $heading = Security::e($headingRaw);
 
         $bodyRaw = $liveCitation
           ? (string)($liveCitation['example_body'] ?? '')
@@ -778,13 +860,27 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
           ? self::normalizeExampleHtml($youTryRaw)
           : self::formatExampleText($youTryRaw);
         $showTry = !array_key_exists('showYouTry', $p) || (bool)$p['showYouTry'];
-        $extraClass = $showTry ? '' : ' nx-examplecard--single';
+        $hasHeading = trim(strip_tags(html_entity_decode($headingRaw, ENT_QUOTES | ENT_HTML5))) !== '';
+        $hasBody = trim(strip_tags(html_entity_decode($bodyRaw !== '' ? $bodyRaw : (string)($p['body'] ?? ''), ENT_QUOTES | ENT_HTML5))) !== '';
+        $isTryOnly = $showTry && !$hasHeading && !$hasBody;
+        $extraClass = !$showTry ? ' nx-examplecard--single' : ($isTryOnly ? ' nx-examplecard--try-only' : '');
+        $cardStyle = $isTryOnly
+          ? 'grid-template-columns:1fr;'
+          : 'grid-template-columns:50% 50%;';
+        $leftStyle = 'background:#e0e0e0;width:100%;padding:30px 20px 32px;';
+        $bodyStyle = 'font-size:15px;line-height:1.42;color:#333333;';
+        $rightStyle = $isTryOnly
+          ? 'padding:24px 40px 22px;background:#ffffff;color:#38383d;width:100%;'
+          : 'padding:24px 28px 22px;background:#ffffff;color:#38383d;width:100%;';
+        $tryInputStyle = 'padding:10px 12px;font-size:14px;line-height:1.5;';
 
-        $html = "<div class=\"nx-examplecard{$extraClass}\">"
-          . "<div class=\"nx-examplecard-left\">"
+        $html = "<div class=\"nx-examplecard{$extraClass}\" style=\"{$cardStyle}\">";
+        if (!$isTryOnly) {
+          $html .= "<div class=\"nx-examplecard-left\" style=\"{$leftStyle}\">"
             . "<div class=\"nx-examplecard-heading\">{$heading}</div>"
-            . "<div class=\"nx-examplecard-body\">{$body}</div>"
+            . "<div class=\"nx-examplecard-body\" style=\"{$bodyStyle}\">{$body}</div>"
           . "</div>";
+        }
 
         if ($showTry) {
           $uid = uniqid('yt_', false);
@@ -793,10 +889,10 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
             ? self::normalizeExampleHtml($expected)
             : self::formatExampleText($expected);
 
-          $html .= "<div class=\"nx-examplecard-right\">"
+          $html .= "<div class=\"nx-examplecard-right\" style=\"{$rightStyle}\">"
             . "<div class=\"nx-examplecard-try-title\">You try</div>"
             . "<div class=\"nx-trybox\">"
-              . "<div id=\"{$uid}_input\" class=\"nx-try-input\" aria-label=\"Enter your citation\" contenteditable=\"true\">{$expectedHtml}</div>"
+              . "<div id=\"{$uid}_input\" class=\"nx-try-input\" style=\"{$tryInputStyle}\" aria-label=\"Enter your citation\" contenteditable=\"true\">{$expectedHtml}</div>"
               . "<div class=\"nx-try-actions\">"
                 . "<div class=\"nx-try-actions-group\">"
                   . "<button type=\"button\" class=\"nx-try-action nx-try-action--italic\">Italicise</button>"

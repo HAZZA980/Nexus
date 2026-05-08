@@ -109,6 +109,17 @@ $src = $base . '/admin/site.php?id=' . (int)$site['id'] . '&view=citations';
           body.scrollHeight, body.offsetHeight, body.clientHeight,
           html.scrollHeight, html.offsetHeight, html.clientHeight
         );
+        var activeDrawers = doc.querySelectorAll('.cite-viewer.active');
+        if (activeDrawers.length) {
+          activeDrawers.forEach(function (drawer) {
+            var drawerBottom = drawer.offsetTop + Math.max(
+              drawer.scrollHeight || 0,
+              drawer.offsetHeight || 0,
+              drawer.clientHeight || 0
+            );
+            height = Math.max(height, drawerBottom);
+          });
+        }
         frame.style.height = height + 'px';
       }
 
@@ -122,31 +133,16 @@ $src = $base . '/admin/site.php?id=' . (int)$site['id'] . '&view=citations';
       function syncFrameDrawerPosition() {
         var doc = frameDoc();
         if (!doc) return;
-        var rect = frame.getBoundingClientRect();
-        var frameTopInViewport = rect.top;
-        var frameBottomInViewport = rect.bottom;
-        var header = document.querySelector('.nx-admin-topbar, .top-bar');
-        var headerBottomInViewport = 0;
-        if (header) {
-          var headerRect = header.getBoundingClientRect();
-          headerBottomInViewport = Math.max(0, Math.round(headerRect.bottom));
-        }
-        var visibleTop = Math.max(0, frameTopInViewport, headerBottomInViewport);
-        var visibleBottom = Math.min(window.innerHeight, frameBottomInViewport);
-        var visibleHeight = Math.max(0, visibleBottom - visibleTop);
-        var topPx = Math.max(0, visibleTop - frameTopInViewport);
-        var remainingFrameHeight = Math.max(0, frame.clientHeight - topPx);
-        var heightPx = visibleHeight;
-        if (remainingFrameHeight > 0) heightPx = Math.min(heightPx, remainingFrameHeight);
         var drawers = doc.querySelectorAll('.cite-viewer');
         if (!drawers.length) return;
         drawers.forEach(function (drawer) {
           drawer.style.zIndex = '2600';
-          drawer.style.position = 'absolute';
-          drawer.style.top = topPx + 'px';
-          drawer.style.height = heightPx + 'px';
-          drawer.style.maxHeight = heightPx + 'px';
-          drawer.style.overflowY = 'auto';
+          drawer.style.position = 'fixed';
+          drawer.style.top = '0';
+          drawer.style.bottom = '0';
+          drawer.style.height = '100dvh';
+          drawer.style.maxHeight = '100dvh';
+          drawer.style.overflowY = 'hidden';
           drawer.style.width = '';
           drawer.style.right = '0';
           drawer.style.maxWidth = '';
