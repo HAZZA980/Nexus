@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/../app/bootstrap.php';
 require_admin();
+require_role('website_admin');
 
 use NexusCMS\Core\DB;
 use NexusCMS\Core\Security;
@@ -18,8 +19,8 @@ $me = null;
 if (isset($_SESSION['user_id'])) {
   $me = User::findById((int)$_SESSION['user_id']) ?: null;
 }
-$myRole = strtolower((string)($me['role'] ?? $_SESSION['role'] ?? ''));
-$canManageUsers = in_array($myRole, ['super_admin', 'website_admin'], true);
+$myRole = strtolower((string)($me['role'] ?? $_SESSION['user_role'] ?? ''));
+$canManageUsers = role_level($myRole) >= role_level('website_admin');
 $canChangeRole = $myRole === 'super_admin';
 
 function role_label(string $role): string {

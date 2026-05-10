@@ -9,10 +9,8 @@ function normalize_return_path(string $candidate): string {
   $to = trim($candidate);
   if ($to === '') return '/';
 
-  if (preg_match('#^https?://#i', $to)) {
-    $path = (string)(parse_url($to, PHP_URL_PATH) ?? '/');
-    $query = (string)(parse_url($to, PHP_URL_QUERY) ?? '');
-    $to = $path . ($query !== '' ? ('?' . $query) : '');
+  if (preg_match('#^(?:[a-z][a-z0-9+.-]*:|//)#i', $to)) {
+    return '/';
   }
 
   if ($base !== '' && str_starts_with($to, $base)) {
@@ -20,6 +18,7 @@ function normalize_return_path(string $candidate): string {
   }
 
   if ($to === '' || $to[0] !== '/') $to = '/' . ltrim($to, '/');
+  if (str_starts_with($to, '//')) return '/';
   return $to;
 }
 
@@ -35,4 +34,3 @@ session_destroy();
 
 header('Location: ' . rtrim(base_path(), '/') . $to);
 exit;
-

@@ -2,6 +2,7 @@
 require __DIR__ . '/app/bootstrap.php';
 
 use NexusCMS\Models\User;
+use NexusCMS\Models\LoginAttempts;
 use NexusCMS\Core\Security;
 use NexusCMS\Core\DB;
 
@@ -19,10 +20,8 @@ function normalize_return_path(string $candidate): string {
   $to = trim($candidate);
   if ($to === '') return '/';
 
-  if (preg_match('#^https?://#i', $to)) {
-    $path = (string)(parse_url($to, PHP_URL_PATH) ?? '/');
-    $query = (string)(parse_url($to, PHP_URL_QUERY) ?? '');
-    $to = $path . ($query !== '' ? ('?' . $query) : '');
+  if (preg_match('#^(?:[a-z][a-z0-9+.-]*:|//)#i', $to)) {
+    return '/';
   }
 
   if ($base !== '' && str_starts_with($to, $base)) {
@@ -30,8 +29,12 @@ function normalize_return_path(string $candidate): string {
   }
 
   if ($to === '' || $to[0] !== '/') $to = '/' . ltrim($to, '/');
+  if (str_starts_with($to, '//')) return '/';
   return $to;
 }
+
+$loginAttemptStatus = LoginAttempts::status(LoginAttempts::ipHash());
+$requireCaptcha = !empty($loginAttemptStatus['captcha_required']);
 
 if (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0 && $_SERVER['REQUEST_METHOD'] !== 'POST') {
   $to = normalize_return_path($return);
@@ -82,15 +85,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
       }
     } else {
-      $user = User::findByEmail($email);
-      if ($user && !empty($user['password_hash']) && password_verify($pass, $user['password_hash'])) {
-        establish_user_session($user);
-        $to = normalize_return_path($return);
-        header('Location: ' . rtrim(base_path(), '/') . $to);
-        exit;
+      $ipHash = LoginAttempts::ipHash();
+      $usernameHash = LoginAttempts::usernameHash($email);
+      $attemptStatus = LoginAttempts::status($ipHash);
+
+      if (!empty($attemptStatus['locked'])) {
+        $error = "Too many failed login attempts. Try again later.";
+      } elseif (!empty($attemptStatus['captcha_required']) && !login_captcha_check((string)($_POST['captcha_answer'] ?? ''))) {
+        $attemptStatus = LoginAttempts::recordFailure($ipHash, $usernameHash, 'portal_login', 'captcha_failed');
+        $error = !empty($attemptStatus['locked'])
+          ? "Too many failed login attempts. Try again later."
+          : "Complete the verification challenge and try again.";
       } else {
-        $error = "Invalid credentials.";
+        $user = User::findByEmail($email);
+        if ($user && !empty($user['password_hash']) && password_verify($pass, $user['password_hash'])) {
+          LoginAttempts::reset($ipHash, $usernameHash, 'portal_login');
+          login_captcha_question(true);
+          establish_user_session($user);
+          $to = normalize_return_path($return);
+          header('Location: ' . rtrim(base_path(), '/') . $to);
+          exit;
+        } else {
+          $attemptStatus = LoginAttempts::recordFailure($ipHash, $usernameHash, 'portal_login');
+          $error = !empty($attemptStatus['locked'])
+            ? "Too many failed login attempts. Try again later."
+            : "Invalid credentials.";
+        }
       }
+      $requireCaptcha = !empty($attemptStatus['captcha_required']);
     }
   }
 }
@@ -214,6 +236,10 @@ $signupCardClass = $mode === 'signup' ? 'tab is-active' : 'tab';
           <input name="email" type="email" required value="<?= Security::e((string)($_POST['email'] ?? '')) ?>">
           <label>Password</label>
           <input name="password" type="password" required>
+          <?php if ($requireCaptcha): ?>
+            <label>Verification: <?= Security::e(login_captcha_question()) ?></label>
+            <input name="captcha_answer" type="text" inputmode="numeric" autocomplete="off" required>
+          <?php endif; ?>
           <button class="btn" type="submit">Log in</button>
         </form>
       </div>

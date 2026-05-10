@@ -56,7 +56,6 @@ body {
   margin: 2px 6px 12px;
   font-size: 18px;
   font-weight: 700;
-  line-height: 1.2;
   letter-spacing: 0.1px;
   text-decoration: none;
 }
@@ -66,7 +65,6 @@ body {
   color: var(--admin-muted);
   font-size: 11px;
   font-weight: 700;
-  line-height: 1.2;
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
@@ -80,7 +78,6 @@ body {
   color: var(--admin-text-strong);
   font-size: 14px;
   font-weight: 600;
-  line-height: 1.25;
   text-decoration: none;
 }
 
@@ -131,45 +128,6 @@ body {
   gap: 10px;
   color: var(--admin-muted);
   font-size: 13px;
-}
-
-.nx-icon-btn {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--admin-line);
-  border-radius: 6px;
-  background: var(--admin-surface-2);
-  color: var(--admin-text-strong);
-  cursor: pointer;
-  font: inherit;
-  font-size: 16px;
-  line-height: 1;
-  position: relative;
-  text-decoration: none;
-}
-
-.nx-icon-btn:hover {
-  background: color-mix(in srgb, var(--admin-accent) 14%, transparent);
-}
-
-.nx-icon-badge {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--admin-danger);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
 }
 
 .nx-user-menu {

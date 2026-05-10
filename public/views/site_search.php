@@ -83,10 +83,18 @@ function safe_include(string $path, string $root): bool {
   $pathNorm = str_replace('\\', '/', $path);
   $rootNorm = rtrim(str_replace('\\', '/', $root), '/');
   if (strpos($pathNorm, '..') !== false) return false;
+  if ($rootNorm === '' || strncmp($pathNorm, $rootNorm . '/', strlen($rootNorm) + 1) !== 0) return false;
+  $relative = substr($pathNorm, strlen($rootNorm) + 1);
+  $cursor = $rootNorm;
+  foreach (explode('/', $relative) as $segment) {
+    if ($segment === '') return false;
+    $cursor .= '/' . $segment;
+    if (is_link($cursor)) return false;
+  }
   $real = realpath($pathNorm);
   if ($real === false) return false;
   $real = str_replace('\\', '/', $real);
-  if (strncmp($real, $rootNorm, strlen($rootNorm)) !== 0) return false;
+  if (!str_starts_with($real, $rootNorm . '/')) return false;
   include $real;
   return true;
 }

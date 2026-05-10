@@ -156,6 +156,61 @@ function apply_source_type_breadcrumbs(array $doc, array $page, string $base, st
   return $doc;
 }
 
+function analytics_string_field(array $data, string $field, int $max, string $default = ''): string {
+  $value = $data[$field] ?? $default;
+  if (is_array($value) || is_object($value)) return $default;
+  $value = trim(str_replace(["\r", "\n"], ' ', (string)$value));
+  return strlen($value) > $max ? substr($value, 0, $max) : $value;
+}
+
+function analytics_key_field(array $data, string $field): string {
+  $value = $data[$field] ?? '';
+  if (is_array($value) || is_object($value)) return '';
+  $value = strtolower(substr((string)$value, 0, 128));
+  $value = preg_replace('/[^a-f0-9]/', '', $value) ?? '';
+  return strlen($value) >= 8 ? substr($value, 0, 64) : '';
+}
+
+function analytics_int_field(array $data, string $field, int $min, int $max): ?int {
+  if (!isset($data[$field]) || is_array($data[$field]) || is_object($data[$field])) return null;
+  if (!is_numeric($data[$field])) return null;
+  $value = (int)$data[$field];
+  if ($value < $min || $value > $max) return null;
+  return $value;
+}
+
+function validate_analytics_payload(array $data): array {
+  $siteId = analytics_int_field($data, 'site_id', 1, PHP_INT_MAX);
+  if ($siteId === null) json_response(['ok' => false, 'error' => 'Missing site'], 400);
+
+  $path = analytics_string_field($data, 'path', 255, '/');
+  if ($path === '') json_response(['ok' => false, 'error' => 'Missing path'], 400);
+  if ($path[0] !== '/') $path = '/' . ltrim($path, '/');
+
+  $payload = [
+    'site_id' => $siteId,
+    'path' => $path,
+    'visitor_key' => analytics_key_field($data, 'visitor_key'),
+    'session_key' => analytics_key_field($data, 'session_key'),
+    'title' => analytics_string_field($data, 'title', 240),
+    'referrer' => analytics_string_field($data, 'referrer', 240),
+    'utm_source' => analytics_string_field($data, 'utm_source', 100),
+    'utm_medium' => analytics_string_field($data, 'utm_medium', 100),
+    'utm_campaign' => analytics_string_field($data, 'utm_campaign', 120),
+    'is_404' => !empty($data['is_404']),
+    'dnt' => !empty($data['dnt']),
+  ];
+
+  $statusCode = analytics_int_field($data, 'status_code', 100, 599);
+  if ($statusCode !== null) $payload['status_code'] = $statusCode;
+  $loadMs = analytics_int_field($data, 'load_ms', 0, 600000);
+  if ($loadMs !== null) $payload['load_ms'] = $loadMs;
+  $ttfbMs = analytics_int_field($data, 'ttfb_ms', 0, 600000);
+  if ($ttfbMs !== null) $payload['ttfb_ms'] = $ttfbMs;
+
+  return $payload;
+}
+
 function ctr_normalize_search_text(string $value): string {
   $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
   $value = strip_tags($value);
@@ -363,6 +418,7 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 if ($method === 'POST' && $uri === '/api/analytics/collect') {
   $data = json_decode(file_get_contents('php://input'), true);
   if (!is_array($data)) json_response(['ok' => false, 'error' => 'Invalid JSON'], 400);
+  $data = validate_analytics_payload($data);
 
   $siteId = (int)($data['site_id'] ?? 0);
   if ($siteId <= 0) json_response(['ok' => false, 'error' => 'Missing site'], 400);
@@ -373,17 +429,21 @@ if ($method === 'POST' && $uri === '/api/analytics/collect') {
     $baseCookiePath = rtrim($base, '/') . '/';
     $longTtl = time() + (86400 * 365 * 2);
     $sessionTtl = time() + 86400; // keep short; server enforces timeout
+    $secureCookie = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+      || strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
     setcookie('nx_vid_' . $siteId, $result['visitor_key'], [
       'expires' => $longTtl,
       'path' => $baseCookiePath ?: '/',
-      'httponly' => false,
+      'secure' => $secureCookie,
+      'httponly' => true,
       'samesite' => 'Lax',
     ]);
     if (!empty($result['session_key'])) {
       setcookie('nx_sid_' . $siteId, $result['session_key'], [
         'expires' => $sessionTtl,
         'path' => $baseCookiePath ?: '/',
-        'httponly' => false,
+        'secure' => $secureCookie,
+        'httponly' => true,
         'samesite' => 'Lax',
       ]);
     }

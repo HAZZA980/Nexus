@@ -250,6 +250,23 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     return implode(';', $css);
   }
 
+  private static function sanitizeCssUrl(string $url): string
+  {
+    $url = trim($url);
+    if ($url === '') return '';
+    if (!preg_match('#^(https?://|/)#i', $url)) return '';
+    if (str_starts_with($url, '//')) return '';
+    if (preg_match('/[\x00-\x1f\x7f\s;{}\\\\]/', $url)) return '';
+    $url = preg_replace("#['\"()]#", '', $url) ?? '';
+    return trim($url);
+  }
+
+  private static function cssBackgroundImage(string $url): string
+  {
+    $safeUrl = self::sanitizeCssUrl($url);
+    return $safeUrl !== '' ? 'background-image:url(' . Security::e($safeUrl) . ');' : '';
+  }
+
   /**
    * Wrap block HTML with:
    * - outer wrapper styling from blk.style
@@ -919,7 +936,8 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         if ($overlay < 0) $overlay = 0;
         if ($overlay > 1) $overlay = 1;
 
-        $bgStyle = $bg !== '' ? "background-image:url('".Security::e($bg)."');" : "background:linear-gradient(135deg,#1f2937,#111827);";
+        $bgStyle = self::cssBackgroundImage($bg);
+        if ($bgStyle === '') $bgStyle = "background:linear-gradient(135deg,#1f2937,#111827);";
         $heroSpacing = '';
         $blkStyle = is_array($blk['style'] ?? null) ? $blk['style'] : [];
         $marginBottom = trim((string)($blkStyle['marginBottom'] ?? $blkStyle['margin-bottom'] ?? ''));
@@ -1014,7 +1032,7 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
         if ($overlay < 0) $overlay = 0;
         if ($overlay > 0.9) $overlay = 0.9;
 
-        $bgStyle = $bgImage !== '' ? "background-image:url('".Security::e($bgImage)."');" : '';
+        $bgStyle = self::cssBackgroundImage($bgImage);
         if ($bgStyle === '') $bgStyle = "background:{$bgColor};";
 
         $html = "<div class=\"nx-hero\" style=\"{$bgStyle}\">"
@@ -1194,8 +1212,9 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
               $bodyRaw = nl2br($bodyRaw);
             }
             $body = $bodyRaw !== '' ? self::safeInlineHtml($bodyRaw) : '';
-            $thumb = ($it['showHeaderImg'] && $it['headerImg'])
-              ? '<span class="nx-acc-thumb size-' . Security::e($headerImgSize) . '" style="background-image:url(\'' . Security::e($it['headerImg']) . '\')" aria-hidden="true"></span>'
+            $thumbStyle = self::cssBackgroundImage((string)($it['headerImg'] ?? ''));
+            $thumb = ($it['showHeaderImg'] && $thumbStyle !== '')
+              ? '<span class="nx-acc-thumb size-' . Security::e($headerImgSize) . '" style="' . $thumbStyle . '" aria-hidden="true"></span>'
               : '';
             $tabsHtml .= "<button role=\"tab\" class=\"nx-tab" . ($i===$active ? " active" : "") . "\" aria-selected=\"" . ($i===$active ? "true" : "false") . "\" aria-controls=\"tab-panel-{$accId}-{$i}\" id=\"tab-{$accId}-{$i}\">{$thumb}<span class=\"nx-tab-label\">" . Security::e($it['title']) . "</span></button>";
             $panelsHtml .= "<div role=\"tabpanel\" class=\"nx-tab-panel" . ($i===$active ? " active" : "") . "\" id=\"tab-panel-{$accId}-{$i}\" aria-labelledby=\"tab-{$accId}-{$i}\"" . ($i===$active ? '' : ' hidden style=\"display:none\"') . ">"
@@ -1342,8 +1361,9 @@ HTML;
             $bodyHtmlRaw = self::trimAccordionBodyHtml((string)($it['bodyHtml'] ?? ''));
             $bodyRaw = $bodyHtmlRaw !== '' ? $bodyHtmlRaw : $it['body'];
             $body = $bodyRaw !== '' ? self::safeInlineHtml($bodyRaw) : '';
-            $thumb = ($it['showHeaderImg'] && $it['headerImg'])
-              ? '<span class="nx-acc-thumb size-' . Security::e($headerImgSize) . '" style="background-image:url(\'' . Security::e($it['headerImg']) . '\')" aria-hidden="true"></span>'
+            $thumbStyle = self::cssBackgroundImage((string)($it['headerImg'] ?? ''));
+            $thumb = ($it['showHeaderImg'] && $thumbStyle !== '')
+              ? '<span class="nx-acc-thumb size-' . Security::e($headerImgSize) . '" style="' . $thumbStyle . '" aria-hidden="true"></span>'
               : '';
             $childHtml .= "<div class=\"nx-title-accordion-item" . ($isOpen ? " is-open" : "") . "\" data-idx=\"{$i}\">"
               . "<button type=\"button\" class=\"nx-accordion-head\" id=\"{$childHeadId}\" aria-expanded=\"" . ($isOpen ? 'true' : 'false') . "\" aria-controls=\"{$childPanelId}\">"
@@ -1379,8 +1399,9 @@ HTML;
             $bodyHtmlRaw = self::trimAccordionBodyHtml((string)($it['bodyHtml'] ?? ''));
             $bodyRaw = $bodyHtmlRaw !== '' ? $bodyHtmlRaw : $it['body'];
             $body = $bodyRaw !== '' ? self::safeInlineHtml($bodyRaw) : '';
-            $thumb = ($it['showHeaderImg'] && $it['headerImg'])
-              ? '<span class="nx-acc-thumb size-' . Security::e($headerImgSize) . '" style="background-image:url(\'' . Security::e($it['headerImg']) . '\')" aria-hidden="true"></span>'
+            $thumbStyle = self::cssBackgroundImage((string)($it['headerImg'] ?? ''));
+            $thumb = ($it['showHeaderImg'] && $thumbStyle !== '')
+              ? '<span class="nx-acc-thumb size-' . Security::e($headerImgSize) . '" style="' . $thumbStyle . '" aria-hidden="true"></span>'
               : '';
             $itemsHtml .= "<div class=\"nx-accordion-item" . ($isOpen ? " is-open" : "") . "\" data-idx=\"{$i}\">"
               . "<button type=\"button\" class=\"nx-accordion-head\" id=\"{$headId}\" aria-expanded=\"" . ($isOpen ? 'true' : 'false') . "\" aria-controls=\"{$panelId}\">"
@@ -2032,8 +2053,8 @@ HTML;
       $title = Security::e((string)($s['title'] ?? ''));
       $bodyRaw = (string)($s['body'] ?? '');
       $body = $bodyRaw !== '' ? self::safeInlineHtml($bodyRaw) : '';
-      $img = trim((string)($s['image'] ?? ''));
-      $imgHtml = $img !== '' ? '<div class="nx-car-img" style="background-image:url(\''.Security::e($img).'\');"></div>' : '<div class="nx-car-bubbles"></div>';
+      $imgStyle = self::cssBackgroundImage((string)($s['image'] ?? ''));
+      $imgHtml = $imgStyle !== '' ? '<div class="nx-car-img" style="' . $imgStyle . '"></div>' : '<div class="nx-car-bubbles"></div>';
       $layoutRaw = $s['layout'] ?? 'text-left';
       $layout = in_array($layoutRaw, ['text-left','text-right','stacked'], true) ? $layoutRaw : 'text-left';
       $slidesHtml .= '<div class="nx-car-slide layout-'.$layout.'">'

@@ -189,7 +189,8 @@ if (isset($_SESSION['user_id'])) {
 
 $userName = trim((string)($currentUser['display_name'] ?? $currentUser['email'] ?? $_SESSION['username'] ?? 'Administrator'));
 if ($userName === '') $userName = 'Administrator';
-$rawRole = strtolower(trim((string)($currentUser['role'] ?? $_SESSION['role'] ?? '')));
+$rawRole = strtolower(trim((string)($currentUser['role'] ?? $_SESSION['user_role'] ?? '')));
+$canManageUsersNav = role_level($rawRole) >= role_level('website_admin');
 $roleMap = [
   'super_admin' => 'Super Admin',
   'website_admin' => 'Website Admin',
@@ -468,13 +469,17 @@ usort($rows, function (array $a, array $b): int {
       <div class="nav-label">Content Management</div>
       <a class="nav-link" href="<?= $base ?>/">Dashboard</a>
       <a class="nav-link active" href="<?= $base ?>/admin/index.php">Sites</a>
-      <a class="nav-link" href="<?= $base ?>/admin/users.php">Users</a>
+      <?php if ($canManageUsersNav): ?>
+        <a class="nav-link" href="<?= $base ?>/admin/users.php">Users</a>
+      <?php endif; ?>
       <a class="nav-link" href="<?= $base ?>/admin/images.php">Media</a>
       <a class="nav-link" href="<?= $base ?>/admin/databases.php">Database</a>
 
       <div class="nav-label">Create</div>
       <a class="nav-link" href="<?= $base ?>/admin/site_new.php">New Site</a>
-      <a class="nav-link" href="<?= $base ?>/admin/user_new.php">New User</a>
+      <?php if ($canManageUsersNav): ?>
+        <a class="nav-link" href="<?= $base ?>/admin/user_new.php">New User</a>
+      <?php endif; ?>
     </aside>
 
     <div class="workspace">

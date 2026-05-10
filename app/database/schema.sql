@@ -18,6 +18,28 @@ CREATE TABLE IF NOT EXISTS user_site_access (
   CONSTRAINT fk_user_site_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS login_attempts (
+  ip_hash CHAR(64) NOT NULL PRIMARY KEY,
+  attempts INT NOT NULL DEFAULT 0,
+  first_attempt_at DATETIME NULL,
+  last_attempt_at DATETIME NULL,
+  locked_until DATETIME NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_locked_until (locked_until)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS login_attempt_events (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  ip_hash CHAR(64) NOT NULL,
+  username_hash CHAR(64) NULL,
+  endpoint VARCHAR(40) NOT NULL DEFAULT 'login',
+  success TINYINT(1) NOT NULL DEFAULT 0,
+  reason VARCHAR(80) NOT NULL DEFAULT '',
+  occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_ip_time (ip_hash, occurred_at),
+  INDEX idx_username_time (username_hash, occurred_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE sites (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(190),

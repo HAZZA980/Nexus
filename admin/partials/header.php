@@ -38,7 +38,8 @@ if (!$currentUser && isset($_SESSION['user_id'])) {
 $userLabel = trim((string)($currentUser['display_name'] ?? $currentUser['email'] ?? $_SESSION['username'] ?? 'Administrator'));
 if ($userLabel === '') $userLabel = 'Administrator';
 
-$rawRole = strtolower(trim((string)($currentUser['role'] ?? $_SESSION['role'] ?? '')));
+$rawRole = strtolower(trim((string)($currentUser['role'] ?? $_SESSION['user_role'] ?? '')));
+$canManageUsersNav = function_exists('role_level') && role_level($rawRole) >= role_level('website_admin');
 $roleMap = [
   'super_admin' => 'Super Admin',
   'website_admin' => 'Website Admin',
@@ -64,13 +65,17 @@ if ($currentUser) {
   <div class="nx-admin-nav-label">Content Management</div>
   <a class="nx-admin-nav-link <?= $nav === 'dashboard' ? 'active' : '' ?>" href="<?= $base ?>/">Dashboard</a>
   <a class="nx-admin-nav-link <?= $nav === 'sites' ? 'active' : '' ?>" href="<?= $base ?>/admin/index.php">Sites</a>
-  <a class="nx-admin-nav-link <?= $nav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
+  <?php if ($canManageUsersNav): ?>
+    <a class="nx-admin-nav-link <?= $nav === 'users' ? 'active' : '' ?>" href="<?= $base ?>/admin/users.php">Users</a>
+  <?php endif; ?>
   <a class="nx-admin-nav-link <?= $nav === 'images' ? 'active' : '' ?>" href="<?= $base ?>/admin/images.php">Media</a>
   <a class="nx-admin-nav-link <?= $nav === 'databases' ? 'active' : '' ?>" href="<?= $base ?>/admin/databases.php">Database</a>
 
   <div class="nx-admin-nav-label">Create</div>
   <a class="nx-admin-nav-link <?= $nav === 'site_new' ? 'active' : '' ?>" href="<?= $base ?>/admin/site_new.php">New Site</a>
-  <a class="nx-admin-nav-link <?= $nav === 'user_new' ? 'active' : '' ?>" href="<?= $base ?>/admin/user_new.php">New User</a>
+  <?php if ($canManageUsersNav): ?>
+    <a class="nx-admin-nav-link <?= $nav === 'user_new' ? 'active' : '' ?>" href="<?= $base ?>/admin/user_new.php">New User</a>
+  <?php endif; ?>
 </aside>
 
 <header class="nx-admin-topbar" role="banner">

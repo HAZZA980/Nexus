@@ -48,15 +48,23 @@ function nx_db() {
   throw new Exception('Database connection not found. Ensure bootstrap.php exposes DB::pdo().');
 }
 
-function nx_update_site_json(int $siteId, string $col, array $payload): void {
-  $allowed = ['theme_json','header_json','footer_json'];
-  if (!in_array($col, $allowed, true)) throw new Exception('Invalid settings column');
+function nx_site_json_payload(array $payload): string {
+  return (string)json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+}
 
-  $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+function nx_update_site_theme_json(int $siteId, array $payload): void {
+  $stmt = nx_db()->prepare("UPDATE sites SET theme_json = :json WHERE id = :id LIMIT 1");
+  $stmt->execute([':json' => nx_site_json_payload($payload), ':id' => $siteId]);
+}
 
-  $db = nx_db();
-  $stmt = $db->prepare("UPDATE sites SET {$col} = :json WHERE id = :id LIMIT 1");
-  $stmt->execute([':json' => $json, ':id' => $siteId]);
+function nx_update_site_header_json(int $siteId, array $payload): void {
+  $stmt = nx_db()->prepare("UPDATE sites SET header_json = :json WHERE id = :id LIMIT 1");
+  $stmt->execute([':json' => nx_site_json_payload($payload), ':id' => $siteId]);
+}
+
+function nx_update_site_footer_json(int $siteId, array $payload): void {
+  $stmt = nx_db()->prepare("UPDATE sites SET footer_json = :json WHERE id = :id LIMIT 1");
+  $stmt->execute([':json' => nx_site_json_payload($payload), ':id' => $siteId]);
 }
 
 function nx_safe_rollback($pdo): void {
@@ -971,7 +979,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $newTheme['radius'] = $newTheme['shape']['radius'];
 
-    nx_update_site_json($siteId, 'theme_json', $newTheme);
+    nx_update_site_theme_json($siteId, $newTheme);
     header('Location: site.php?id=' . $siteId . '&saved=theme');
     exit;
   }
@@ -1030,7 +1038,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       ],
     ];
 
-    nx_update_site_json($siteId, 'header_json', $newHeader);
+    nx_update_site_header_json($siteId, $newHeader);
     header('Location: site.php?id=' . $siteId . '&saved=header');
     exit;
   }
@@ -1062,7 +1070,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       ],
     ];
 
-    nx_update_site_json($siteId, 'footer_json', $newFooter);
+    nx_update_site_footer_json($siteId, $newFooter);
     header('Location: site.php?id=' . $siteId . '&saved=footer');
     exit;
   }
