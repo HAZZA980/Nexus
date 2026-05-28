@@ -19,4 +19,9 @@ return [
     'subject_prefix' => '[NexusCMS]',
     'log_file' => __DIR__ . '/../storage/mail.log',
   ],
+  'ai' => [
+    'gemini_api_key' => getenv('GEMINI_API_KEY') ?: '',
+    'gemini_model' => getenv('GEMINI_MODEL') ?: 'gemini-2.5-flash',
+    'gemini_endpoint' => getenv('GEMINI_ENDPOINT') ?: 'https://generativelanguage.googleapis.com/v1beta',
+  ],
 ];

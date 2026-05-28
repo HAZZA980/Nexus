@@ -88,6 +88,7 @@ if ($currentUser) {
       <span aria-hidden="true">🔔</span>
       <?php if ($notificationCount > 0): ?><span class="nx-icon-badge"><?= (int)$notificationCount ?></span><?php endif; ?>
     </a>
+    <?php include __DIR__ . '/assistant_widget.php'; ?>
     <button type="button" class="nx-icon-btn" id="nxThemeToggle" aria-label="Toggle theme" title="Toggle theme">
       <span id="nxThemeToggleIcon" aria-hidden="true">◐</span>
     </button>

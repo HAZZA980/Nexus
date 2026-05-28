@@ -14,6 +14,7 @@ use NexusCMS\Models\User;
 use NexusCMS\Models\SiteForm;
 use NexusCMS\Services\Renderer;
 use NexusCMS\Services\PageFlagNotifier;
+use NexusCMS\Services\AdminChatbot;
 use NexusCMS\Core\Security;
 use NexusCMS\Core\DB;
 use NexusCMS\Models\Analytics;
@@ -1155,6 +1156,28 @@ if ($method === 'GET' && $uri === '/api/citation/examples') {
   }, $rows);
 
   json_response(['ok' => true, 'examples' => $examples]);
+}
+
+// API: Admin assistant chat (Gemini-backed, admin only)
+if ($method === 'POST' && $uri === '/api/admin/chatbot') {
+  require_admin();
+
+  $data = json_decode(file_get_contents('php://input'), true);
+  if (!is_array($data)) json_response(['ok' => false, 'error' => 'Invalid JSON'], 400);
+  if (!Security::checkCsrf($data['_csrf'] ?? null)) json_response(['ok' => false, 'error' => 'CSRF failed'], 403);
+
+  $messages = $data['messages'] ?? [];
+  if (!is_array($messages)) json_response(['ok' => false, 'error' => 'Invalid messages'], 400);
+
+  $actor = [
+    'id' => (int)($_SESSION['user_id'] ?? 0),
+    'role' => (string)($_SESSION['user_role'] ?? ''),
+    'name' => (string)($_SESSION['user_name'] ?? $_SESSION['username'] ?? 'Administrator'),
+    'site_access' => (array)($_SESSION['site_access'] ?? []),
+  ];
+
+  $result = AdminChatbot::reply($messages, $actor);
+  json_response($result, !empty($result['ok']) ? 200 : 502);
 }
 
 // API: Save draft doc

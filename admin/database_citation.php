@@ -49,12 +49,14 @@ $src = $base . '/admin/site.php?id=' . (int)$site['id'] . '&view=citations';
     main{padding:0 18px 24px;}
     .frame{
       width:100%;
-      min-height:calc(100vh - 116px);
+      height:calc(100vh - var(--admin-top-h, 48px) - 24px);
+      height:calc(100dvh - var(--admin-top-h, 48px) - 24px);
+      min-height:0;
       border:0;
       border-radius:0;
       background:transparent;
       display:block;
-      overflow:hidden;
+      overflow:auto;
       position:relative;
       z-index:1;
     }
@@ -64,17 +66,13 @@ $src = $base . '/admin/site.php?id=' . (int)$site['id'] . '&view=citations';
 <body>
   <?php include __DIR__ . '/partials/header.php'; ?>
   <main>
-    <iframe id="citationDbFrame" class="frame" src="<?= htmlspecialchars($src, ENT_QUOTES, 'UTF-8') ?>" title="Citation DB" scrolling="no"></iframe>
+    <iframe id="citationDbFrame" class="frame" src="<?= htmlspecialchars($src, ENT_QUOTES, 'UTF-8') ?>" title="Citation DB"></iframe>
   </main>
   <script>
     (function () {
       var frame = document.getElementById('citationDbFrame');
       if (!frame) return;
       var userMenuDetails = document.querySelector('.user-menu details');
-
-      var observer = null;
-      var raf = null;
-      var drawerOpen = false;
 
       function frameDoc() {
         try {
@@ -99,30 +97,6 @@ $src = $base . '/admin/site.php?id=' . (int)$site['id'] . '&view=citations';
         } catch (e) {}
       }
 
-      function resizeFrame() {
-        var doc = frameDoc();
-        if (!doc) return;
-        var body = doc.body;
-        var html = doc.documentElement;
-        if (!body || !html) return;
-        var height = Math.max(
-          body.scrollHeight, body.offsetHeight, body.clientHeight,
-          html.scrollHeight, html.offsetHeight, html.clientHeight
-        );
-        var activeDrawers = doc.querySelectorAll('.cite-viewer.active');
-        if (activeDrawers.length) {
-          activeDrawers.forEach(function (drawer) {
-            var drawerBottom = drawer.offsetTop + Math.max(
-              drawer.scrollHeight || 0,
-              drawer.offsetHeight || 0,
-              drawer.clientHeight || 0
-            );
-            height = Math.max(height, drawerBottom);
-          });
-        }
-        frame.style.height = height + 'px';
-      }
-
       function syncFrameTheme() {
         var doc = frameDoc();
         if (!doc || !doc.documentElement) return;
@@ -130,111 +104,12 @@ $src = $base . '/admin/site.php?id=' . (int)$site['id'] . '&view=citations';
         doc.documentElement.classList.toggle('theme-light', isLight);
       }
 
-      function syncFrameDrawerPosition() {
-        var doc = frameDoc();
-        if (!doc) return;
-        var drawers = doc.querySelectorAll('.cite-viewer');
-        if (!drawers.length) return;
-        drawers.forEach(function (drawer) {
-          drawer.style.zIndex = '2600';
-          drawer.style.position = 'fixed';
-          drawer.style.top = '0';
-          drawer.style.bottom = '0';
-          drawer.style.height = '100dvh';
-          drawer.style.maxHeight = '100dvh';
-          drawer.style.overflowY = 'hidden';
-          drawer.style.width = '';
-          drawer.style.right = '0';
-          drawer.style.maxWidth = '';
-        });
-      }
-
-      function findScrollableAncestor(startNode, stopNode) {
-        var node = startNode;
-        while (node && node !== stopNode && node.nodeType === 1) {
-          var style = window.getComputedStyle(node);
-          var overflowY = style ? style.overflowY : '';
-          var canScroll = (overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight;
-          if (canScroll) return node;
-          node = node.parentElement;
-        }
-        return stopNode;
-      }
-
-      function installFrameScrollRouting() {
-        var doc = frameDoc();
-        if (!doc || doc.__nexusWheelRoutingBound) return;
-        doc.__nexusWheelRoutingBound = true;
-
-        doc.addEventListener('wheel', function (event) {
-          var target = event.target && event.target.closest ? event.target : null;
-          var activeDrawer = target && target.closest ? target.closest('.cite-viewer.active') : null;
-
-          if (!activeDrawer) {
-            event.preventDefault();
-            window.scrollBy(0, event.deltaY);
-            return;
-          }
-
-          var scroller = findScrollableAncestor(target, activeDrawer);
-          var atTop = scroller.scrollTop <= 0;
-          var atBottom = Math.ceil(scroller.scrollTop + scroller.clientHeight) >= scroller.scrollHeight;
-          var scrollingUp = event.deltaY < 0;
-          var scrollingDown = event.deltaY > 0;
-          var drawerCanConsume = (scrollingUp && !atTop) || (scrollingDown && !atBottom);
-
-          if (!drawerCanConsume) {
-            event.preventDefault();
-            window.scrollBy(0, event.deltaY);
-          }
-        }, { passive: false });
-      }
-
-      function syncParentScrollLock() {
-        var doc = frameDoc();
-        if (!doc) return;
-        var isOpen = !!doc.querySelector('.cite-viewer.active');
-        if (isOpen === drawerOpen) return;
-        drawerOpen = isOpen;
-        document.documentElement.style.overflow = '';
-        document.body.style.overflow = '';
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.left = '';
-        document.body.style.right = '';
-        document.body.style.width = '';
-      }
-
-      function scheduleResize() {
-        if (raf) cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(resizeFrame);
-      }
-
       frame.addEventListener('load', function () {
-        scheduleResize();
         syncFrameTheme();
-        syncFrameDrawerPosition();
-        syncParentScrollLock();
-        installFrameScrollRouting();
         bindIframeMenuClose();
-        var doc = frameDoc();
-        if (!doc) return;
-        if (observer) observer.disconnect();
-        observer = new MutationObserver(function () {
-          scheduleResize();
-          syncFrameDrawerPosition();
-          syncParentScrollLock();
-        });
-        observer.observe(doc.documentElement, { childList: true, subtree: true, attributes: true, characterData: true });
       });
 
-      window.addEventListener('resize', scheduleResize);
-      window.addEventListener('resize', syncFrameDrawerPosition);
-      window.addEventListener('scroll', syncFrameDrawerPosition, { passive: true });
       new MutationObserver(syncFrameTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-      setInterval(syncParentScrollLock, 200);
-      setInterval(syncFrameDrawerPosition, 600);
-      setInterval(scheduleResize, 600);
       bindIframeMenuClose();
     })();
   </script>

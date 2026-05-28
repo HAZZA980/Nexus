@@ -459,6 +459,13 @@ function nx_truncate(string $str, int $limit = 30): string {
   return (strlen($str) > $limit) ? substr($str, 0, $limit) . '…' : $str;
 }
 
+function nx_citation_table_preview(string $str): string {
+  $text = preg_replace('/<\s*br\s*\/?>/i', "\n", $str);
+  $text = preg_replace('/<\/\s*(p|div|li|h[1-6])\s*>/i', "\n", (string)$text);
+  $text = trim(strip_tags((string)$text));
+  return nl2br(Security::e($text !== '' ? $text : '—'));
+}
+
 // Citation key helpers
 function nx_citation_style_code(string $style): string {
   $norm = strtolower(trim($style));
@@ -1669,6 +1676,18 @@ if ($siteSlug === 'cite-them-right') {
     ];
   }
 }
+$citationViewCategories = [];
+$citationViewSubCategories = [];
+foreach ($citationExamplesView as $exRow) {
+  $cat = trim((string)($exRow['category'] ?? ''));
+  $sub = trim((string)($exRow['sub_category'] ?? ''));
+  if ($cat !== '') $citationViewCategories[$cat] = true;
+  if ($sub !== '') $citationViewSubCategories[$sub] = true;
+}
+$citationViewCategories = array_keys($citationViewCategories);
+$citationViewSubCategories = array_keys($citationViewSubCategories);
+sort($citationViewCategories, SORT_NATURAL | SORT_FLAG_CASE);
+sort($citationViewSubCategories, SORT_NATURAL | SORT_FLAG_CASE);
 
 $base = base_path();
 $themeIsLight = ui_theme_is_light();
@@ -2127,12 +2146,211 @@ if (isset($_SESSION['user_id'])) {
   .citation-table{width:100%;border-collapse:collapse;}
   .citation-table th,.citation-table td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;}
   .citation-table th{color:var(--muted);font-size:12px;letter-spacing:0.3px;text-transform:uppercase;}
+  .citation-table-wrap{overflow:auto;width:100%;}
+  .citation-data-table{
+    min-width:980px;
+    font-family:"Inter","SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;
+    font-feature-settings:"tnum" 1,"ss01" 1;
+    letter-spacing:0;
+  }
+  .citation-data-table th,.citation-data-table td{vertical-align:top;}
+  .citation-data-table th{
+    font-size:11px;
+    font-weight:800;
+  }
+  .citation-data-table td{
+    font-size:13px;
+  }
+  .citation-data-text{max-width:360px;max-height:98px;overflow:hidden;line-height:1.45;color:var(--text);}
+  .citation-data-text p{margin:0 0 6px;}
+  .citation-data-text p:last-child{margin-bottom:0;}
+  .citation-data-text ul,.citation-data-text ol{margin:0 0 6px 18px;padding:0;}
+  .citation-data-meta{min-width:130px;}
   .citation-row{cursor:pointer;}
   .citation-row:hover{background:rgba(255,255,255,0.04);}
   .citation-label{font-weight:800;font-size:15px;}
   .citation-style-pill{border-radius:999px;padding:6px 10px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;}
   .badge-chip{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--border);}
   .badge-chip.staged{background:rgba(37,99,235,0.12);color:#bfdbfe;border-color:rgba(59,130,246,0.4);}
+  .citation-toolbar{
+    margin:14px 0 18px;
+    padding:14px;
+    border:1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    border-radius:18px;
+    background:linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, #f8f9fb 6%), color-mix(in srgb, var(--card) 98%, #f8f9fb 2%));
+    box-shadow:0 16px 40px rgba(2,6,23,0.12);
+    display:grid;
+    gap:12px;
+  }
+  html.theme-light .citation-toolbar{
+    background:#f8f9fb;
+    border-color:#e5e7eb;
+    box-shadow:0 14px 34px rgba(15,23,42,0.06);
+  }
+  .citation-toolbar-top{display:flex;gap:12px;align-items:center;justify-content:space-between;}
+  .citation-search-shell{
+    position:relative;
+    flex:1 1 460px;
+    min-width:260px;
+    display:flex;
+    align-items:center;
+  }
+  .citation-search-shell svg{
+    position:absolute;
+    left:14px;
+    width:18px;
+    height:18px;
+    color:var(--muted);
+    pointer-events:none;
+  }
+  .citation-search-shell input{
+    min-height:46px;
+    padding:12px 14px 12px 42px;
+    border-radius:14px;
+    border:1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background:var(--card);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);
+    font-size:14px;
+    font-weight:600;
+  }
+  html.theme-light .citation-search-shell input{
+    background:#fff;
+    border-color:#e5e7eb;
+    box-shadow:0 1px 2px rgba(15,23,42,0.04);
+  }
+  .citation-toolbar-main{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;}
+  .citation-filter-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
+  .citation-group-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-right:2px;}
+  .citation-filter-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    min-height:36px;
+    padding:0 10px;
+    border:1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius:999px;
+    background:color-mix(in srgb, var(--card) 92%, #ffffff 8%);
+    color:var(--text);
+    transition:background .18s ease,border-color .18s ease,box-shadow .18s ease,transform .18s ease;
+  }
+  .citation-filter-chip:hover{border-color:color-mix(in srgb, var(--primary) 42%, var(--border));box-shadow:0 6px 18px rgba(2,6,23,0.08);transform:translateY(-1px);}
+  .citation-filter-chip.active{border-color:color-mix(in srgb, var(--primary) 50%, var(--border));background:color-mix(in srgb, var(--primary) 12%, var(--card));}
+  .citation-filter-chip span{font-size:12px;font-weight:800;color:var(--muted);}
+  .citation-filter-chip select{
+    width:auto;
+    min-width:82px;
+    height:28px;
+    padding:0 20px 0 0;
+    border:0;
+    border-radius:0;
+    background:transparent;
+    color:var(--text);
+    font-size:13px;
+    font-weight:800;
+    outline:0;
+  }
+  .citation-toolbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto;}
+  .citation-column-menu-wrap{position:relative;display:inline-flex;}
+  .citation-ghost-btn{
+    min-height:36px;
+    border-radius:999px;
+    border:1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    background:transparent;
+    color:var(--text);
+    font-size:13px;
+    font-weight:800;
+    padding:0 12px;
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    transition:background .18s ease,border-color .18s ease,color .18s ease;
+  }
+  .citation-ghost-btn:hover{background:color-mix(in srgb, var(--primary) 8%, transparent);border-color:color-mix(in srgb, var(--primary) 34%, var(--border));}
+  .citation-column-menu{
+    position:absolute;
+    right:0;
+    top:calc(100% + 8px);
+    width:260px;
+    padding:10px;
+    border:1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius:16px;
+    background:var(--card);
+    box-shadow:0 18px 42px rgba(2,6,23,0.22);
+    z-index:80;
+    display:none;
+  }
+  .citation-column-menu.open{display:grid;gap:6px;animation:citationToolbarIn .16s ease;}
+  html.theme-light .citation-column-menu{background:#fff;border-color:#e5e7eb;box-shadow:0 18px 42px rgba(15,23,42,0.12);}
+  .citation-column-menu-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:4px 6px 6px;}
+  .citation-column-option{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    min-height:34px;
+    padding:6px 8px;
+    border-radius:10px;
+    color:var(--text);
+    font-size:13px;
+    font-weight:750;
+    cursor:pointer;
+  }
+  .citation-column-option:hover{background:color-mix(in srgb, var(--primary) 8%, transparent);}
+  .citation-column-option input{width:16px;height:16px;margin:0;accent-color:var(--primary);}
+  .citation-filter-count{
+    display:none;
+    min-width:18px;
+    height:18px;
+    padding:0 6px;
+    border-radius:999px;
+    align-items:center;
+    justify-content:center;
+    background:var(--primary);
+    color:#fff;
+    font-size:11px;
+    line-height:18px;
+  }
+  .citation-filter-count.active{display:inline-flex;}
+  .citation-advanced-filters{
+    display:none;
+    gap:12px;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    padding-top:12px;
+    border-top:1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  }
+  .citation-advanced-filters.open{display:flex;animation:citationToolbarIn .18s ease;}
+  .citation-presets{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .citation-preset-label,.citation-recent-filters{font-size:12px;color:var(--muted);font-weight:700;}
+  .citation-preset-btn{
+    min-height:30px;
+    padding:0 10px;
+    border-radius:999px;
+    border:1px solid transparent;
+    background:color-mix(in srgb, var(--primary) 8%, transparent);
+    color:var(--text);
+    font-size:12px;
+    font-weight:800;
+  }
+  .citation-preset-btn:hover{border-color:color-mix(in srgb, var(--primary) 30%, var(--border));background:color-mix(in srgb, var(--primary) 12%, transparent);}
+  .citation-toolbar-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:12px;}
+  .citation-ai-hint{display:inline-flex;align-items:center;gap:8px;font-weight:700;}
+  .citation-ai-dot{width:7px;height:7px;border-radius:999px;background:var(--primary);box-shadow:0 0 0 4px color-mix(in srgb, var(--primary) 12%, transparent);}
+  .citation-view-toggle{display:inline-flex;gap:3px;padding:3px;border:1px solid color-mix(in srgb, var(--border) 70%, transparent);border-radius:14px;background:color-mix(in srgb, var(--card) 86%, #fff 14%);}
+  .citation-view-toggle button{border:0;border-radius:11px;background:transparent;color:var(--muted);font:inherit;font-weight:800;padding:8px 12px;cursor:pointer;transition:background .18s ease,color .18s ease,box-shadow .18s ease;}
+  .citation-view-toggle button:hover{color:var(--text);background:color-mix(in srgb, var(--primary) 8%, transparent);}
+  .citation-view-toggle button.active{background:var(--text);color:var(--bg);box-shadow:0 6px 16px rgba(2,6,23,0.16);}
+  html.theme-light .citation-view-toggle{background:#fff;border-color:#e5e7eb;}
+  html.theme-light .citation-view-toggle button.active{background:#111827;color:#fff;}
+  @keyframes citationToolbarIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}
+  @media(max-width:860px){
+    .citation-toolbar-top{align-items:stretch;flex-direction:column;}
+    .citation-search-shell{flex-basis:auto;min-width:0;}
+    .citation-toolbar-actions{width:100%;margin-left:0;}
+    .citation-ghost-btn{flex:1;}
+  }
+  .citation-no-results{display:none;margin-top:12px;color:var(--muted);}
   .analytics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px;}
   .analytic-card{border:1px solid var(--border);border-radius:4px;padding:12px;background:var(--field-bg);display:flex;flex-direction:column;gap:6px;}
   .analytic-card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.4px;}
@@ -2147,15 +2365,17 @@ if (isset($_SESSION['user_id'])) {
   .chart-line span{flex:1;border-radius:6px;background:linear-gradient(180deg, rgba(37,99,235,.65), rgba(37,99,235,.28));min-height:2px;}
   .trend-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:4px;border:1px solid var(--border);background:var(--field-bg);font-weight:700;font-size:12px;}
   .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:var(--field-bg);font-weight:700;font-size:12px;}
-  .cite-viewer{position:fixed;inset:0 0 0 auto;width:520px;max-width:90vw;height:100dvh;max-height:100dvh;background:linear-gradient(180deg, rgba(17,24,39,0.98), rgba(15,23,42,1));border-left:1px solid rgba(148,163,184,0.18);box-shadow:-18px 0 40px rgba(2,6,23,0.38);transition:transform 0.25s ease;z-index:2600;display:flex;flex-direction:column;transform:translateX(100%);overflow:hidden;}
-  .cite-viewer.active{transform:translateX(0);}
-  .cite-viewer header{padding:18px 18px 14px;border-bottom:1px solid rgba(148,163,184,0.14);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));}
+  .cite-viewer{position:fixed;top:0;right:0;bottom:auto;left:auto;width:520px;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;background:linear-gradient(180deg, rgba(17,24,39,0.98), rgba(15,23,42,1));border-left:1px solid rgba(148,163,184,0.18);box-shadow:-18px 0 40px rgba(2,6,23,0.38);transition:transform 0.25s ease, visibility 0s linear 0.25s;z-index:2600;display:flex;flex-direction:column;transform:translateX(100%);overflow:hidden;visibility:hidden;pointer-events:none;contain:layout paint;}
+  .cite-viewer.active{transform:translateX(0);visibility:visible;pointer-events:auto;transition-delay:0s;}
+  .cite-viewer header{position:sticky;top:0;z-index:2;padding:18px 18px 14px;border-bottom:1px solid rgba(148,163,184,0.14);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));}
   .cite-viewer .actions-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid rgba(148,163,184,0.12);padding:12px 18px;background:rgba(15,23,42,0.72);}
-  .cite-viewer main{padding:14px;overflow:auto;flex:1;display:grid;gap:10px;max-width:100%;margin:0;width:100%;}
+  .cite-viewer main{padding:14px;overflow-y:auto;overflow-x:hidden;flex:0 1 auto;display:grid;gap:10px;max-width:100%;margin:0;width:100%;}
   .cite-viewer .section{margin:0;}
   .cite-viewer footer{padding:12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
   .cite-viewer main.viewer-body{display:flex;flex-direction:column;align-items:stretch;}
-  .cite-viewer .viewer-body{padding:12px 14px 16px;overflow-y:auto;overflow-x:hidden;flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;background:transparent;align-items:stretch;}
+  .cite-viewer .viewer-body{padding:12px 14px 16px;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;background:transparent;align-items:stretch;}
+  .cite-viewer .viewer-body{scrollbar-width:none;-ms-overflow-style:none;}
+  .cite-viewer .viewer-body::-webkit-scrollbar{display:none;width:0;height:0;}
   .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body){gap:8px;}
   .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body){
     justify-content:flex-start;
@@ -2293,9 +2513,16 @@ if (isset($_SESSION['user_id'])) {
   .cite-viewer .viewer-body li{
     color:#dbe4f0;
   }
-  .cite-viewer .edit-body{gap:12px;}
+  .cite-viewer .edit-body{
+    gap:6px;
+    padding:8px 10px 0;
+    align-content:start;
+    grid-auto-rows:max-content;
+    font-family:"Inter","SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;
+    letter-spacing:0;
+  }
   .cite-viewer .revisions-body{gap:10px;align-content:start;}
-  .cite-viewer.edit-mode{background:var(--panel);}
+  .cite-viewer.edit-mode,
   .cite-viewer.revisions-mode{background:var(--panel);}
   #revTimelineSelect{
     width:100%;
@@ -2419,26 +2646,67 @@ if (isset($_SESSION['user_id'])) {
   html.theme-light .rev-after-added{background:rgba(37,99,235,0.12);}
   .cite-readonly-badge{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:999px;border:1px solid rgba(148,163,184,0.16);background:rgba(255,255,255,0.04);font-weight:700;font-size:12px;backdrop-filter:blur(8px);}
   .citation-edit-field input,
+  .citation-edit-field select,
   .citation-edit-field textarea{
     background:var(--card);
     border:1px solid var(--border);
     color:inherit;
-    font:inherit;
-    padding:10px;
-    border-radius:10px;
-    line-height:1.6;
+    font-family:"Inter","SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;
+    font-size:13px;
+    font-weight:500;
+    padding:8px 10px;
+    border-radius:9px;
+    line-height:1.45;
     box-shadow:0 1px 0 rgba(0,0,0,0.04);
     height:auto;
-    min-height:44px;
+    min-height:38px;
   }
   .citation-edit-field input:focus,
+  .citation-edit-field select:focus,
   .citation-edit-field textarea:focus{border-color:var(--primary);}
+  .cite-viewer .edit-body .citation-field{
+    margin:0;
+    padding:6px 8px;
+    border:1px solid rgba(148,163,184,0.14);
+    border-radius:10px;
+    background:rgba(255,255,255,0.025);
+  }
+  .cite-viewer.edit-mode .edit-body{
+    flex:1;
+    max-height:none;
+  }
   .citation-edit-field textarea{
-    min-height:0;
+    min-height:38px;
     resize:none;
     overflow:hidden;
   }
-  .citation-edit-field strong{display:block;margin-bottom:6px;}
+  .citation-edit-field strong{
+    display:block;
+    margin:0 0 5px;
+    font-family:"Inter","SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;
+    font-size:11px;
+    line-height:1.1;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+  }
+  .cite-viewer .edit-body .rich-editor{
+    min-height:72px;
+    margin:0;
+    padding:8px 10px;
+    border-radius:9px;
+    font-family:"Inter","SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;
+    font-size:13px;
+    line-height:1.45;
+  }
+  .cite-viewer .edit-body .mini-toolbar{
+    margin:4px 0;
+  }
+  .cite-viewer .edit-body .mini-toolbar button{
+    min-height:26px;
+    padding:3px 8px;
+    border-radius:7px;
+    font-size:11px;
+  }
   .citation-subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;}
   .citation-subtab{padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text);cursor:pointer;font-weight:700;min-height:36px;}
   .citation-subtab.active{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border-color:transparent;}
@@ -2460,6 +2728,111 @@ if (isset($_SESSION['user_id'])) {
   .view-meta-item{min-width:0;}
   .view-meta-item strong{display:block;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);}
   .view-meta-item .meta-value{margin-top:3px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.05;font-size:13px;color:var(--text);}
+  html.theme-light .cite-viewer{
+    background:linear-gradient(180deg,#ffffff,#f8fafc);
+    border-left:1px solid #dbe3ee;
+    box-shadow:-18px 0 42px rgba(15,23,42,0.14);
+    color:#0f172a;
+  }
+  html.theme-light .cite-viewer.edit-mode,
+  html.theme-light .cite-viewer.revisions-mode{
+    background:#ffffff;
+  }
+  html.theme-light .cite-viewer header{
+    background:linear-gradient(180deg,#ffffff,#f8fafc);
+    border-bottom:1px solid #e2e8f0;
+  }
+  html.theme-light .cite-viewer .actions-bar{
+    background:#f8fafc;
+    border-bottom:1px solid #e2e8f0;
+  }
+  html.theme-light .cite-viewer .viewer-body{
+    background:transparent;
+  }
+  html.theme-light .cite-viewer,
+  html.theme-light .cite-viewer header,
+  html.theme-light .cite-viewer main,
+  html.theme-light .cite-viewer footer,
+  html.theme-light .cite-viewer .section,
+  html.theme-light .cite-viewer .citation-field,
+  html.theme-light .cite-viewer .citation-field strong,
+  html.theme-light .cite-viewer .collection-name,
+  html.theme-light .cite-viewer .meta-value,
+  html.theme-light .cite-viewer .viewer-body,
+  html.theme-light .cite-viewer .viewer-body p,
+  html.theme-light .cite-viewer .viewer-body div,
+  html.theme-light .cite-viewer .viewer-body span,
+  html.theme-light .cite-viewer .viewer-body li,
+  html.theme-light .cite-viewer .viewer-body ul,
+  html.theme-light .cite-viewer .viewer-body ol,
+  html.theme-light .cite-viewer .viewer-body a,
+  html.theme-light .cite-viewer .viewer-body em,
+  html.theme-light .cite-viewer .viewer-body i,
+  html.theme-light .cite-viewer .viewer-body b,
+  html.theme-light .cite-viewer .viewer-body strong{
+    color:#0f172a;
+  }
+  html.theme-light .cite-viewer .muted,
+  html.theme-light .cite-viewer #viewSubtitle,
+  html.theme-light .cite-viewer #citationRevisionsHint{
+    color:#64748b;
+  }
+  html.theme-light .cite-viewer #viewOrder,
+  html.theme-light .cite-viewer #viewExampleBody,
+  html.theme-light .cite-viewer #viewYouTry,
+  html.theme-light .cite-viewer #viewNotes,
+  html.theme-light .cite-viewer .viewer-body li{
+    color:#1e293b;
+  }
+  html.theme-light .cite-viewer .viewer-body:not(.edit-body):not(.revisions-body) .citation-field,
+  html.theme-light .cite-viewer .callout{
+    background:#ffffff;
+    border-color:#e2e8f0;
+    box-shadow:0 1px 2px rgba(15,23,42,0.04);
+  }
+  html.theme-light .cite-viewer .edit-body .citation-field{
+    background:#ffffff;
+    border-color:#e2e8f0;
+    box-shadow:0 1px 2px rgba(15,23,42,0.04);
+  }
+  html.theme-light .citation-edit-field input,
+  html.theme-light .citation-edit-field select,
+  html.theme-light .citation-edit-field textarea,
+  html.theme-light .cite-viewer .edit-body .rich-editor{
+    background:#ffffff;
+    border-color:#dbe3ee;
+    color:#0f172a;
+  }
+  html.theme-light .view-meta-grid{
+    background:linear-gradient(180deg,#ffffff,#f8fafc);
+    border-color:#e2e8f0;
+    box-shadow:0 1px 2px rgba(15,23,42,0.04);
+  }
+  html.theme-light .cite-readonly-badge{
+    background:#f1f5f9;
+    border-color:#dbe3ee;
+    color:#334155;
+  }
+  html.theme-light .cite-viewer .close-btn{
+    background:#ffffff;
+    border:1px solid #dbe3ee;
+    color:#0f172a;
+    box-shadow:0 1px 2px rgba(15,23,42,0.08);
+  }
+  html.theme-light .cite-viewer .btn:not(.primary):not(.danger){
+    background:#ffffff;
+    border-color:#dbe3ee;
+    color:#0f172a;
+  }
+  html.theme-light .cite-viewer .btn:not(.primary):not(.danger):hover{
+    background:#f8fafc;
+    border-color:#bfccda;
+  }
+  html.theme-light #revTimelineSelect{
+    background:#ffffff;
+    color:#0f172a;
+    border-color:#dbe3ee;
+  }
   @media(max-width:720px){.view-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
   </style>
   <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css?v=20260322">
@@ -3433,24 +3806,108 @@ if (isset($_SESSION['user_id'])) {
             </div>
           </div>
 
-          <div class="citation-searchbar" style="margin:12px 0 16px; display:flex; gap:12px; flex-wrap:wrap;">
-            <div style="flex:1; min-width:240px;">
-              <label for="revSearch" class="muted" style="display:block;margin-bottom:6px;">Search</label>
-              <input id="revSearch" type="search" placeholder="Search by citation title or key" style="width:100%;">
+          <div class="citation-toolbar" aria-label="Citation database controls">
+            <div class="citation-toolbar-top">
+              <div class="citation-search-shell">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M9 15.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Zm4.6-1.9 3.4 3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+                <input id="revSearch" type="search" placeholder="Search citations, authors, ISBNs, or keywords" aria-label="Search citations" style="width:100%;">
+              </div>
+              <div class="citation-view-toggle" role="group" aria-label="Citation view">
+                <button type="button" class="active" data-citation-view-button="summary">Summary</button>
+                <button type="button" data-citation-view-button="data">Data table</button>
+              </div>
             </div>
-            <div style="min-width:180px;">
-              <label for="globalStyleFilter" class="muted" style="display:block;margin-bottom:6px;">Referencing style</label>
-              <select id="globalStyleFilter" style="width:100%;">
-                <option value="">All styles</option>
-                <?php foreach ($citationStyles as $style): ?>
-                  <option value="<?= Security::e($style) ?>"><?= Security::e($style) ?></option>
-                <?php endforeach; ?>
-              </select>
+            <div class="citation-toolbar-main">
+              <div class="citation-filter-group" aria-label="Quick filters">
+                <span class="citation-group-label">Quick filters</span>
+                <label class="citation-filter-chip" for="globalStyleFilter">
+                  <span>Style</span>
+                  <select id="globalStyleFilter">
+                    <option value="">All styles</option>
+                    <?php foreach ($citationStyles as $style): ?>
+                      <option value="<?= Security::e($style) ?>"><?= Security::e($style) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </label>
+                <label class="citation-filter-chip" for="citationCategoryFilter">
+                  <span>Category</span>
+                  <select id="citationCategoryFilter">
+                    <option value="">All categories</option>
+                    <?php foreach ($citationViewCategories as $cat): ?>
+                      <option value="<?= Security::e($cat) ?>"><?= Security::e($cat) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </label>
+                <label class="citation-filter-chip" for="citationStatusFilter">
+                  <span>Status</span>
+                  <select id="citationStatusFilter">
+                    <option value="">Any status</option>
+                    <option value="clean">Clean</option>
+                    <option value="staged">Queued</option>
+                    <option value="edited">Edited</option>
+                  </select>
+                </label>
+              </div>
+              <div class="citation-toolbar-actions">
+                <div class="citation-column-menu-wrap">
+                  <button class="citation-ghost-btn" type="button" id="citationColumnsBtn" aria-expanded="false" aria-controls="citationColumnMenu">Columns</button>
+                  <div class="citation-column-menu" id="citationColumnMenu" role="menu" aria-label="Visible data table columns">
+                    <div class="citation-column-menu-title">Data table columns</div>
+                    <label class="citation-column-option"><span>Example header</span><input type="checkbox" data-column-toggle="example_header" checked></label>
+                    <label class="citation-column-option"><span>Example body</span><input type="checkbox" data-column-toggle="example_body" checked></label>
+                    <label class="citation-column-option"><span>You try</span><input type="checkbox" data-column-toggle="you_try" checked></label>
+                    <label class="citation-column-option"><span>Category</span><input type="checkbox" data-column-toggle="category" checked></label>
+                    <label class="citation-column-option"><span>Sub-category</span><input type="checkbox" data-column-toggle="sub_category" checked></label>
+                    <label class="citation-column-option"><span>Reference type</span><input type="checkbox" data-column-toggle="label"></label>
+                    <label class="citation-column-option"><span>Style</span><input type="checkbox" data-column-toggle="style"></label>
+                    <label class="citation-column-option"><span>Key</span><input type="checkbox" data-column-toggle="key"></label>
+                    <label class="citation-column-option"><span>Status</span><input type="checkbox" data-column-toggle="status"></label>
+                  </div>
+                </div>
+                <button class="citation-ghost-btn" type="button" id="citationMoreFilters" aria-expanded="false" aria-controls="citationAdvancedFilters">More filters <span class="citation-filter-count" id="citationFilterCount">0</span></button>
+                <button class="citation-ghost-btn" type="button" id="citationClearFilters">Clear</button>
+              </div>
+            </div>
+            <div class="citation-advanced-filters" id="citationAdvancedFilters">
+              <div class="citation-filter-group" aria-label="Advanced filters">
+                <span class="citation-group-label">Advanced</span>
+                <label class="citation-filter-chip" for="citationSubCategoryFilter">
+                  <span>Sub-category</span>
+                  <select id="citationSubCategoryFilter">
+                    <option value="">All sub-categories</option>
+                    <?php foreach ($citationViewSubCategories as $subCat): ?>
+                      <option value="<?= Security::e($subCat) ?>"><?= Security::e($subCat) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </label>
+                <label class="citation-filter-chip" for="citationSortSelect">
+                  <span>Sort</span>
+                  <select id="citationSortSelect">
+                    <option value="label-asc">Reference type A-Z</option>
+                    <option value="label-desc">Reference type Z-A</option>
+                    <option value="style-asc">Style A-Z</option>
+                    <option value="category-asc">Category A-Z</option>
+                    <option value="sub_category-asc">Sub-category A-Z</option>
+                  </select>
+                </label>
+              </div>
+              <div class="citation-presets" aria-label="Saved filter presets">
+                <span class="citation-preset-label">Saved presets</span>
+                <button class="citation-preset-btn" type="button" data-citation-preset data-style="Harvard">Harvard</button>
+                <button class="citation-preset-btn" type="button" data-citation-preset data-category="Books">Books</button>
+                <button class="citation-preset-btn" type="button" data-citation-preset data-status="staged">Queued changes</button>
+              </div>
+            </div>
+            <div class="citation-toolbar-footer">
+              <span class="citation-ai-hint"><span class="citation-ai-dot"></span> Try natural language search, e.g. journal article with DOI.</span>
+              <span class="citation-recent-filters" id="citationRecentFilters">Recent filters: none</span>
             </div>
           </div>
 
           <?php if ($citationExamples): ?>
-            <div class="citations-list" id="citationList">
+            <div class="citations-list" id="citationList" data-citation-view="summary">
               <table class="citation-table">
                 <thead>
                   <tr>
@@ -3520,6 +3977,65 @@ if (isset($_SESSION['user_id'])) {
                 </tbody>
               </table>
             </div>
+            <div class="citations-list" id="citationDataList" data-citation-view="data" style="display:none;">
+              <div class="citation-table-wrap">
+                <table class="citation-table citation-data-table" aria-label="Citation data table">
+                  <thead>
+                    <tr>
+                      <th data-column="example_header">Example header</th>
+                      <th data-column="example_body">Example body</th>
+                      <th data-column="you_try">You try</th>
+                      <th data-column="category">Category</th>
+                      <th data-column="sub_category">Sub-category</th>
+                      <th data-column="label" hidden>Reference type</th>
+                      <th data-column="style" hidden>Style</th>
+                      <th data-column="key" hidden>Key</th>
+                      <th data-column="status" hidden>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach ($citationExamplesView as $ex):
+                      $key = $ex['example_key'] ?? '';
+                      $keyDisplay = nx_truncate($key, 30);
+                      $staged = isset($stagedKeys[$key]);
+                      $hasRevision = isset($latestByKey[$key]);
+                      $statusLabel = 'Clean';
+                      $statusTone = 'muted';
+                      if ($staged) { $statusLabel = 'Queued'; $statusTone = 'badge-chip staged'; }
+                      elseif ($hasRevision) { $statusLabel = 'Edited (other release)'; $statusTone = 'badge-chip'; }
+                      $statusValue = $staged ? 'staged' : ($hasRevision ? 'edited' : 'clean');
+                    ?>
+                      <tr
+                        class="citation-row"
+                        data-style="<?= Security::e($ex['referencing_style'] ?? '') ?>"
+                        data-status="<?= Security::e($statusValue) ?>"
+                        data-category="<?= Security::e($ex['category'] ?? '') ?>"
+                        data-sub-category="<?= Security::e($ex['sub_category'] ?? '') ?>"
+                        data-key="<?= Security::e($ex['example_key'] ?? '') ?>"
+                        data-label="<?= Security::e($ex['label'] ?? '') ?>"
+                        data-order="<?= Security::e($ex['citation_order'] ?? '') ?>"
+                        data-heading="<?= Security::e($ex['example_heading'] ?? '') ?>"
+                        data-body="<?= Security::e($ex['example_body'] ?? '') ?>"
+                        data-youtry="<?= Security::e($ex['you_try'] ?? '') ?>"
+                        data-notes="<?= Security::e($ex['notes'] ?? '') ?>"
+                        data-id="<?= (int)($ex['id'] ?? 0) ?>"
+                      >
+                        <td data-column="example_header"><div class="citation-data-text"><?= nx_citation_table_preview((string)($ex['example_heading'] ?? '')) ?></div></td>
+                        <td data-column="example_body"><div class="citation-data-text"><?= nx_citation_table_preview((string)($ex['example_body'] ?? '')) ?></div></td>
+                        <td data-column="you_try"><div class="citation-data-text"><?= nx_citation_table_preview((string)($ex['you_try'] ?? '')) ?></div></td>
+                        <td data-column="category" class="muted citation-data-meta"><?= Security::e($ex['category'] ?? '') ?></td>
+                        <td data-column="sub_category" class="muted citation-data-meta"><?= Security::e($ex['sub_category'] ?? '—') ?></td>
+                        <td data-column="label" hidden><div class="citation-label"><?= Security::e($ex['label'] ?? '') ?></div></td>
+                        <td data-column="style" hidden><span class="citation-style-pill"><?= Security::e($ex['referencing_style'] ?? '') ?></span></td>
+                        <td data-column="key" hidden class="muted collection-slug" title="<?= Security::e($key) ?>"><?= Security::e($keyDisplay) ?></td>
+                        <td data-column="status" hidden><span class="<?= $statusTone ?>"><?= Security::e($statusLabel) ?></span></td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="citation-no-results" id="citationNoResults">No citations match the selected filters.</div>
             <?php if (!$citationsOnly): ?>
             <div class="section citation-panel" style="margin-top:14px" data-subtab-panel="revisions">
               <h3>Revisions (latest 100)</h3>
@@ -4044,6 +4560,8 @@ if (isset($_SESSION['user_id'])) {
     <div class="actions-bar" id="viewActions">
       <button class="btn primary" type="button" id="viewerEdit">Edit citation</button>
       <button class="btn" type="button" id="viewerRevisions">View revisions</button>
+      <button class="btn" type="button" id="editCancel" style="display:none;">Cancel</button>
+      <button class="btn primary" type="submit" form="editBody" id="editSaveBtn" style="display:none;">Save changes</button>
     </div>
     <main id="viewBody" class="viewer-body">
       <div class="view-meta-grid">
@@ -4118,7 +4636,7 @@ if (isset($_SESSION['user_id'])) {
       <div class="citation-field citation-edit-field">
         <strong>Example heading</strong>
         <input name="citation_heading" id="editHeadingField" required>
-        <strong style="margin-top:12px;display:block;">Example body</strong>
+        <strong style="margin-top:8px;display:block;">Example body</strong>
         <textarea name="citation_body" id="editBodyField" rows="4" required></textarea>
       </div>
       <div class="citation-field citation-edit-field">
@@ -4130,10 +4648,6 @@ if (isset($_SESSION['user_id'])) {
         <textarea name="citation_notes" id="editNotesField" rows="3"></textarea>
       </div>
     </form>
-    <footer id="editFooter" style="display:none;">
-      <button class="btn" type="button" id="editCancel">Cancel</button>
-      <button class="btn primary" type="submit" form="editBody">Save changes</button>
-    </footer>
     <footer id="revisionsFooter" style="display:none;">
       <button class="btn" type="button" id="revisionsBackBtn">Back to citation</button>
     </footer>
@@ -4194,47 +4708,6 @@ if (isset($_SESSION['user_id'])) {
     (function(){
     })();
     const basePath = <?= json_encode($base) ?>;
-    let adminScrollLockY = 0;
-    let adminScrollLocked = false;
-    const updateDrawerScrollLock = () => {
-      const shouldLock = [
-        document.getElementById('citationViewer')?.classList.contains('active'),
-        document.getElementById('revisionViewer')?.classList.contains('active'),
-        (() => {
-          const el = document.getElementById('citationModalBackdrop');
-          return !!el && el.style.display !== 'none';
-        })(),
-        (() => {
-          const el = document.getElementById('exportBundleBackdrop');
-          return !!el && el.style.display !== 'none';
-        })(),
-      ].some(Boolean);
-      if (shouldLock) {
-        if (!adminScrollLocked) {
-          adminScrollLockY = window.scrollY || window.pageYOffset || 0;
-        }
-        document.documentElement.style.overflow = 'hidden';
-        document.body.style.overflow = 'hidden';
-        document.body.style.position = 'fixed';
-        document.body.style.top = `-${adminScrollLockY}px`;
-        document.body.style.left = '0';
-        document.body.style.right = '0';
-        document.body.style.width = '100%';
-        adminScrollLocked = true;
-        return;
-      }
-      document.documentElement.style.overflow = '';
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.left = '';
-      document.body.style.right = '';
-      document.body.style.width = '';
-      if (adminScrollLocked) {
-        window.scrollTo(0, adminScrollLockY);
-      }
-      adminScrollLocked = false;
-    };
     
     // tabs with hash support
     const tabs = Array.from(document.querySelectorAll('.tab'));
@@ -5262,34 +5735,15 @@ if (isset($_SESSION['user_id'])) {
     const showCitationModal = () => {
       if (!citationBackdrop) return;
       citationBackdrop.style.display = 'flex';
-      citationModalBody?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-      updateDrawerScrollLock();
     };
     const hideCitationModal = () => {
       if (!citationBackdrop) return;
       citationBackdrop.style.display = 'none';
-      updateDrawerScrollLock();
     };
     openCitationModal?.addEventListener('click', () => { resetCitationForm(); showCitationModal(); });
     closeCitationModal?.addEventListener('click', hideCitationModal);
     cancelCitationModal?.addEventListener('click', hideCitationModal);
     citationBackdrop?.addEventListener('click', (e) => { if (e.target === citationBackdrop) hideCitationModal(); });
-    citationBackdrop?.addEventListener('wheel', (e) => {
-      if (!citationBackdrop || citationBackdrop.style.display === 'none' || !citationModalBody) return;
-      const activeEditor = e.target.closest('.rich-editor');
-      if (activeEditor) return;
-      const maxScrollTop = Math.max(0, citationModalBody.scrollHeight - citationModalBody.clientHeight);
-      if (maxScrollTop <= 0) {
-        e.preventDefault();
-        return;
-      }
-      const nextScrollTop = Math.max(0, Math.min(maxScrollTop, citationModalBody.scrollTop + e.deltaY));
-      if (nextScrollTop !== citationModalBody.scrollTop || e.target === citationBackdrop || !e.target.closest('.modal-body')) {
-        citationModalBody.scrollTop = nextScrollTop;
-        e.preventDefault();
-      }
-    }, { passive: false });
-
     // Export bundle modal
     const exportBundleBackdrop = document.getElementById('exportBundleBackdrop');
     const openExportBundleModal = document.getElementById('openExportBundleModal');
@@ -5298,12 +5752,10 @@ if (isset($_SESSION['user_id'])) {
     const showExportBundle = () => {
       if (!exportBundleBackdrop) return;
       exportBundleBackdrop.style.display = 'flex';
-      updateDrawerScrollLock();
     };
     const hideExportBundle = () => {
       if (!exportBundleBackdrop) return;
       exportBundleBackdrop.style.display = 'none';
-      updateDrawerScrollLock();
     };
     openExportBundleModal?.addEventListener('click', showExportBundle);
     closeExportBundleModal?.addEventListener('click', hideExportBundle);
@@ -5382,9 +5834,10 @@ if (isset($_SESSION['user_id'])) {
       const viewBody = document.getElementById('viewBody');
       const revisionsBody = document.getElementById('revisionsBody');
       const editBody = document.getElementById('editBody');
-      const editFooter = document.getElementById('editFooter');
       const revisionsFooter = document.getElementById('revisionsFooter');
       const revisionsBackBtn = document.getElementById('revisionsBackBtn');
+      const editCancelBtn = document.getElementById('editCancel');
+      const editSaveBtn = document.getElementById('editSaveBtn');
       const citationRevisionsList = document.getElementById('citationRevisionsList');
       const editIdField = document.getElementById('editIdField');
       const editStyleField = document.getElementById('editStyleField');
@@ -5410,6 +5863,50 @@ if (isset($_SESSION['user_id'])) {
       let viewerEditId = null;
       let editDirty = false;
       let currentCitation = null;
+      const activeScrollBody = () => {
+        if (viewerMode === 'edit') return editBody;
+        if (viewerMode === 'revisions') return revisionsBody;
+        return viewBody;
+      };
+      const keepDrawerScrollPinned = (drawer, getBody) => {
+        if (!drawer || drawer.dataset.scrollPinned === '1') return;
+        drawer.dataset.scrollPinned = '1';
+        let lastTouchY = 0;
+        const maxScroll = (el) => Math.max(0, el.scrollHeight - el.clientHeight);
+        const atTop = (el) => el.scrollTop <= 0;
+        const atBottom = (el) => el.scrollTop >= maxScroll(el) - 1;
+        const scrollInside = (event, deltaY) => {
+          if (!drawer.classList.contains('active')) return;
+          const body = getBody();
+          if (!body) return;
+          const max = maxScroll(body);
+          if (max <= 0) {
+            event.preventDefault();
+            return;
+          }
+          const next = Math.max(0, Math.min(max, body.scrollTop + deltaY));
+          body.scrollTop = next;
+          event.preventDefault();
+        };
+
+        drawer.addEventListener('wheel', (event) => {
+          scrollInside(event, event.deltaY);
+        }, { passive: false });
+
+        drawer.addEventListener('touchstart', (event) => {
+          if (event.touches.length !== 1) return;
+          lastTouchY = event.touches[0].clientY;
+        }, { passive: true });
+
+        drawer.addEventListener('touchmove', (event) => {
+          if (event.touches.length !== 1) return;
+          const y = event.touches[0].clientY;
+          const deltaY = lastTouchY - y;
+          lastTouchY = y;
+          if (Math.abs(deltaY) < 1) return;
+          scrollInside(event, deltaY);
+        }, { passive: false });
+      };
       const revSeedEl = document.getElementById('revisionViewerSeed');
       const liveSeedEl = document.getElementById('liveCitationSeed');
       let revisionSeed = [];
@@ -5423,19 +5920,16 @@ if (isset($_SESSION['user_id'])) {
         if (viewBody) viewBody.style.display = mode === 'view' ? 'grid' : 'none';
         if (editBody) editBody.style.display = mode === 'edit' ? 'grid' : 'none';
         if (revisionsBody) revisionsBody.style.display = mode === 'revisions' ? 'grid' : 'none';
-        if (editFooter) editFooter.style.display = mode === 'edit' ? 'flex' : 'none';
         if (revisionsFooter) revisionsFooter.style.display = mode === 'revisions' ? 'flex' : 'none';
+        if (viewerEdit) viewerEdit.style.display = mode === 'view' ? '' : 'none';
+        if (viewerRevisions) viewerRevisions.style.display = mode === 'view' ? '' : 'none';
+        if (editCancelBtn) editCancelBtn.style.display = mode === 'edit' ? '' : 'none';
+        if (editSaveBtn) editSaveBtn.style.display = mode === 'edit' ? '' : 'none';
         if (mode === 'edit') {
-          viewer.scrollTop = 0;
           requestAnimationFrame(autoGrowAll);
         } else if (mode === 'view') {
           editDirty = false;
         } else if (mode === 'revisions') {
-          viewer.scrollTop = 0;
-          if (revisionsBody) revisionsBody.scrollTop = 0;
-          requestAnimationFrame(() => {
-            if (revisionsBody) revisionsBody.scrollTop = 0;
-          });
         }
       };
 
@@ -5621,7 +6115,6 @@ if (isset($_SESSION['user_id'])) {
         renderCitationRevisions(citation);
         setMode('revisions');
         viewer.classList.add('active');
-        updateDrawerScrollLock();
         return true;
       };
       const openCitationRevisionsByRevisionId = (revisionId) => {
@@ -5675,7 +6168,6 @@ if (isset($_SESSION['user_id'])) {
         applyEditFields(data);
         setMode('view');
         viewer.classList.add('active');
-        updateDrawerScrollLock();
       };
 
       window.NexusCitationViewer = {
@@ -5689,7 +6181,9 @@ if (isset($_SESSION['user_id'])) {
         },
         openRevisionsForCitation: (citation) => openCitationRevisions(citation),
         openRevisionsForRevisionId: (revisionId) => openCitationRevisionsByRevisionId(revisionId),
+        keepDrawerScrollPinned,
       };
+      keepDrawerScrollPinned(viewer, activeScrollBody);
 
       document.querySelectorAll('.citation-row').forEach(row => {
         row.addEventListener('click', (e) => {
@@ -5715,7 +6209,6 @@ if (isset($_SESSION['user_id'])) {
         if (viewerMode === 'edit' && editDirty && !confirm('Discard unsaved changes?')) return;
         viewer.classList.remove('active');
         setMode('view');
-        updateDrawerScrollLock();
       });
 
       document.addEventListener('click', (e) => {
@@ -5727,7 +6220,6 @@ if (isset($_SESSION['user_id'])) {
           if (viewerMode === 'edit' && editDirty && !confirm('Discard unsaved changes?')) return;
           viewer.classList.remove('active');
           setMode('view');
-          updateDrawerScrollLock();
         }
       });
 
@@ -5857,30 +6349,172 @@ if (isset($_SESSION['user_id'])) {
       });
       applyFilters();
 
-      // Entries filtering via the shared search/style/status
+      // Entries filtering via the shared search/style/status controls
       const entries = Array.from(document.querySelectorAll('.citation-row'));
       const globalStyle = document.getElementById('globalStyleFilter');
       const statusSelect = document.getElementById('citationStatusFilter');
+      const categorySelect = document.getElementById('citationCategoryFilter');
+      const subCategorySelect = document.getElementById('citationSubCategoryFilter');
+      const sortSelect = document.getElementById('citationSortSelect');
+      const viewButtons = Array.from(document.querySelectorAll('[data-citation-view-button]'));
+      const viewPanels = Array.from(document.querySelectorAll('[data-citation-view]'));
+      const citationNoResults = document.getElementById('citationNoResults');
+      const moreFiltersBtn = document.getElementById('citationMoreFilters');
+      const advancedFilters = document.getElementById('citationAdvancedFilters');
+      const clearFiltersBtn = document.getElementById('citationClearFilters');
+      const filterCount = document.getElementById('citationFilterCount');
+      const recentFilters = document.getElementById('citationRecentFilters');
+      const presetButtons = Array.from(document.querySelectorAll('[data-citation-preset]'));
+      const columnsBtn = document.getElementById('citationColumnsBtn');
+      const columnsMenu = document.getElementById('citationColumnMenu');
+      const columnToggles = Array.from(document.querySelectorAll('[data-column-toggle]'));
+      let citationView = 'summary';
+
+      const activeViewRows = () => entries.filter(row => row.closest('[data-citation-view]')?.dataset.citationView === citationView);
+      const setChipState = (select) => {
+        const chip = select?.closest?.('.citation-filter-chip');
+        if (chip) chip.classList.toggle('active', !!select.value);
+      };
+      const filterSelects = [globalStyle, statusSelect, categorySelect, subCategorySelect].filter(Boolean);
+      const activeFilterLabels = () => {
+        const labels = [];
+        if (globalStyle?.value) labels.push(globalStyle.value);
+        if (categorySelect?.value) labels.push(categorySelect.value);
+        if (subCategorySelect?.value) labels.push(subCategorySelect.value);
+        if (statusSelect?.value) labels.push(statusSelect.options[statusSelect.selectedIndex]?.text || statusSelect.value);
+        return labels;
+      };
+      const updateFilterMeta = () => {
+        const labels = activeFilterLabels();
+        if (filterCount) {
+          filterCount.textContent = String(labels.length);
+          filterCount.classList.toggle('active', labels.length > 0);
+        }
+        if (recentFilters) {
+          recentFilters.textContent = labels.length ? 'Recent filters: ' + labels.slice(0, 3).join(', ') : 'Recent filters: none';
+        }
+        filterSelects.forEach(setChipState);
+      };
+      const setCitationView = (view) => {
+        citationView = view || 'summary';
+        viewButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.citationViewButton === citationView));
+        viewPanels.forEach(panel => {
+          panel.style.display = panel.dataset.citationView === citationView ? '' : 'none';
+        });
+        entryFilter();
+      };
+      const compareText = (a, b, dir) => {
+        const result = String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base', numeric: true });
+        return dir === 'desc' ? -result : result;
+      };
+      const sortEntries = () => {
+        const raw = sortSelect?.value || 'label-asc';
+        const lastDash = raw.lastIndexOf('-');
+        const key = lastDash > 0 ? raw.slice(0, lastDash) : raw;
+        const dir = lastDash > 0 ? raw.slice(lastDash + 1) : 'asc';
+        viewPanels.forEach(panel => {
+          const tbody = panel.querySelector('tbody');
+          if (!tbody) return;
+          const rows = Array.from(tbody.querySelectorAll('.citation-row'));
+          rows.sort((a, b) => {
+            if (key === 'style') return compareText(a.dataset.style, b.dataset.style, dir) || compareText(a.dataset.label, b.dataset.label, 'asc');
+            if (key === 'category') return compareText(a.dataset.category, b.dataset.category, dir) || compareText(a.dataset.label, b.dataset.label, 'asc');
+            if (key === 'sub_category') return compareText(a.dataset.subCategory, b.dataset.subCategory, dir) || compareText(a.dataset.label, b.dataset.label, 'asc');
+            return compareText(a.dataset.label, b.dataset.label, dir);
+          });
+          rows.forEach(row => tbody.appendChild(row));
+        });
+      };
+      const setColumnMenuOpen = (open) => {
+        columnsMenu?.classList.toggle('open', open);
+        columnsBtn?.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      const applyColumnVisibility = () => {
+        columnToggles.forEach(toggle => {
+          const column = toggle.dataset.columnToggle || '';
+          document.querySelectorAll(`#citationDataList [data-column="${column}"]`).forEach(cell => {
+            cell.hidden = !toggle.checked;
+          });
+        });
+      };
       const entryFilter = () => {
         const q = (search?.value || '').toLowerCase();
         const styleSel = globalStyle?.value || '';
         const statusSel = statusSelect?.value || '';
+        const categorySel = categorySelect?.value || '';
+        const subCategorySel = subCategorySelect?.value || '';
+        let activeVisible = 0;
         entries.forEach(row => {
-          const label = (row.querySelector('.citation-label')?.textContent || '').toLowerCase();
-          const key = (row.querySelector('.collection-slug')?.textContent || '').toLowerCase();
+          const label = (row.dataset.label || '').toLowerCase();
+          const key = (row.dataset.key || '').toLowerCase();
+          const heading = (row.dataset.heading || '').toLowerCase();
+          const body = (row.dataset.body || '').toLowerCase();
+          const youtry = (row.dataset.youtry || '').toLowerCase();
           const style = row.dataset.style || '';
           const status = row.dataset.status || '';
-          const matchesText = !q || label.includes(q) || key.includes(q);
+          const category = row.dataset.category || '';
+          const subCategory = row.dataset.subCategory || '';
+          const matchesText = !q || label.includes(q) || key.includes(q) || heading.includes(q) || body.includes(q) || youtry.includes(q);
           const matchesStyle = !styleSel || styleSel === style;
           const matchesStatus = !statusSel || statusSel === status;
-          row.style.display = (matchesText && matchesStyle && matchesStatus) ? '' : 'none';
+          const matchesCategory = !categorySel || categorySel === category;
+          const matchesSubCategory = !subCategorySel || subCategorySel === subCategory;
+          const match = matchesText && matchesStyle && matchesStatus && matchesCategory && matchesSubCategory;
+          row.style.display = match ? '' : 'none';
+          if (match && activeViewRows().includes(row)) activeVisible++;
         });
+        if (citationNoResults) citationNoResults.style.display = activeVisible ? 'none' : '';
+        updateFilterMeta();
       };
       if (entries.length) {
         search?.addEventListener('input', entryFilter);
         globalStyle?.addEventListener('change', entryFilter);
         statusSelect?.addEventListener('change', entryFilter);
-        entryFilter();
+        categorySelect?.addEventListener('change', entryFilter);
+        subCategorySelect?.addEventListener('change', entryFilter);
+        sortSelect?.addEventListener('change', () => {
+          sortEntries();
+          entryFilter();
+        });
+        viewButtons.forEach(btn => btn.addEventListener('click', () => setCitationView(btn.dataset.citationViewButton)));
+        moreFiltersBtn?.addEventListener('click', () => {
+          const open = !advancedFilters?.classList.contains('open');
+          advancedFilters?.classList.toggle('open', open);
+          moreFiltersBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        columnsBtn?.addEventListener('click', (event) => {
+          event.stopPropagation();
+          setColumnMenuOpen(!columnsMenu?.classList.contains('open'));
+        });
+        columnToggles.forEach(toggle => toggle.addEventListener('change', applyColumnVisibility));
+        document.addEventListener('click', (event) => {
+          if (!columnsMenu?.classList.contains('open')) return;
+          if (event.target.closest('#citationColumnMenu') || event.target.closest('#citationColumnsBtn')) return;
+          setColumnMenuOpen(false);
+        });
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') setColumnMenuOpen(false);
+        });
+        clearFiltersBtn?.addEventListener('click', () => {
+          if (search) search.value = '';
+          filterSelects.forEach(select => { select.value = ''; });
+          if (sortSelect) sortSelect.value = 'label-asc';
+          sortEntries();
+          entryFilter();
+          search?.focus();
+        });
+        presetButtons.forEach(btn => {
+          btn.addEventListener('click', () => {
+            filterSelects.forEach(select => { select.value = ''; });
+            if (btn.dataset.style && globalStyle) globalStyle.value = btn.dataset.style;
+            if (btn.dataset.category && categorySelect) categorySelect.value = btn.dataset.category;
+            if (btn.dataset.status && statusSelect) statusSelect.value = btn.dataset.status;
+            entryFilter();
+          });
+        });
+        sortEntries();
+        applyColumnVisibility();
+        setCitationView('summary');
       }
 
       // Advanced filters toggle (tab-specific)
@@ -6072,8 +6706,10 @@ if (isset($_SESSION['user_id'])) {
         if (compareToggle) compareToggle.textContent = 'Compare with current';
         renderSelectedRevision();
         viewer.classList.add('active');
-        updateDrawerScrollLock();
       };
+      if (window.NexusCitationViewer?.keepDrawerScrollPinned) {
+        window.NexusCitationViewer.keepDrawerScrollPinned(viewer, () => document.getElementById('revViewBody'));
+      }
       const openRevisionByKey = (key) => {
         if (!key) return false;
         const rec = allRevisions.find(r => (r.key || '') === key);
@@ -6105,7 +6741,6 @@ if (isset($_SESSION['user_id'])) {
 
       const closeRevision = () => {
         viewer.classList.remove('active');
-        updateDrawerScrollLock();
       };
       closeBtn?.addEventListener('click', closeRevision);
       revCloseBtn?.addEventListener('click', closeRevision);

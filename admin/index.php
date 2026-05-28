@@ -493,6 +493,7 @@ usort($rows, function (array $a, array $b): int {
             <span aria-hidden="true">🔔</span>
             <?php if ($notificationCount > 0): ?><span class="nx-icon-badge"><?= (int)$notificationCount ?></span><?php endif; ?>
           </a>
+          <?php include __DIR__ . '/partials/assistant_widget.php'; ?>
           <button type="button" class="nx-icon-btn" id="nxThemeToggleSites" aria-label="Toggle theme" title="Toggle theme">
             <span id="nxThemeToggleIconSites" aria-hidden="true">◐</span>
           </button>
