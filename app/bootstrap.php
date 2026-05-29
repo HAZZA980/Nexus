@@ -27,18 +27,27 @@ $config = require __DIR__ . '/config.php';
 session_name($config['app']['session_name']);
 session_start();
 
+function csp_nonce(): string {
+  static $nonce = null;
+  if ($nonce === null) {
+    $nonce = base64_encode(random_bytes(16));
+  }
+  return $nonce;
+}
+
 function send_security_headers(): void {
   if (headers_sent()) return;
 
+  $nonce = csp_nonce();
   header('X-Content-Type-Options: nosniff');
   header('X-Frame-Options: SAMEORIGIN');
   header('Referrer-Policy: strict-origin-when-cross-origin');
   header(
     "Content-Security-Policy: default-src 'self'; " .
-    "script-src 'self' 'unsafe-inline' https:; " .
+    "script-src 'self' 'nonce-{$nonce}'; " .
     "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " .
     "img-src 'self' data: https:; " .
-    "font-src 'self' data: https://cdnjs.cloudflare.com; " .
+    "font-src 'self' data: https://cdnjs.cloudflare.com https://fonts.gstatic.com; " .
     "connect-src 'self' https://api.openalex.org https://universities.hipolabs.com; " .
     "frame-ancestors 'self'; " .
     "base-uri 'self'; " .

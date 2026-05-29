@@ -59,7 +59,7 @@ function rel_path(string $rootedPath): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Site partials — <?= Security::e($site['name']) ?></title>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
@@ -135,7 +135,7 @@ function rel_path(string $rootedPath): string {
       </div>
     </div>
   </main>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     document.querySelectorAll('[data-copy]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const targetSel = btn.getAttribute('data-copy');

@@ -316,7 +316,7 @@ usort($rows, function(array $a, array $b): int {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Databases — NexusCMS Admin</title>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
@@ -596,7 +596,7 @@ usort($rows, function(array $a, array $b): int {
     </div>
   </div>
 
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       const rows = Array.from(document.querySelectorAll('#dbTable tbody tr'));
       const searchEl = document.getElementById('dbSearch');

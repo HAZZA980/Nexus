@@ -15,6 +15,7 @@ use NexusCMS\Support\PagePath;
 use NexusCMS\Models\CitationExample;
 use NexusCMS\Models\CitationRevision;
 use NexusCMS\Models\CitationRelease;
+use NexusCMS\Models\CitationStyleDocument;
 
 // -----------------------------
 // Site loading
@@ -453,10 +454,23 @@ $citationCategories = [
   'Governmental',
   'Communications',
 ];
+$citationStyleDocTypes = [
+  'Style guide',
+  'Source type information',
+  'Referencing rules',
+  'Editorial guidance',
+  'Examples policy',
+];
 
 // Utility: truncate long strings for display
 function nx_truncate(string $str, int $limit = 30): string {
   return (strlen($str) > $limit) ? substr($str, 0, $limit) . '…' : $str;
+}
+
+function nx_doc_text_preview(string $str, int $limit = 160): string {
+  $text = trim(preg_replace('/\s+/', ' ', strip_tags($str)));
+  if ($text === '') return 'No document body yet.';
+  return strlen($text) > $limit ? substr($text, 0, $limit - 1) . '…' : $text;
 }
 
 function nx_citation_table_preview(string $str): string {
@@ -1185,6 +1199,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $applySnapshot($after);
     };
 
+    if (($_POST['save_style_document'] ?? '') === '1') {
+      try {
+        $id = (int)($_POST['style_document_id'] ?? 0);
+        $style = trim((string)($_POST['style_document_style'] ?? ''));
+        if (!in_array($style, $citationStyles, true)) $style = $citationStyles[0];
+        $docType = trim((string)($_POST['style_document_type'] ?? ''));
+        if (!in_array($docType, $citationStyleDocTypes, true)) $docType = $citationStyleDocTypes[0];
+        $category = trim((string)($_POST['style_document_category'] ?? ''));
+        if ($category === '') $category = null;
+        elseif (!in_array($category, $citationCategories, true)) $category = null;
+        $subCategory = trim((string)($_POST['style_document_sub_category'] ?? ''));
+        if ($subCategory === '') $subCategory = null;
+        $title = trim((string)($_POST['style_document_title'] ?? ''));
+        $body = trim((string)($_POST['style_document_body'] ?? ''));
+        if ($title === '') throw new Exception('Document title is required.');
+        if ($body === '') throw new Exception('Document body is required.');
+        $docPayload = [
+          'site_slug' => $siteSlug,
+          'referencing_style' => $style,
+          'doc_type' => $docType,
+          'category' => $category,
+          'sub_category' => $subCategory,
+          'title' => $title,
+          'body' => $body,
+          'updated_by_email' => $currentUserEmail,
+        ];
+        if ($id > 0) {
+          CitationStyleDocument::update($id, $siteSlug, $docPayload);
+          $notice = 'Style document updated.';
+        } else {
+          CitationStyleDocument::create($docPayload);
+          $notice = 'Style document created.';
+        }
+      } catch (\Throwable $e) {
+        $notice = 'Error saving style document: ' . $e->getMessage();
+      }
+    }
+
+    if (isset($_POST['delete_style_document'])) {
+      try {
+        $id = (int)($_POST['style_document_id'] ?? 0);
+        if ($id <= 0) throw new Exception('Invalid style document.');
+        CitationStyleDocument::delete($id, $siteSlug);
+        $notice = 'Style document deleted.';
+      } catch (\Throwable $e) {
+        $notice = 'Error deleting style document: ' . $e->getMessage();
+      }
+    }
+
     if (($_POST['add_citation'] ?? '') === '1') {
       try {
         $pdo = nx_db();
@@ -1529,9 +1592,11 @@ if ($siteSlug === 'cite-them-right') {
 }
 $citationRevisions = [];
 $citationReleases = [];
+$citationStyleDocuments = [];
 if ($siteSlug === 'cite-them-right') {
   $citationRevisions = CitationRevision::recent($siteSlug, 5000);
   $citationReleases = CitationRelease::listAll($siteSlug);
+  $citationStyleDocuments = CitationStyleDocument::listForSiteSlug($siteSlug);
 }
 $currentReleaseTag = '';
 if ($siteSlug === 'cite-them-right') {
@@ -1548,6 +1613,7 @@ $queuedBundleItems = [];
 $citationExamplesView = $citationExamples;
 $revisionViewerSeed = [];
 $liveCitationSeed = [];
+$styleDocumentSeed = [];
 if ($siteSlug === 'cite-them-right') {
   foreach ($citationExamples as $exRow) {
     $row = [
@@ -1675,6 +1741,19 @@ if ($siteSlug === 'cite-them-right') {
       'after' => $after,
     ];
   }
+  foreach ($citationStyleDocuments as $doc) {
+    $styleDocumentSeed[] = [
+      'id' => (int)($doc['id'] ?? 0),
+      'style' => (string)($doc['referencing_style'] ?? ''),
+      'type' => (string)($doc['doc_type'] ?? ''),
+      'category' => (string)($doc['category'] ?? ''),
+      'subCategory' => (string)($doc['sub_category'] ?? ''),
+      'title' => (string)($doc['title'] ?? ''),
+      'body' => (string)($doc['body'] ?? ''),
+      'updatedBy' => (string)($doc['updated_by_email'] ?? ''),
+      'updatedAt' => (string)($doc['updated_at'] ?? ''),
+    ];
+  }
 }
 $citationViewCategories = [];
 $citationViewSubCategories = [];
@@ -1711,7 +1790,7 @@ if (isset($_SESSION['user_id'])) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Site — <?= Security::e($site['name']) ?></title>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function() {
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
@@ -2351,6 +2430,36 @@ if (isset($_SESSION['user_id'])) {
     .citation-ghost-btn{flex:1;}
   }
   .citation-no-results{display:none;margin-top:12px;color:var(--muted);}
+  .citation-row-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .citation-doc-menu{position:relative;display:inline-flex;}
+  .citation-doc-menu-btn{width:32px;height:32px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:18px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
+  .citation-doc-menu-btn:hover{background:color-mix(in srgb, var(--primary) 8%, transparent);border-color:color-mix(in srgb, var(--primary) 32%, var(--border));}
+  .citation-doc-menu-list{position:absolute;right:0;top:calc(100% + 6px);min-width:220px;padding:8px;border:1px solid var(--border);border-radius:12px;background:var(--card);box-shadow:0 18px 42px rgba(2,6,23,0.22);z-index:90;display:none;}
+  .citation-doc-menu.open .citation-doc-menu-list{display:grid;gap:6px;}
+  .citation-doc-menu-list button{width:100%;text-align:left;border:0;border-radius:8px;background:transparent;color:var(--text);font:inherit;font-size:13px;font-weight:750;padding:8px 9px;cursor:pointer;}
+  .citation-doc-menu-list button:hover{background:color-mix(in srgb, var(--primary) 10%, transparent);}
+  .style-library-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px;}
+  .style-doc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:14px;}
+  .style-doc-card{border:1px solid var(--border);border-radius:14px;background:color-mix(in srgb, var(--card) 96%, #fff 4%);padding:13px;display:grid;gap:9px;min-width:0;}
+  .style-doc-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+  .style-doc-title{font-size:15px;font-weight:850;color:var(--text);line-height:1.25;}
+  .style-doc-meta{display:flex;gap:6px;flex-wrap:wrap;}
+  .style-doc-pill{display:inline-flex;align-items:center;min-height:24px;padding:0 8px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-size:11px;font-weight:800;color:var(--muted);}
+  .style-doc-preview{font-size:13px;color:var(--muted);line-height:1.45;}
+  .style-doc-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .doc-viewer-body{white-space:pre-wrap;line-height:1.55;}
+  .doc-viewer-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+  .doc-modal-grid{display:grid;gap:10px;}
+  .doc-modal-grid .row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  .doc-modal-grid textarea{min-height:220px;resize:vertical;}
+  #styleDocumentModal{padding:0;overflow:hidden;}
+  #styleDocumentForm{display:flex;flex-direction:column;min-height:0;height:100%;margin:0;}
+  #styleDocumentModal .modal-head{padding:18px 18px 12px;border-bottom:1px solid var(--border);}
+  #styleDocumentModal .modal-body{flex:1;min-height:0;overflow-y:auto;padding:0 18px 16px;}
+  #styleDocumentModal .modal-footer{position:static;margin:0;padding:12px 18px;border-top:1px solid var(--border);background:var(--card);}
+  @media(max-width:720px){.doc-modal-grid .row{grid-template-columns:1fr;}}
+  html.theme-light .citation-doc-menu-list,
+  html.theme-light .style-doc-card{background:#fff;border-color:#e2e8f0;box-shadow:0 1px 2px rgba(15,23,42,0.04);}
   .analytics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px;}
   .analytic-card{border:1px solid var(--border);border-radius:4px;padding:12px;background:var(--field-bg);display:flex;flex-direction:column;gap:6px;}
   .analytic-card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.4px;}
@@ -3815,8 +3924,9 @@ if (isset($_SESSION['user_id'])) {
                 <input id="revSearch" type="search" placeholder="Search citations, authors, ISBNs, or keywords" aria-label="Search citations" style="width:100%;">
               </div>
               <div class="citation-view-toggle" role="group" aria-label="Citation view">
-                <button type="button" class="active" data-citation-view-button="summary">Summary</button>
-                <button type="button" data-citation-view-button="data">Data table</button>
+                <button type="button" class="active" data-citation-view-button="summary">Operations</button>
+                <button type="button" data-citation-view-button="data">Editorial</button>
+                <button type="button" data-citation-view-button="library">Style Library</button>
               </div>
             </div>
             <div class="citation-toolbar-main">
@@ -3959,7 +4069,17 @@ if (isset($_SESSION['user_id'])) {
                       <td>
                         <span class="<?= $statusTone ?>"><?= Security::e($statusLabel) ?></span>
                       </td>
-                      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+                      <td>
+                        <div class="citation-row-actions">
+                          <div class="citation-doc-menu" data-doc-menu>
+                            <button class="citation-doc-menu-btn" type="button" aria-label="Document actions" aria-expanded="false">⋮</button>
+                            <div class="citation-doc-menu-list">
+                              <button type="button" data-open-style-docs data-doc-scope="style">Style guide</button>
+                              <button type="button" data-open-style-docs data-doc-scope="source">Source type information</button>
+                              <button type="button" data-open-style-docs data-doc-scope="rules">Referencing rules</button>
+                              <button type="button" data-open-style-docs data-doc-scope="all">All related documents</button>
+                            </div>
+                          </div>
                         <?php if ($staged && $queuedRevId > 0): ?>
                           <button class="btn text" type="button" data-view-bundle data-revision-id="<?= $queuedRevId ?>">View in bundle</button>
                         <?php endif; ?>
@@ -3971,6 +4091,7 @@ if (isset($_SESSION['user_id'])) {
                             <button class="btn danger" type="submit" onclick="return confirm('Queue delete for this citation?')">Queue delete</button>
                           </form>
                         <?php endif; ?>
+                        </div>
                       </td>
                     </tr>
                   <?php endforeach; ?>
@@ -4034,6 +4155,57 @@ if (isset($_SESSION['user_id'])) {
                   </tbody>
                 </table>
               </div>
+            </div>
+            <div class="citations-list" id="styleLibraryList" data-citation-view="library" style="display:none;">
+              <div class="style-library-head">
+                <div>
+                  <h3 style="margin:0">Style Library</h3>
+                  <div class="muted">Guides, source type information, referencing rules, and editorial guidance for each referencing style.</div>
+                </div>
+                <button class="btn primary" type="button" id="openStyleDocumentModal">+ Add document</button>
+              </div>
+              <?php if ($citationStyleDocuments): ?>
+                <div class="style-doc-grid">
+                  <?php foreach ($citationStyleDocuments as $doc): ?>
+                    <article
+                      class="style-doc-card"
+                      data-style-doc-card
+                      data-id="<?= (int)($doc['id'] ?? 0) ?>"
+                      data-style="<?= Security::e($doc['referencing_style'] ?? '') ?>"
+                      data-type="<?= Security::e($doc['doc_type'] ?? '') ?>"
+                      data-category="<?= Security::e($doc['category'] ?? '') ?>"
+                      data-sub-category="<?= Security::e($doc['sub_category'] ?? '') ?>"
+                      data-title="<?= Security::e($doc['title'] ?? '') ?>"
+                      data-body="<?= Security::e($doc['body'] ?? '') ?>"
+                      data-updated-by="<?= Security::e($doc['updated_by_email'] ?? '') ?>"
+                      data-updated-at="<?= Security::e($doc['updated_at'] ?? '') ?>"
+                    >
+                      <div class="style-doc-card-head">
+                        <div>
+                          <div class="style-doc-title"><?= Security::e($doc['title'] ?? '') ?></div>
+                          <div class="style-doc-meta" style="margin-top:7px;">
+                            <span class="style-doc-pill"><?= Security::e($doc['referencing_style'] ?? '') ?></span>
+                            <span class="style-doc-pill"><?= Security::e($doc['doc_type'] ?? '') ?></span>
+                            <?php if (!empty($doc['category'])): ?><span class="style-doc-pill"><?= Security::e($doc['category']) ?></span><?php endif; ?>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="style-doc-preview"><?= Security::e(nx_doc_text_preview((string)($doc['body'] ?? ''))) ?></div>
+                      <div class="style-doc-actions">
+                        <button class="btn small" type="button" data-open-doc-card>Open</button>
+                        <button class="btn small" type="button" data-edit-doc-card>Edit</button>
+                        <form method="post" style="margin:0">
+                          <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+                          <input type="hidden" name="style_document_id" value="<?= (int)($doc['id'] ?? 0) ?>">
+                          <button class="btn danger small" type="submit" name="delete_style_document" value="1" onclick="return confirm('Delete this style document?')">Delete</button>
+                        </form>
+                      </div>
+                    </article>
+                  <?php endforeach; ?>
+                </div>
+              <?php else: ?>
+                <div class="empty" style="margin-top:14px;">No style documents yet. Add a guide, source type note, or referencing rule.</div>
+              <?php endif; ?>
             </div>
             <div class="citation-no-results" id="citationNoResults">No citations match the selected filters.</div>
             <?php if (!$citationsOnly): ?>
@@ -4389,7 +4561,7 @@ if (isset($_SESSION['user_id'])) {
     </div>
   </div>
 
-  <script id="siteFormsData" type="application/json"><?= json_encode(array_map(static function (array $row): array {
+  <script nonce="<?= Security::e(csp_nonce()) ?>" id="siteFormsData" type="application/json"><?= json_encode(array_map(static function (array $row): array {
     return [
       'id' => (int)($row['id'] ?? 0),
       'name' => (string)($row['name'] ?? ''),
@@ -4403,7 +4575,7 @@ if (isset($_SESSION['user_id'])) {
       }, (array)($row['questions'] ?? []))),
     ];
   }, $siteForms), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
-  <script id="siteFormResponsesData" type="application/json"><?= json_encode(array_map(static function (array $responses): array {
+  <script nonce="<?= Security::e(csp_nonce()) ?>" id="siteFormResponsesData" type="application/json"><?= json_encode(array_map(static function (array $responses): array {
     return array_values(array_map(static function (array $response): array {
       return [
         'id' => (int)($response['id'] ?? 0),
@@ -4541,6 +4713,72 @@ if (isset($_SESSION['user_id'])) {
         <div class="modal-footer">
           <button class="btn" type="button" id="cancelCitationModal">Cancel</button>
           <button class="btn primary" type="submit" id="citationSubmitBtn">Add citation</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="styleDocumentModalBackdrop" style="display:none;">
+    <div class="modal" id="styleDocumentModal" role="dialog" aria-modal="true" aria-labelledby="styleDocumentModalTitle">
+      <form method="post" id="styleDocumentForm">
+        <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+        <input type="hidden" name="save_style_document" value="1">
+        <input type="hidden" name="style_document_id" id="styleDocumentIdField" value="0">
+        <div class="modal-head">
+          <div>
+            <h2 id="styleDocumentModalTitle">Add style document</h2>
+            <div class="muted">Store style guides, source type notes, and referencing rules for fast editorial lookup.</div>
+          </div>
+          <button class="close-btn" type="button" id="closeStyleDocumentModal" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="doc-modal-grid">
+            <div class="row">
+              <div>
+                <label class="muted" for="styleDocumentStyleField">Referencing style</label>
+                <select name="style_document_style" id="styleDocumentStyleField" required>
+                  <?php foreach ($citationStyles as $style): ?>
+                    <option value="<?= Security::e($style) ?>"><?= Security::e($style) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div>
+                <label class="muted" for="styleDocumentTypeField">Document type</label>
+                <select name="style_document_type" id="styleDocumentTypeField" required>
+                  <?php foreach ($citationStyleDocTypes as $type): ?>
+                    <option value="<?= Security::e($type) ?>"><?= Security::e($type) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label class="muted" for="styleDocumentCategoryField">Category (optional)</label>
+                <select name="style_document_category" id="styleDocumentCategoryField">
+                  <option value="">Applies to all categories</option>
+                  <?php foreach ($citationCategories as $cat): ?>
+                    <option value="<?= Security::e($cat) ?>"><?= Security::e($cat) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div>
+                <label class="muted" for="styleDocumentSubCategoryField">Sub-category (optional)</label>
+                <input name="style_document_sub_category" id="styleDocumentSubCategoryField" placeholder="e.g. Audiobooks">
+              </div>
+            </div>
+            <div>
+              <label class="muted" for="styleDocumentTitleField">Title</label>
+              <input name="style_document_title" id="styleDocumentTitleField" required placeholder="Harvard source type rules">
+            </div>
+            <div>
+              <label class="muted" for="styleDocumentBodyField">Document body</label>
+              <textarea name="style_document_body" id="styleDocumentBodyField" required placeholder="Paste or write the guidance here."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" type="button" id="cancelStyleDocumentModal">Cancel</button>
+          <button class="btn primary" type="submit" id="styleDocumentSubmitBtn">Save document</button>
         </div>
       </form>
     </div>
@@ -4701,13 +4939,193 @@ if (isset($_SESSION['user_id'])) {
     </footer>
   </aside>
 
-  <script id="revisionViewerSeed" type="application/json"><?= (string)json_encode($revisionViewerSeed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
-  <script id="liveCitationSeed" type="application/json"><?= (string)json_encode($liveCitationSeed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+  <aside class="cite-viewer" id="styleDocumentViewer" aria-label="Style document">
+    <header>
+      <div>
+        <div class="citation-label" id="styleDocViewTitle">Style document</div>
+        <div class="muted" id="styleDocViewSubtitle" style="font-size:12px;">Style Library</div>
+        <div class="doc-viewer-meta" id="styleDocViewMeta"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn small" type="button" id="styleDocEditFromViewer">Edit</button>
+        <button class="close-btn" type="button" id="closeStyleDocumentViewer" aria-label="Close">×</button>
+      </div>
+    </header>
+    <main class="viewer-body" id="styleDocViewBody">
+      <div class="citation-field">
+        <strong>Document</strong>
+        <div class="doc-viewer-body" id="styleDocViewContent">No document selected.</div>
+      </div>
+    </main>
+  </aside>
 
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>" id="revisionViewerSeed" type="application/json"><?= (string)json_encode($revisionViewerSeed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>" id="liveCitationSeed" type="application/json"><?= (string)json_encode($liveCitationSeed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>" id="styleDocumentSeed" type="application/json"><?= (string)json_encode($styleDocumentSeed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
     })();
     const basePath = <?= json_encode($base) ?>;
+
+    // Style Library documents
+    (function(){
+      const seedEl = document.getElementById('styleDocumentSeed');
+      let docs = [];
+      try { docs = JSON.parse(seedEl?.textContent || '[]'); } catch(e) { docs = []; }
+      const modalBackdrop = document.getElementById('styleDocumentModalBackdrop');
+      const modalTitle = document.getElementById('styleDocumentModalTitle');
+      const idField = document.getElementById('styleDocumentIdField');
+      const styleField = document.getElementById('styleDocumentStyleField');
+      const typeField = document.getElementById('styleDocumentTypeField');
+      const categoryField = document.getElementById('styleDocumentCategoryField');
+      const subCategoryField = document.getElementById('styleDocumentSubCategoryField');
+      const titleField = document.getElementById('styleDocumentTitleField');
+      const bodyField = document.getElementById('styleDocumentBodyField');
+      const viewer = document.getElementById('styleDocumentViewer');
+      const viewerClose = document.getElementById('closeStyleDocumentViewer');
+      const viewerTitle = document.getElementById('styleDocViewTitle');
+      const viewerSub = document.getElementById('styleDocViewSubtitle');
+      const viewerMeta = document.getElementById('styleDocViewMeta');
+      const viewerContent = document.getElementById('styleDocViewContent');
+      const editFromViewer = document.getElementById('styleDocEditFromViewer');
+      let activeDoc = null;
+      let activeDocDefaults = {};
+
+      const escapeHtml = (str) => String(str ?? '')
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
+      const docTypeForScope = (scope) => {
+        if (scope === 'source') return 'Source type information';
+        if (scope === 'rules') return 'Referencing rules';
+        if (scope === 'style') return 'Style guide';
+        return '';
+      };
+      const pill = (text) => text ? `<span class="style-doc-pill">${escapeHtml(text)}</span>` : '';
+      const docMatchesCitation = (doc, row, scope) => {
+        if (!doc || !row) return false;
+        const style = row.dataset.style || '';
+        const category = row.dataset.category || '';
+        const subCategory = row.dataset.subCategory || '';
+        const wantedType = docTypeForScope(scope);
+        if (style && doc.style !== style) return false;
+        if (wantedType && doc.type !== wantedType) return false;
+        if (doc.category && doc.category !== category) return false;
+        if (doc.subCategory && doc.subCategory !== subCategory) return false;
+        return true;
+      };
+
+      const fillModal = (doc = null, defaults = {}) => {
+        if (idField) idField.value = String(doc?.id || 0);
+        if (styleField) styleField.value = doc?.style || defaults.style || styleField.options?.[0]?.value || '';
+        if (typeField) typeField.value = doc?.type || defaults.type || typeField.options?.[0]?.value || '';
+        if (categoryField) categoryField.value = doc?.category || defaults.category || '';
+        if (subCategoryField) subCategoryField.value = doc?.subCategory || defaults.subCategory || '';
+        if (titleField) titleField.value = doc?.title || defaults.title || '';
+        if (bodyField) bodyField.value = doc?.body || '';
+        if (modalTitle) modalTitle.textContent = doc?.id ? 'Edit style document' : 'Add style document';
+      };
+      const openModal = (doc = null, defaults = {}) => {
+        fillModal(doc, defaults);
+        if (modalBackdrop) modalBackdrop.style.display = 'flex';
+        window.setTimeout(() => titleField?.focus(), 0);
+      };
+      const closeModal = () => {
+        if (modalBackdrop) modalBackdrop.style.display = 'none';
+      };
+      document.getElementById('openStyleDocumentModal')?.addEventListener('click', () => openModal());
+      document.getElementById('closeStyleDocumentModal')?.addEventListener('click', closeModal);
+      document.getElementById('cancelStyleDocumentModal')?.addEventListener('click', closeModal);
+      modalBackdrop?.addEventListener('click', (event) => {
+        if (event.target === modalBackdrop) closeModal();
+      });
+
+      const openViewer = (doc, fallback = {}) => {
+        activeDoc = doc || null;
+        activeDocDefaults = fallback || {};
+        if (viewerTitle) viewerTitle.textContent = doc?.title || fallback.title || 'No style document found';
+        if (viewerSub) viewerSub.textContent = doc ? `${doc.style} · ${doc.type}` : 'Style Library';
+        if (viewerMeta) {
+          viewerMeta.innerHTML = doc
+            ? [pill(doc.style), pill(doc.type), pill(doc.category), pill(doc.subCategory), pill(doc.updatedAt ? `Updated ${doc.updatedAt}` : '')].join('')
+            : [pill(fallback.style), pill(fallback.category), pill(fallback.subCategory)].join('');
+        }
+        if (viewerContent) {
+          viewerContent.textContent = doc?.body || 'No matching document exists yet. Use “Edit” to create one for this style or source type.';
+        }
+        if (editFromViewer) editFromViewer.textContent = doc ? 'Edit' : 'Create';
+        viewer?.classList.add('active');
+      };
+      const closeViewer = () => viewer?.classList.remove('active');
+      viewerClose?.addEventListener('click', closeViewer);
+      editFromViewer?.addEventListener('click', () => {
+        openModal(activeDoc, activeDoc ? {} : activeDocDefaults);
+      });
+
+      document.querySelectorAll('[data-style-doc-card]').forEach((card) => {
+        const cardDoc = () => docs.find(d => String(d.id) === String(card.dataset.id)) || {
+          id: card.dataset.id || '',
+          style: card.dataset.style || '',
+          type: card.dataset.type || '',
+          category: card.dataset.category || '',
+          subCategory: card.dataset.subCategory || '',
+          title: card.dataset.title || '',
+          body: card.dataset.body || '',
+          updatedBy: card.dataset.updatedBy || '',
+          updatedAt: card.dataset.updatedAt || '',
+        };
+        card.querySelector('[data-open-doc-card]')?.addEventListener('click', () => openViewer(cardDoc()));
+        card.querySelector('[data-edit-doc-card]')?.addEventListener('click', () => openModal(cardDoc()));
+      });
+
+      document.querySelectorAll('[data-doc-menu]').forEach((menu) => {
+        const btn = menu.querySelector('.citation-doc-menu-btn');
+        btn?.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          document.querySelectorAll('[data-doc-menu].open').forEach((other) => {
+            if (other !== menu) {
+              other.classList.remove('open');
+              other.querySelector('.citation-doc-menu-btn')?.setAttribute('aria-expanded', 'false');
+            }
+          });
+          const open = !menu.classList.contains('open');
+          menu.classList.toggle('open', open);
+          btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        menu.querySelectorAll('[data-open-style-docs]').forEach((item) => {
+          item.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const row = menu.closest('.citation-row');
+            const scope = item.getAttribute('data-doc-scope') || 'all';
+            const matches = docs.filter(doc => docMatchesCitation(doc, row, scope));
+            const selected = matches[0] || null;
+            const wantedType = docTypeForScope(scope);
+            openViewer(selected, {
+              title: wantedType || 'Related style documents',
+              style: row?.dataset.style || '',
+              type: wantedType || 'Style guide',
+              category: row?.dataset.category || '',
+              subCategory: row?.dataset.subCategory || '',
+            });
+            menu.classList.remove('open');
+            btn?.setAttribute('aria-expanded', 'false');
+          });
+        });
+      });
+
+      document.addEventListener('click', (event) => {
+        if (event.target.closest?.('[data-doc-menu]')) return;
+        document.querySelectorAll('[data-doc-menu].open').forEach((menu) => {
+          menu.classList.remove('open');
+          menu.querySelector('.citation-doc-menu-btn')?.setAttribute('aria-expanded', 'false');
+        });
+      });
+    })();
     
     // tabs with hash support
     const tabs = Array.from(document.querySelectorAll('.tab'));
@@ -6438,6 +6856,11 @@ if (isset($_SESSION['user_id'])) {
         });
       };
       const entryFilter = () => {
+        if (citationView === 'library') {
+          if (citationNoResults) citationNoResults.style.display = 'none';
+          updateFilterMeta();
+          return;
+        }
         const q = (search?.value || '').toLowerCase();
         const styleSel = globalStyle?.value || '';
         const statusSel = statusSelect?.value || '';

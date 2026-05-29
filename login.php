@@ -280,7 +280,7 @@ $signupCardClass = $mode === 'signup' ? 'tab is-active' : 'tab';
       </div>
     </div>
   </div>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       const search = document.getElementById('institution_search');
       const hidden = document.getElementById('institution_name');

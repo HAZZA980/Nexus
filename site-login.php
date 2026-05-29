@@ -3,25 +3,39 @@ require __DIR__ . '/app/bootstrap.php';
 
 use NexusCMS\Core\DB;
 use NexusCMS\Core\Security;
+use NexusCMS\Models\LoginAttempts;
 use NexusCMS\Models\User;
 
 $siteSlug = trim((string)($_GET['site'] ?? $_POST['site'] ?? ''));
 $return = trim((string)($_GET['return'] ?? $_POST['return'] ?? '/'));
 $prefillEmail = isset($_GET['prefill_email']) ? trim((string)$_GET['prefill_email']) : '';
-$prefillPass  = isset($_GET['prefill_pass']) ? trim((string)$_GET['prefill_pass']) : '';
 $basePath = rtrim(base_path(), '/');
 $makeTarget = function(string $ret) use ($basePath): string {
+  $ret = trim($ret);
   if ($ret === '') return $basePath . '/';
-  // Allow full URLs
-  if (preg_match('#^https?://#i', $ret)) return $ret;
-  // Ensure leading slash
-  if ($ret[0] !== '/') $ret = '/' . $ret;
-  // Avoid double base path
-  if (str_starts_with($ret, $basePath.'/') || $ret === $basePath) return $ret;
+
+  if (preg_match('#^(?:[a-z][a-z0-9+.-]*:|//)#i', $ret)) {
+    return $basePath . '/';
+  }
+
+  if ($basePath !== '' && str_starts_with($ret, $basePath)) {
+    $ret = substr($ret, strlen($basePath));
+  }
+
+  if ($ret === '' || $ret[0] !== '/') $ret = '/' . ltrim($ret, '/');
+  if (str_starts_with($ret, '//')) return $basePath . '/';
   return $basePath . $ret;
 };
 $error = null;
 $message = null;
+
+if (!empty($_SESSION['registration_notice'])) {
+  $message = (string)$_SESSION['registration_notice'];
+  unset($_SESSION['registration_notice']);
+}
+
+$loginAttemptStatus = LoginAttempts::status(LoginAttempts::ipHash());
+$requireCaptcha = !empty($loginAttemptStatus['captcha_required']);
 
 /**
  * Ensure auth schema exists even on older databases.
@@ -75,15 +89,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
       } else {
         $existing = User::findByEmail($email);
         if ($existing) {
-          // user exists, just attach access
-          ensureAccessMapping((int)$existing['id'], (int)$site['id']);
-          $_SESSION['user_id'] = (int)$existing['id'];
-          $_SESSION['user_role'] = $existing['role'];
-          $_SESSION['site_access'] = User::siteAccess((int)$existing['id'], (string)$existing['role']);
-          // prefill and switch to login mode after creating
-          $prefillEmail = $email;
-          $prefillPass = $pass;
-          $goto = $makeTarget("/site-login.php?site={$siteSlug}&return=" . urlencode($return) . "&prefill_email=" . urlencode($prefillEmail) . "&prefill_pass=" . urlencode($prefillPass));
+          $_SESSION['registration_notice'] = 'An account already exists for that email. Please sign in.';
+          $goto = $makeTarget("/site-login.php?site={$siteSlug}&return=" . urlencode($return) . "&prefill_email=" . urlencode($email));
           header('Location: ' . $goto);
           exit;
         } else {
@@ -92,36 +99,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
           $st->execute([$email, $hash, $name ?: $email, 'student']);
           $uid = (int)DB::pdo()->lastInsertId();
           ensureAccessMapping($uid, (int)$site['id']);
-          // send back to login mode with prefilled credentials
-          $prefillEmail = $email;
-          $prefillPass = $pass;
-          $goto = $makeTarget("/site-login.php?site={$siteSlug}&return=" . urlencode($return) . "&prefill_email=" . urlencode($prefillEmail) . "&prefill_pass=" . urlencode($prefillPass));
+          $_SESSION['registration_notice'] = 'Account created. Please sign in.';
+          $goto = $makeTarget("/site-login.php?site={$siteSlug}&return=" . urlencode($return) . "&prefill_email=" . urlencode($email));
           header('Location: ' . $goto);
           exit;
         }
       }
     } else { // login
-      $user = User::findByEmail($email);
-      if ($user && password_verify($pass, $user['password_hash'])) {
-        // Check access
-        $role = (string)$user['role'];
-        if ($role !== 'super_admin') {
-          $st = DB::pdo()->prepare("SELECT 1 FROM user_site_access usa JOIN sites s ON s.id = usa.site_id WHERE usa.user_id=? AND s.slug=? LIMIT 1");
-          $st->execute([(int)$user['id'], $siteSlug]);
-          if (!$st->fetch()) {
-            $error = "You don't have access to this site.";
-          }
-        }
-        if (!$error) {
-          $_SESSION['user_id'] = (int)$user['id'];
-          $_SESSION['user_role'] = $role;
-          $_SESSION['site_access'] = User::siteAccess((int)$user['id'], $role);
-          header('Location: ' . $makeTarget($return));
-          exit;
-        }
+      $ipHash = LoginAttempts::ipHash();
+      $usernameHash = LoginAttempts::usernameHash($email);
+      $attemptStatus = LoginAttempts::status($ipHash);
+
+      if (!empty($attemptStatus['locked'])) {
+        $error = "Too many failed login attempts. Try again later.";
+      } elseif (!empty($attemptStatus['captcha_required']) && !login_captcha_check((string)($_POST['captcha_answer'] ?? ''))) {
+        $attemptStatus = LoginAttempts::recordFailure($ipHash, $usernameHash, 'site_login', 'captcha_failed');
+        $error = !empty($attemptStatus['locked'])
+          ? "Too many failed login attempts. Try again later."
+          : "Complete the verification challenge and try again.";
       } else {
-        $error = "Invalid credentials.";
+        $user = User::findByEmail($email);
+        if ($user && !empty($user['password_hash']) && password_verify($pass, $user['password_hash'])) {
+          // Check access
+          $role = (string)$user['role'];
+          if ($role !== 'super_admin') {
+            $st = DB::pdo()->prepare("SELECT 1 FROM user_site_access usa JOIN sites s ON s.id = usa.site_id WHERE usa.user_id=? AND s.slug=? LIMIT 1");
+            $st->execute([(int)$user['id'], $siteSlug]);
+            if (!$st->fetch()) {
+              $attemptStatus = LoginAttempts::recordFailure($ipHash, $usernameHash, 'site_login', 'site_access_denied');
+              $error = "You don't have access to this site.";
+            }
+          }
+
+          if (!$error) {
+            LoginAttempts::reset($ipHash, $usernameHash, 'site_login');
+            login_captcha_question(true);
+            establish_user_session($user);
+            header('Location: ' . $makeTarget($return));
+            exit;
+          }
+        } else {
+          $attemptStatus = LoginAttempts::recordFailure($ipHash, $usernameHash, 'site_login');
+          $error = !empty($attemptStatus['locked'])
+            ? "Too many failed login attempts. Try again later."
+            : "Invalid credentials.";
+        }
       }
+      $requireCaptcha = !empty($attemptStatus['captcha_required']);
     }
   }
 }
@@ -153,6 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
       <img src="https://pub-mediabox-storage.rxweb-prd.com/exhibitor/cover/exh-b160a402-5b1c-43d4-8c0a-97158d629c5d/desktop-cover/1db46f2e-ae4b-4fcd-a4bf-7f514eb29b24.jpg" alt="Login">
     </div>
     <?php if ($error): ?><div class="error"><?= Security::e($error) ?></div><?php endif; ?>
+    <?php if ($message): ?><div class="muted"><?= Security::e($message) ?></div><?php endif; ?>
     <div class="toggle">
       <button type="button" id="btnLogin" class="active">Login</button>
       <button type="button" id="btnRegister">Create account</button>
@@ -169,29 +194,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
       <label>Email</label>
       <input name="email" type="email" required autocomplete="email" value="<?= Security::e($prefillEmail) ?>">
       <label>Password</label>
-      <input name="password" type="password" required autocomplete="current-password" value="<?= Security::e($prefillPass) ?>">
+      <input name="password" type="password" required autocomplete="current-password">
+      <?php if ($requireCaptcha): ?>
+        <label>Verification: <?= Security::e(login_captcha_question()) ?></label>
+        <input name="captcha_answer" type="text" inputmode="numeric" autocomplete="off" required data-login-required="1">
+      <?php endif; ?>
       <button type="submit">Continue</button>
       <div class="muted">You are signing in for site: <?= Security::e($site['name'] ?? $siteSlug) ?></div>
     </form>
   </div>
 
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     const btnLogin = document.getElementById('btnLogin');
     const btnReg = document.getElementById('btnRegister');
     const modeField = document.getElementById('modeField');
     const nameField = document.getElementById('nameField');
     const passwordInput = document.querySelector('input[name="password"]');
+    const loginRequiredInputs = document.querySelectorAll('[data-login-required="1"]');
     const setMode = (mode) => {
       if (mode === 'register') {
         modeField.value = 'register';
         btnReg.classList.add('active'); btnLogin.classList.remove('active');
         nameField.style.display = '';
         if (passwordInput) passwordInput.setAttribute('autocomplete','new-password');
+        loginRequiredInputs.forEach((input) => input.required = false);
       } else {
         modeField.value = 'login';
         btnLogin.classList.add('active'); btnReg.classList.remove('active');
         nameField.style.display = 'none';
         if (passwordInput) passwordInput.setAttribute('autocomplete','current-password');
+        loginRequiredInputs.forEach((input) => input.required = true);
       }
     };
     btnLogin.addEventListener('click', () => setMode('login'));

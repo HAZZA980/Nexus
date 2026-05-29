@@ -1,11 +1,12 @@
 RewriteEngine On
 
+RewriteRule (^|/)install\.php$ - [F,L]
+
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options "nosniff"
     Header always set X-Frame-Options "SAMEORIGIN"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTPS} == 'on'"
-    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: https:; font-src 'self' data: https://cdnjs.cloudflare.com; connect-src 'self' https://api.openalex.org https://universities.hipolabs.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
 </IfModule>
 
 # If file or directory exists, serve it normally

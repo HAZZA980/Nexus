@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="utf-8">
   <title>New Page — <?= Security::e($site['name']) ?></title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function() {
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
@@ -172,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
   </div>
 
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     const form = document.getElementById('pageForm');
     const tplInput = document.getElementById('template');
     const modeInput = document.getElementById('mode');

@@ -1,12 +1,6 @@
 <?php
 require __DIR__ . '/../app/bootstrap.php';
 
-// HARD FAIL ON ERRORS (DEV ONLY)
-ini_set('display_errors', '1');
-ini_set('display_startup_errors', '1');
-error_reporting(E_ALL);
-
-
 use NexusCMS\Models\User;
 use NexusCMS\Models\LoginAttempts;
 use NexusCMS\Core\Security;

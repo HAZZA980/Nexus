@@ -191,7 +191,7 @@ $builderBodyClasses = [
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function() {
       var theme = <?= json_encode($uiTheme, JSON_UNESCAPED_SLASHES) ?>;
       document.documentElement.setAttribute('data-theme', theme);
@@ -719,11 +719,11 @@ $builderBodyClasses = [
 
   </div>
 
-  <script>window.NX_DOC = <?= json_encode($doc, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
-  <script>window.NX_SITE_PAGES = <?= json_encode($sitePages, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
-  <script>window.NX_SITE_FORMS = <?= json_encode($siteForms, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">window.NX_DOC = <?= json_encode($doc, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">window.NX_SITE_PAGES = <?= json_encode($sitePages, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">window.NX_SITE_FORMS = <?= json_encode($siteForms, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
   <script src="<?= $base ?>/public/assets/builder.js?v=<?= Security::e($builderJsVer) ?>"></script>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function() {
       var root = document.documentElement;
       var btn = document.getElementById('themeToggle');

@@ -265,7 +265,7 @@ sort($formats, SORT_NATURAL | SORT_FLAG_CASE);
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Media — NexusCMS Admin</title>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
@@ -564,7 +564,7 @@ sort($formats, SORT_NATURAL | SORT_FLAG_CASE);
     </div>
   </div>
 
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       const rows = Array.from(document.querySelectorAll('#mediaTable tbody tr'));
       const searchEl = document.getElementById('mediaSearch');

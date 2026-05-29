@@ -561,7 +561,7 @@ if (!$usedPartialFooter && is_file($footerTemplate)) require $footerTemplate;
 <?php endif; ?>
 
 <?php if ($isCtrSearch): ?>
-<script>
+<script nonce="<?= Security::e(csp_nonce()) ?>">
 (function(){
   const facetForm = document.getElementById('ctrFacetForm');
   facetForm?.addEventListener('change', function () {
@@ -626,7 +626,7 @@ if (!$usedPartialFooter && is_file($footerTemplate)) require $footerTemplate;
 <?php endif; ?>
 
 <?php if (!empty($site['analytics_enabled'])): ?>
-<script>
+<script nonce="<?= Security::e(csp_nonce()) ?>">
 (function(){
   if (<?= $isAdmin ? 'true' : 'false' ?>) return;
   if (navigator.doNotTrack === '1' || window.doNotTrack === '1') return;
@@ -694,7 +694,7 @@ if (!$usedPartialFooter && is_file($footerTemplate)) require $footerTemplate;
 <?php endif; ?>
 
 <?php if ($canFlagUser): ?>
-<script>
+<script nonce="<?= Security::e(csp_nonce()) ?>">
 (function(){
   const modal = document.getElementById('nxFlagModal');
   const openBtn = document.getElementById('nxOpenFlagModal');

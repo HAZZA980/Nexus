@@ -1,4 +1,9 @@
 <?php
+if (PHP_SAPI !== 'cli') {
+  http_response_code(404);
+  exit('Not found.');
+}
+
 require __DIR__ . '/app/bootstrap.php';
 use NexusCMS\Core\DB;
 
@@ -10,10 +15,22 @@ if ($exists > 0) {
   exit;
 }
 
-$hash = password_hash('Admin123!', PASSWORD_DEFAULT);
+$plainPassword = rtrim(strtr(base64_encode(random_bytes(18)), '+/', '-_'), '=');
+$adminEmail = getenv('NEXUSCMS_INSTALL_ADMIN_EMAIL');
+$adminEmail = is_string($adminEmail) && filter_var($adminEmail, FILTER_VALIDATE_EMAIL)
+  ? $adminEmail
+  : 'admin-' . bin2hex(random_bytes(4)) . '@nexuscms.local';
+
+$hash = password_hash($plainPassword, PASSWORD_DEFAULT);
 $pdo->prepare(
   "INSERT INTO users (email,password_hash,display_name,role)
-   VALUES ('admin@nexuscms.local',?,?, 'super_admin')"
-)->execute([$hash, 'Admin']);
+   VALUES (?,?,?, 'super_admin')"
+)->execute([$adminEmail, $hash, 'Admin']);
 
-echo "Installed. <a href='/NexusCMS/admin/login.php'>Go to Admin</a>";
+echo "Installed.\n";
+echo "Admin email: {$adminEmail}\n";
+echo "Admin password: {$plainPassword}\n";
+echo "Store this password now; it will not be shown again.\n";
+
+@unlink(__FILE__);
+@unlink(__DIR__ . '/app/install.php');

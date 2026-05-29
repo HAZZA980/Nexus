@@ -115,7 +115,7 @@ $canEscalate = $canActOnSelected && $selected && ($selected['status'] ?? '') !==
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Notifications — NexusCMS Admin</title>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();

@@ -273,7 +273,7 @@ usort($rows, function (array $a, array $b): int {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>NexusCMS Admin</title>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
@@ -676,7 +676,7 @@ usort($rows, function (array $a, array $b): int {
     </div>
   </div>
 
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function () {
       const searchEl = document.getElementById('siteSearch');
       const statusEl = document.getElementById('siteStatusFilter');

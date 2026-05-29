@@ -308,6 +308,11 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
   }
 
+  private static function scriptNonceAttr(): string
+  {
+    return function_exists('csp_nonce') ? ' nonce="' . Security::e(csp_nonce()) . '"' : '';
+  }
+
   private static function normalizeCitation(string $s): string
   {
     // strip tags, collapse whitespace
@@ -548,6 +553,7 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
 
   private static function block(array $blk): string
   {
+    $nonceAttr = self::scriptNonceAttr();
     $type = (string)($blk['type'] ?? 'text');
     $p = is_array($blk['props'] ?? null) ? $blk['props'] : [];
 
@@ -1227,7 +1233,7 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
             . "<div class=\"nx-tabs-panels\">{$panelsHtml}</div>"
             . "</div>";
           $tabs .= <<<HTML
-<script>(function(){
+<script{$nonceAttr}>(function(){
   const root=document.getElementById("{$accId}");
   if(!root)return;
   const tabs=[...root.querySelectorAll('.nx-tab')];
@@ -1426,7 +1432,7 @@ HTML;
           $accordion = "<div class=\"nx-accordion\" id=\"{$accId}\" data-allow=\"" . ($allowMultiple ? 'multiple' : 'single') . "\" data-collapse=\"" . ($allowCollapseAll ? 'allow' : 'force') . "\" data-indicator=\"" . ($showIndicator ? $indicatorPosition : 'none') . "\" data-spacing=\"{$spacing}\" data-style=\"{$styleVariant}\" data-dividers=\"" . ($showDividers ? 'on' : 'off') . "\" data-border=\"" . ($showBorder ? 'on' : 'off') . "\"{$styleInline}>{$itemsHtml}</div>";
         }
         $accordion .= <<<HTML
-<script>(function(){
+<script{$nonceAttr}>(function(){
   const root=document.getElementById("{$accId}");
   if(!root)return;
   const isGrouped=root.dataset.grouped==="1";
@@ -1590,7 +1596,7 @@ HTML;
   </div>
   <div class="nx-dw-feedback" data-feedback style="display:none"></div>
 </div>
-<script>(function(){
+<script{$nonceAttr}>(function(){
   const root=document.getElementById("{$uid}");if(!root)return;
   const answers={$answersJson};
   const blanks=[...root.querySelectorAll('[data-blank]')];
@@ -1707,7 +1713,7 @@ HTML;
     </div>
   </div>
 </div>
-<script>(function(){
+<script{$nonceAttr}>(function(){
   const root=document.getElementById("{$uid}");if(!root)return;
   const inner=root.querySelector('.nx-fc-inner');
   const btnF=root.querySelector('[data-turn]');
@@ -1746,7 +1752,7 @@ HTML;
   </div>
   <div class="nx-tf-feedback" data-feedback style="display:none"></div>
 </div>
-<script>(function(){
+<script{$nonceAttr}>(function(){
   const root=document.getElementById("{$uid}");if(!root)return;
   const correct={$correctJson};
   const fbOk={$tfOkJson};
@@ -1919,7 +1925,7 @@ HTML;
   {$questionsHtml}
   {$explainHtml}
 </div>
-<script>(function(){
+<script{$nonceAttr}>(function(){
   const root=document.getElementById("{$uid}");
   if(!root) return;
   const qs=[...root.querySelectorAll('.nx-mcq-q')];
@@ -2022,6 +2028,7 @@ HTML;
 
   private static function renderCarousel(array $blk): string
   {
+    $nonceAttr = self::scriptNonceAttr();
     $p = is_array($blk['props'] ?? null) ? $blk['props'] : [];
     $slides = array_values(array_filter((array)($p['slides'] ?? []), fn($s) => is_array($s)));
     if (!$slides) $slides = [['title'=>'Slide','body'=>'','image'=>'']];
@@ -2078,7 +2085,7 @@ HTML;
   <button class="nx-car-nav prev" aria-label="Previous slide">‹</button>
   <button class="nx-car-nav next" aria-label="Next slide">›</button>
 </div>
-<script>(function(){
+<script{$nonceAttr}>(function(){
   const root=document.getElementById("{$uid}");
   if(!root) return;
   const track=root.querySelector('.nx-car-track');

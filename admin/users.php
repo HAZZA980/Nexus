@@ -371,7 +371,7 @@ foreach ($users as $u) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Users — NexusCMS Admin</title>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
@@ -840,7 +840,7 @@ foreach ($users as $u) {
     </div>
   </div>
 
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       const searchEl = document.getElementById('userSearch');
       const roleEl = document.getElementById('userRoleFilter');

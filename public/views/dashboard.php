@@ -22,7 +22,7 @@ $summaryCards = [
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>NexusCMS Dashboard</title>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
   </script>
   <link rel="stylesheet" href="<?= $base ?>/public/assets/admin-shared.css?v=20260322">

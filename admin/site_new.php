@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Create new website</title>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
@@ -224,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </section>
   </main>
 
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function() {
       const nameInput = document.getElementById('name');
       const slugInput = document.getElementById('slug');

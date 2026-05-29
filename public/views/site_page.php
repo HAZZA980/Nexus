@@ -703,7 +703,7 @@ if (!$usedPartialFooter) {
 <?php endif; ?>
 
 <?php if (!empty($site['analytics_enabled']) && !$isPreview): ?>
-<script>
+<script nonce="<?= Security::e(csp_nonce()) ?>">
 (function(){
   // Skip analytics for admins to avoid contaminating data
   const isAdmin = <?= $isAdmin ? 'true' : 'false' ?>;
@@ -799,7 +799,7 @@ if (!$usedPartialFooter) {
 <?php endif; ?>
 
 <?php if ($canFlagUser): ?>
-<script>
+<script nonce="<?= Security::e(csp_nonce()) ?>">
 (function(){
   const modal = document.getElementById('nxFlagModal');
   const openBtn = document.getElementById('nxOpenFlagModal');
@@ -827,7 +827,7 @@ if (!$usedPartialFooter) {
 </script>
 <?php endif; ?>
 
-<script>
+<script nonce="<?= Security::e(csp_nonce()) ?>">
 (function () {
   function syncRatingGroup(group) {
     if (!group) return;

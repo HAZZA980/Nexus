@@ -34,7 +34,7 @@ $author = $rev['created_by_user_id'] ?? null;
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Revision <?= Security::e($label) ?></title>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function() {
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
@@ -96,7 +96,7 @@ $author = $rev['created_by_user_id'] ?? null;
     <div class="nexus-page"><?= $content ?></div>
   </div>
 
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     document.getElementById('restoreBtn')?.addEventListener('click', async () => {
       if (!confirm('Restore this revision? This will create a new revision snapshot.')) return;
       try {

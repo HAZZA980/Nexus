@@ -85,7 +85,7 @@ $assistantConfigured = trim((string)(app_config('ai.gemini_api_key') ?? '')) !==
   }
 </style>
 
-<script>
+<script nonce="<?= Security::e(csp_nonce()) ?>">
   (function () {
     var root = document.getElementById('nxAiChat');
     if (!root || root.dataset.ready === '1') return;

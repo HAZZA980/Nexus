@@ -141,6 +141,24 @@ CREATE TABLE IF NOT EXISTS citation_releases (
   INDEX idx_site_status (site_slug, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Citation style documents (style guides, source type rules, editorial guidance)
+CREATE TABLE IF NOT EXISTS citation_style_documents (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  site_slug VARCHAR(190) NOT NULL,
+  referencing_style VARCHAR(100) NOT NULL,
+  doc_type VARCHAR(80) NOT NULL DEFAULT 'Style guide',
+  category VARCHAR(80) NULL,
+  sub_category VARCHAR(120) NULL,
+  title VARCHAR(190) NOT NULL,
+  body MEDIUMTEXT NOT NULL,
+  updated_by_email VARCHAR(190) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_site_style (site_slug, referencing_style),
+  INDEX idx_site_type (site_slug, doc_type),
+  INDEX idx_site_category (site_slug, category, sub_category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Analytics (per site)
 CREATE TABLE IF NOT EXISTS analytics_visitors (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,

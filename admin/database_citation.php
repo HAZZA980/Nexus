@@ -23,7 +23,7 @@ $src = $base . '/admin/site.php?id=' . (int)$site['id'] . '&view=citations';
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Citation DB — NexusCMS Admin</title>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function(){
       document.documentElement.classList.toggle('theme-light', <?= $themeIsLight ? 'true' : 'false' ?>);
     })();
@@ -68,7 +68,7 @@ $src = $base . '/admin/site.php?id=' . (int)$site['id'] . '&view=citations';
   <main>
     <iframe id="citationDbFrame" class="frame" src="<?= htmlspecialchars($src, ENT_QUOTES, 'UTF-8') ?>" title="Citation DB"></iframe>
   </main>
-  <script>
+  <script nonce="<?= Security::e(csp_nonce()) ?>">
     (function () {
       var frame = document.getElementById('citationDbFrame');
       if (!frame) return;

@@ -111,7 +111,7 @@ if ($currentUser) {
   </div>
 </header>
 
-<script>
+<script nonce="<?= Security::e(csp_nonce()) ?>">
   document.body.classList.add('nx-admin-layout');
   (function () {
     var root = document.documentElement;
