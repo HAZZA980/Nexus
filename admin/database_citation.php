@@ -2,6 +2,7 @@
 require __DIR__ . '/../app/bootstrap.php';
 require_admin();
 
+use NexusCMS\Core\Security;
 use NexusCMS\Models\Site;
 
 $base = base_path();
