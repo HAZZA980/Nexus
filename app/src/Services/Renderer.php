@@ -267,6 +267,15 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     return $safeUrl !== '' ? 'background-image:url(' . Security::e($safeUrl) . ');' : '';
   }
 
+  private static function blockAnchorId(array $blk): string
+  {
+    $raw = trim((string)($blk['id'] ?? ''));
+    if ($raw === '') return '';
+    $safe = preg_replace('/[^a-zA-Z0-9_-]+/', '-', $raw) ?? '';
+    $safe = trim($safe, '-');
+    return $safe !== '' ? 'nx-block-' . $safe : '';
+  }
+
   /**
    * Wrap block HTML with:
    * - outer wrapper styling from blk.style
@@ -298,6 +307,11 @@ $html .= '<div class="' . $rowClass . '"' . $styleAttr . '>';
     $blockLink = trim((string)(($blk['props']['blockLink'] ?? '')));
     if ($blockLink !== '' && in_array((string)($blk['type'] ?? ''), ['heading', 'panel', 'image', 'testimonial'], true)) {
       $html = '<a class="nx-block-link" href="' . Security::e($blockLink) . '">' . $html . '</a>';
+    }
+
+    $anchorId = self::blockAnchorId($blk);
+    if ($anchorId !== '') {
+      $html = '<div class="nx-block-anchor" id="' . Security::e($anchorId) . '">' . $html . '</div>';
     }
 
     return $html;

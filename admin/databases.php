@@ -357,7 +357,7 @@ usort($rows, function(array $a, array $b): int {
     .bulk-count{font-size:12px;color:var(--admin-muted);font-weight:600}
 
     .table-wrap{overflow:auto;max-width:100%}
-    table{width:100%;border-collapse:collapse;font-size:13px;background:var(--admin-surface);min-width:1100px}
+    table{width:100%;border-collapse:collapse;font-size:13px;background:var(--admin-surface);table-layout:fixed}
     thead th{text-align:left;background:var(--admin-surface-2);border-top:1px solid var(--admin-line);border-bottom:1px solid var(--admin-line);padding:7px 8px;font-weight:700;white-space:nowrap}
     tbody tr{cursor:pointer}
     tbody td{padding:7px 8px;border-bottom:1px solid var(--admin-line);vertical-align:middle}
@@ -365,26 +365,24 @@ usort($rows, function(array $a, array $b): int {
     tbody tr.selected{background:color-mix(in srgb, var(--admin-accent) 14%, transparent)}
 
     .check-col{width:34px}
-    .db-link{font-weight:700;color:var(--admin-text-strong);text-decoration:none}
+    .db-link{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;font-weight:700;color:var(--admin-text-strong);text-decoration:none}
     .db-link:hover{text-decoration:underline}
     .meta{font-size:12px;color:var(--admin-muted)}
 
-    .status-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;border:1px solid transparent;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.2px}
-    .status-pill.healthy{background:color-mix(in srgb, var(--admin-success) 18%, transparent);border-color:color-mix(in srgb, var(--admin-success) 38%, var(--admin-line));color:var(--admin-success)}
-    .status-pill.outdated{background:color-mix(in srgb, var(--admin-warn) 18%, transparent);border-color:color-mix(in srgb, var(--admin-warn) 38%, var(--admin-line));color:var(--admin-warn)}
-    .status-pill.syncing{background:color-mix(in srgb, var(--admin-accent) 18%, transparent);border-color:color-mix(in srgb, var(--admin-accent) 38%, var(--admin-line));color:var(--admin-accent)}
-    .status-pill.error{background:color-mix(in srgb, var(--admin-danger) 18%, transparent);border-color:color-mix(in srgb, var(--admin-danger) 38%, var(--admin-line));color:var(--admin-danger)}
-    .status-select{height:28px;border:1px solid var(--admin-line);border-radius:4px;background:var(--admin-surface);color:var(--admin-text);font:inherit;padding:0 6px}
     .warning{font-size:11px;color:var(--admin-danger);font-weight:700}
 
-    .row-actions{display:flex;gap:6px;align-items:center;justify-content:flex-end}
-    .row-menu{position:relative}
-    .row-menu summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid var(--admin-line);border-radius:4px;background:var(--admin-surface-2);font-size:15px;line-height:1}
-    .row-menu summary::-webkit-details-marker{display:none}
-    .row-menu-list{position:absolute;right:0;top:calc(100% + 4px);min-width:170px;padding:6px;background:var(--admin-surface);border:1px solid var(--admin-line);border-radius:4px;display:grid;gap:4px;z-index:45}
-    .row-menu-list button{display:block;width:100%;border:0;background:transparent;color:var(--admin-text);font:inherit;font-size:12px;font-weight:600;text-align:left;padding:7px 8px;border-radius:4px;cursor:pointer}
-    .row-menu-list button:hover{background:color-mix(in srgb, var(--admin-accent) 12%, transparent)}
-    .row-menu-list button.danger{color:var(--admin-danger)}
+    .row-actions{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}
+    .row-actions .btn{white-space:nowrap}
+    #dbTable th:nth-child(1),#dbTable td:nth-child(1){width:34px}
+    #dbTable th:nth-child(2),#dbTable td:nth-child(2){width:19%}
+    #dbTable th:nth-child(3),#dbTable td:nth-child(3){width:8%}
+    #dbTable th:nth-child(4),#dbTable td:nth-child(4){width:14%}
+    #dbTable th:nth-child(5),#dbTable td:nth-child(5){width:8%}
+    #dbTable th:nth-child(6),#dbTable td:nth-child(6){width:13%}
+    #dbTable th:nth-child(7),#dbTable td:nth-child(7){width:11%}
+    #dbTable th:nth-child(8),#dbTable td:nth-child(8){width:10%}
+    #dbTable th:nth-child(9),#dbTable td:nth-child(9){width:72px}
+    #dbTable td{overflow:hidden;text-overflow:ellipsis}
 
     .sort-btn{border:0;background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:6px}
     .sort-btn .arrow{font-size:10px;color:var(--admin-muted)}
@@ -470,15 +468,14 @@ usort($rows, function(array $a, array $b): int {
           <thead>
             <tr>
               <th class="check-col"><input type="checkbox" id="dbSelectAll" aria-label="Select all databases"></th>
-              <th style="min-width:240px;"><button type="button" class="sort-btn" data-sort="name">Database <span class="arrow">↕</span></button></th>
-              <th style="min-width:120px;"><button type="button" class="sort-btn" data-sort="type">Type <span class="arrow">↕</span></button></th>
-              <th style="min-width:160px;"><button type="button" class="sort-btn" data-sort="source">Source site <span class="arrow">↕</span></button></th>
-              <th style="min-width:130px;"><button type="button" class="sort-btn" data-sort="connected">Connected <span class="arrow">↕</span></button></th>
-              <th style="min-width:170px;"><button type="button" class="sort-btn" data-sort="size">Size <span class="arrow">↕</span></button></th>
-              <th style="min-width:140px;"><button type="button" class="sort-btn" data-sort="last_sync">Last sync <span class="arrow">↕</span></button></th>
-              <th style="min-width:140px;"><button type="button" class="sort-btn active" data-sort="last_updated">Last updated <span class="arrow">↓</span></button></th>
-              <th style="min-width:170px;"><button type="button" class="sort-btn" data-sort="health">Health <span class="arrow">↕</span></button></th>
-              <th style="min-width:210px;text-align:right;">Actions</th>
+              <th><button type="button" class="sort-btn" data-sort="name">Database <span class="arrow">↕</span></button></th>
+              <th><button type="button" class="sort-btn" data-sort="type">Type <span class="arrow">↕</span></button></th>
+              <th><button type="button" class="sort-btn" data-sort="source">Source site <span class="arrow">↕</span></button></th>
+              <th><button type="button" class="sort-btn" data-sort="connected">Connected <span class="arrow">↕</span></button></th>
+              <th><button type="button" class="sort-btn" data-sort="size">Size <span class="arrow">↕</span></button></th>
+              <th><button type="button" class="sort-btn" data-sort="last_sync">Last sync <span class="arrow">↕</span></button></th>
+              <th><button type="button" class="sort-btn active" data-sort="last_updated">Updated <span class="arrow">↓</span></button></th>
+              <th style="text-align:right;">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -516,7 +513,6 @@ usort($rows, function(array $a, array $b): int {
                 data-size="<?= (float)$r['storage_mb'] ?>"
                 data-last-sync="<?= (int)$r['last_sync_ts'] ?>"
                 data-last-updated="<?= (int)$r['last_updated_ts'] ?>"
-                data-health="<?= (int)$r['health_weight'] ?>"
                 data-status="<?= Security::e((string)$r['status']) ?>"
                 data-open-url="<?= Security::e((string)($r['open_url'] ?: '#')) ?>"
                 data-detail='<?= Security::e(json_encode($detail, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) ?>'
@@ -536,33 +532,8 @@ usort($rows, function(array $a, array $b): int {
                 </td>
                 <td><div title="<?= Security::e((string)$r['last_updated']) ?>"><?= Security::e(db_relative_time((string)$r['last_updated'])) ?></div></td>
                 <td>
-                  <form method="post" class="status-form">
-                    <input type="hidden" name="_csrf" value="<?= Security::e($csrfToken) ?>">
-                    <input type="hidden" name="mode" value="row_status">
-                    <input type="hidden" name="database_id" value="<?= (int)$r['id'] ?>">
-                    <select class="status-select" name="status" aria-label="Change health status for <?= Security::e((string)$r['name']) ?>">
-                      <?php foreach ($allowedStatuses as $s): ?>
-                        <option value="<?= Security::e($s) ?>" <?= $r['status'] === $s ? 'selected' : '' ?>><?= Security::e(db_status_label($s)) ?></option>
-                      <?php endforeach; ?>
-                    </select>
-                    <div class="meta"><span class="status-pill <?= Security::e((string)$r['status']) ?>"><?= Security::e(db_status_label((string)$r['status'])) ?></span></div>
-                  </form>
-                </td>
-                <td>
                   <div class="row-actions">
                     <a class="btn small primary" href="<?= Security::e((string)($r['open_url'] ?: '#')) ?>">Open</a>
-                    <details class="row-menu">
-                      <summary aria-label="More actions">⋮</summary>
-                      <div class="row-menu-list">
-                        <form method="post"><input type="hidden" name="_csrf" value="<?= Security::e($csrfToken) ?>"><input type="hidden" name="mode" value="row_action"><input type="hidden" name="database_id" value="<?= (int)$r['id'] ?>"><button type="submit" name="action" value="refresh">Refresh</button></form>
-                        <form method="post"><input type="hidden" name="_csrf" value="<?= Security::e($csrfToken) ?>"><input type="hidden" name="mode" value="row_action"><input type="hidden" name="database_id" value="<?= (int)$r['id'] ?>"><button type="submit" name="action" value="rebuild">Rebuild</button></form>
-                        <form method="post"><input type="hidden" name="_csrf" value="<?= Security::e($csrfToken) ?>"><input type="hidden" name="mode" value="row_action"><input type="hidden" name="database_id" value="<?= (int)$r['id'] ?>"><button type="submit" name="action" value="reconnect">Reconnect</button></form>
-                        <form method="post"><input type="hidden" name="_csrf" value="<?= Security::e($csrfToken) ?>"><input type="hidden" name="mode" value="row_action"><input type="hidden" name="database_id" value="<?= (int)$r['id'] ?>"><button type="submit" name="action" value="disconnect">Disconnect</button></form>
-                        <button type="button" data-open-detail>View schema</button>
-                        <form method="post"><input type="hidden" name="_csrf" value="<?= Security::e($csrfToken) ?>"><input type="hidden" name="mode" value="row_action"><input type="hidden" name="database_id" value="<?= (int)$r['id'] ?>"><button type="submit" name="action" value="export">Export</button></form>
-                        <form method="post"><input type="hidden" name="_csrf" value="<?= Security::e($csrfToken) ?>"><input type="hidden" name="mode" value="row_action"><input type="hidden" name="database_id" value="<?= (int)$r['id'] ?>"><button class="danger" type="submit" name="action" value="delete">Delete</button></form>
-                      </div>
-                    </details>
                   </div>
                 </td>
               </tr>
@@ -664,7 +635,6 @@ usort($rows, function(array $a, array $b): int {
           else if (sortKey === 'size') cmp = getNum(a, 'data-size') - getNum(b, 'data-size');
           else if (sortKey === 'last_sync') cmp = getNum(a, 'data-last-sync') - getNum(b, 'data-last-sync');
           else if (sortKey === 'last_updated') cmp = getNum(a, 'data-last-updated') - getNum(b, 'data-last-updated');
-          else if (sortKey === 'health') cmp = getNum(a, 'data-health') - getNum(b, 'data-health');
 
           return sortDir === 'asc' ? cmp : -cmp;
         });
@@ -716,26 +686,6 @@ usort($rows, function(array $a, array $b): int {
         const action = (bulkAction?.value || '').trim();
         if (!action) { e.preventDefault(); return; }
         if (action === 'delete' && !confirm('Delete selected databases? This action cannot be undone.')) e.preventDefault();
-      });
-
-      document.querySelectorAll('.status-form .status-select').forEach((sel) => {
-        sel.addEventListener('change', function(){
-          const form = sel.closest('form');
-          if (form) form.submit();
-        });
-      });
-
-      document.querySelectorAll('.row-menu-list form').forEach((form) => {
-        form.addEventListener('submit', function(e){
-          const action = (form.querySelector('button[type="submit"]')?.value || '').toLowerCase();
-          if (action === 'delete' && !confirm('Delete this database? This action cannot be undone.')) e.preventDefault();
-        });
-      });
-
-      document.addEventListener('click', function(e){
-        document.querySelectorAll('.row-menu[open]').forEach((menu) => {
-          if (!menu.contains(e.target)) menu.open = false;
-        });
       });
 
       function parseDetail(row) {

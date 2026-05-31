@@ -75,6 +75,12 @@
   const linkModalSearch = document.getElementById('linkModalSearch');
   const linkModalRows = document.getElementById('linkModalRows');
   const linkModalCurrent = document.getElementById('linkModalCurrent');
+  const linkModePages = document.getElementById('linkModePages');
+  const linkModeBlocks = document.getElementById('linkModeBlocks');
+  const linkModalSearchLabel = document.getElementById('linkModalSearchLabel');
+  const linkModalColOne = document.getElementById('linkModalColOne');
+  const linkModalColTwo = document.getElementById('linkModalColTwo');
+  const linkModalColThree = document.getElementById('linkModalColThree');
 
   const textToolbar = document.getElementById('textToolbar');
   const textToolbarToggle = document.getElementById('textToolbarToggle');
@@ -278,6 +284,18 @@
     }
   }
 
+  function blockAnchorId(blk) {
+    const raw = String(blk?.id || '').trim();
+    if (!raw) return '';
+    const safe = raw.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+    return safe ? `nx-block-${safe}` : '';
+  }
+
+  function blockAnchorHref(blk) {
+    const id = blockAnchorId(blk);
+    return id ? `#${id}` : '';
+  }
+
   function blockSupportsElementLink(blk) {
     return !!blk && ['heading', 'panel', 'image', 'testimonial'].includes(blk.type);
   }
@@ -343,10 +361,53 @@
     };
   }
 
-  function renderLinkRows() {
-    if (!linkModalRows) return;
-    const query = (linkModalSearch?.value || '').trim().toLowerCase();
-    const selectedHref = normalizeLinkValue(linkModalState?.selectedPath || '');
+  function getPageElementLinkTargets() {
+    const counts = {};
+    const targets = [];
+    (doc.rows || []).forEach((row, r) => {
+      (row?.cols || []).forEach((col, c) => {
+        (col?.blocks || []).forEach((blk, b) => {
+          if (!blk || typeof blk !== 'object') return;
+          if (!blk.id) blk.id = uuid();
+          const href = blockAnchorHref(blk);
+          if (!href) return;
+          targets.push({
+            href,
+            id: href.slice(1),
+            label: getBlueprintBlockLabel(blk, counts),
+            location: `Row ${r + 1}, Col ${c + 1}`,
+            r,
+            c,
+            b
+          });
+        });
+      });
+    });
+    return targets;
+  }
+
+  function setLinkModalTargetMode(mode, resetSelection = true) {
+    if (!linkModalState) return;
+    linkModalState.targetMode = mode === 'block' ? 'block' : 'page';
+    if (resetSelection) linkModalState.selectedPath = '';
+    if (linkModalSearch) {
+      linkModalSearch.value = '';
+      linkModalSearch.placeholder = linkModalState.targetMode === 'block'
+        ? 'Filter by blueprint element, row, column, or id'
+        : 'Filter by page name, path, or id';
+    }
+    if (linkModalSearchLabel) linkModalSearchLabel.textContent = linkModalState.targetMode === 'block' ? 'Search page blueprint' : 'Search pages';
+    if (linkModalColOne) linkModalColOne.textContent = linkModalState.targetMode === 'block' ? 'Blueprint element' : 'Page name';
+    if (linkModalColTwo) linkModalColTwo.textContent = linkModalState.targetMode === 'block' ? 'Location' : 'Path';
+    if (linkModalColThree) linkModalColThree.textContent = 'ID';
+    linkModePages?.classList.toggle('active', linkModalState.targetMode === 'page');
+    linkModeBlocks?.classList.toggle('active', linkModalState.targetMode === 'block');
+    if (linkModalApply) linkModalApply.textContent = linkModalState.targetMode === 'block' ? 'Link to selected element' : 'Use selected page';
+    renderLinkRows();
+    updateLinkModalApplyState();
+  }
+
+  function renderPageLinkRows(query, selectedHref) {
     const rows = sitePages.filter((page) => {
       if (!query) return true;
       const haystack = [page.name, page.path, String(page.id)].join(' ').toLowerCase();
@@ -369,6 +430,38 @@
         </tr>
       `;
     }).join('');
+  }
+
+  function renderBlockLinkRows(query, selectedHref) {
+    const targets = getPageElementLinkTargets().filter((target) => {
+      if (!query) return true;
+      const haystack = [target.label, target.location, target.id].join(' ').toLowerCase();
+      return haystack.includes(query);
+    });
+
+    if (!targets.length) {
+      linkModalRows.innerHTML = `<tr><td class="nx-link-empty" colspan="3">No page elements match that filter.</td></tr>`;
+      return;
+    }
+
+    linkModalRows.innerHTML = targets.map((target) => {
+      const isSelected = target.href === selectedHref;
+      return `
+        <tr data-link-path="${esc(target.href)}" data-r="${target.r}" data-c="${target.c}" data-b="${target.b}" class="${isSelected ? 'is-selected' : ''}">
+          <td>${esc(target.label)}</td>
+          <td>${esc(target.location)}</td>
+          <td class="nx-link-id"><code>${esc(target.id)}</code></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderLinkRows() {
+    if (!linkModalRows) return;
+    const query = (linkModalSearch?.value || '').trim().toLowerCase();
+    const selectedHref = normalizeLinkValue(linkModalState?.selectedPath || '');
+    if (linkModalState?.targetMode === 'block') renderBlockLinkRows(query, linkModalState?.selectedPath || '');
+    else renderPageLinkRows(query, selectedHref);
   }
 
   function updateLinkModalCurrent() {
@@ -396,21 +489,22 @@
     if (!linkModal || !linkModalSearch) return;
 
     const currentHref = normalizeLinkValue(context?.currentUrl || '');
+    const currentUrl = String(context?.currentUrl || '').trim();
+    const isBlockHash = /^#nx-block-[a-zA-Z0-9_-]+$/.test(currentUrl);
     const selectedPage = sitePages.find((page) => normalizeLinkValue(page.path) === currentHref);
     linkModalState = {
       mode: context?.mode || 'text',
+      targetMode: isBlockHash ? 'block' : 'page',
       block: context?.block || null,
       target: context?.target || null,
       currentAnchor: context?.currentAnchor || null,
-      currentUrl: context?.currentUrl || '',
+      currentUrl,
       selectionCollapsed: !!context?.selectionCollapsed,
-      selectedPath: selectedPage?.path || ''
+      selectedPath: isBlockHash ? currentUrl : (selectedPage?.path || '')
     };
 
-    linkModalSearch.value = '';
     updateLinkModalCurrent();
-    renderLinkRows();
-    updateLinkModalApplyState();
+    setLinkModalTargetMode(linkModalState.targetMode, false);
     linkModal.style.display = 'flex';
     linkModalSearch.focus();
   }
@@ -3766,6 +3860,9 @@
     renderLinkRows();
   });
 
+  linkModePages?.addEventListener('click', () => setLinkModalTargetMode('page'));
+  linkModeBlocks?.addEventListener('click', () => setLinkModalTargetMode('block'));
+
   linkModalRows?.addEventListener('click', (e) => {
     const row = e.target.closest('tr[data-link-path]');
     if (!row) return;
@@ -6898,6 +6995,8 @@
           if (row.equalHeight && colBlocks.length === 1) el.classList.add('block-fill');
           el.draggable = true;
           el.dataset.bid = blk.id;
+          const anchorId = blockAnchorId(blk);
+          if (anchorId) el.id = anchorId;
 
           // Apply block wrapper styles (border/shadow/etc.)
           if (blk.style && typeof blk.style === 'object') {

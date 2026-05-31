@@ -2246,6 +2246,12 @@ body.right-collapsed .nx-right > *:not(.panel-toggle){display:none;}
 }
 .nx-link-modal-dialog{width:860px;max-width:min(92vw,860px);}
 .nx-link-modal-body{gap:10px;}
+.nx-link-mode-row{display:flex;gap:8px;flex-wrap:wrap;}
+.nx-link-mode-row .smallbtn.active{
+  border-color:rgba(59,130,246,.65);
+  background:rgba(37,99,235,.22);
+  color:#fff;
+}
 .nx-link-current{
   padding:10px 12px;
   border-radius:12px;
@@ -3077,6 +3083,11 @@ html[data-theme="light"] .nx-link-table tbody tr.is-selected{
 }
 html[data-theme="light"] .nx-link-table .nx-link-id{color:var(--chrome-text-2);}
 html[data-theme="light"] .nx-link-empty{color:var(--chrome-text-3);}
+html[data-theme="light"] .nx-link-mode-row .smallbtn.active{
+  border-color:var(--chrome-accent);
+  background:var(--chrome-accent-soft);
+  color:var(--chrome-accent);
+}
 
 html[data-theme="light"] .nx-rev{
   border:1px solid var(--chrome-border-1);

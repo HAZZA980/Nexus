@@ -2225,6 +2225,27 @@ if (isset($_SESSION['user_id'])) {
   .citation-table{width:100%;border-collapse:collapse;}
   .citation-table th,.citation-table td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;}
   .citation-table th{color:var(--muted);font-size:12px;letter-spacing:0.3px;text-transform:uppercase;}
+  .citation-ops-table{table-layout:fixed;}
+  .citation-ops-table th:nth-child(1),.citation-ops-table td:nth-child(1){width:18%;}
+  .citation-ops-table th:nth-child(2),.citation-ops-table td:nth-child(2){width:11%;}
+  .citation-ops-table th:nth-child(3),.citation-ops-table td:nth-child(3){width:12%;}
+  .citation-ops-table th:nth-child(4),.citation-ops-table td:nth-child(4){width:14%;}
+  .citation-ops-table th:nth-child(5),.citation-ops-table td:nth-child(5){width:18%;}
+  .citation-ops-table th:nth-child(6),.citation-ops-table td:nth-child(6){width:9%;}
+  .citation-ops-table th:nth-child(7),.citation-ops-table td:nth-child(7){width:18%;}
+  .citation-ops-table .citation-label{max-width:100%;overflow-wrap:anywhere;}
+  .citation-ops-table td{overflow:hidden;}
+  .citation-key-wrap{
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+    max-width:100%;
+    white-space:normal;
+    overflow:hidden;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+    line-height:1.25;
+  }
   .citation-table-wrap{overflow:auto;width:100%;}
   .citation-data-table{
     min-width:980px;
@@ -2430,7 +2451,8 @@ if (isset($_SESSION['user_id'])) {
     .citation-ghost-btn{flex:1;}
   }
   .citation-no-results{display:none;margin-top:12px;color:var(--muted);}
-  .citation-row-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .citation-row-actions{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;justify-content:flex-end;white-space:nowrap;}
+  .citation-row-actions form{flex:0 0 auto;}
   .citation-doc-menu{position:relative;display:inline-flex;}
   .citation-doc-menu-btn{width:32px;height:32px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:18px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
   .citation-doc-menu-btn:hover{background:color-mix(in srgb, var(--primary) 8%, transparent);border-color:color-mix(in srgb, var(--primary) 32%, var(--border));}
@@ -4018,7 +4040,7 @@ if (isset($_SESSION['user_id'])) {
 
           <?php if ($citationExamples): ?>
             <div class="citations-list" id="citationList" data-citation-view="summary">
-              <table class="citation-table">
+              <table class="citation-table citation-ops-table">
                 <thead>
                   <tr>
                     <th>Reference type</th>
@@ -4065,7 +4087,7 @@ if (isset($_SESSION['user_id'])) {
                       <td><span class="citation-style-pill"><?= Security::e($ex['referencing_style'] ?? '') ?></span></td>
                       <td class="muted"><?= Security::e($ex['category'] ?? '') ?></td>
                       <td class="muted"><?= Security::e($ex['sub_category'] ?? '—') ?></td>
-                      <td class="muted collection-slug" title="<?= Security::e($key) ?>"><?= Security::e($keyDisplay) ?></td>
+                      <td class="muted collection-slug" title="<?= Security::e($key) ?>"><span class="citation-key-wrap"><?= Security::e($key) ?></span></td>
                       <td>
                         <span class="<?= $statusTone ?>"><?= Security::e($statusLabel) ?></span>
                       </td>
@@ -4194,11 +4216,13 @@ if (isset($_SESSION['user_id'])) {
                       <div class="style-doc-actions">
                         <button class="btn small" type="button" data-open-doc-card>Open</button>
                         <button class="btn small" type="button" data-edit-doc-card>Edit</button>
-                        <form method="post" style="margin:0">
-                          <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
-                          <input type="hidden" name="style_document_id" value="<?= (int)($doc['id'] ?? 0) ?>">
-                          <button class="btn danger small" type="submit" name="delete_style_document" value="1" onclick="return confirm('Delete this style document?')">Delete</button>
-                        </form>
+                        <button
+                          class="btn danger small"
+                          type="button"
+                          data-delete-style-doc
+                          data-style-document-id="<?= (int)($doc['id'] ?? 0) ?>"
+                          data-style-document-title="<?= Security::e($doc['title'] ?? 'Style document') ?>"
+                        >Delete</button>
                       </div>
                     </article>
                   <?php endforeach; ?>
@@ -4516,6 +4540,11 @@ if (isset($_SESSION['user_id'])) {
     <input type="hidden" name="delete_site_form" value="1">
     <input type="hidden" name="form_id" id="deleteFormModalActionId" value="0">
   </form>
+  <form id="deleteStyleDocumentForm" method="post" action="site.php?id=<?= (int)$site['id'] ?>&amp;view=citations" style="display:none">
+    <input type="hidden" name="_csrf" value="<?= Security::e(Security::csrfToken()) ?>">
+    <input type="hidden" name="delete_style_document" value="1">
+    <input type="hidden" name="style_document_id" id="deleteStyleDocumentId" value="0">
+  </form>
 
   <div class="modal-backdrop" id="formModalBackdrop" style="display:none">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="formModalTitle" style="max-width:860px;width:100%">
@@ -4784,6 +4813,32 @@ if (isset($_SESSION['user_id'])) {
     </div>
   </div>
 
+  <div class="modal-backdrop" id="deleteStyleDocumentModalBackdrop" style="display:none;">
+    <div class="modal modal-danger" role="dialog" aria-modal="true" aria-labelledby="deleteStyleDocumentTitle">
+      <header class="danger-modal-head">
+        <div class="danger-modal-titlewrap">
+          <div class="danger-modal-icon" aria-hidden="true">!</div>
+          <div class="danger-modal-titlegroup">
+            <div class="danger-modal-eyebrow">Destructive action</div>
+            <h3 id="deleteStyleDocumentTitle">Delete style document</h3>
+          </div>
+        </div>
+        <button class="close-btn" type="button" id="closeDeleteStyleDocumentModal" aria-label="Close">×</button>
+      </header>
+      <div class="danger-modal-body">
+        <div class="danger-modal-copy">Are you sure you want to delete this style guide document? This cannot be undone.</div>
+        <div class="danger-page-card">
+          <div class="danger-page-label">Selected document</div>
+          <div class="danger-page-name" id="deleteStyleDocumentName"></div>
+        </div>
+        <div class="danger-modal-actions">
+          <button class="btn subtle" type="button" id="cancelDeleteStyleDocumentBtn">Keep document</button>
+          <button class="btn danger-solid" type="button" id="confirmDeleteStyleDocumentBtn">Delete document</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <aside class="cite-viewer" id="citationViewer" aria-label="Citation details">
     <header>
       <div>
@@ -4989,8 +5044,13 @@ if (isset($_SESSION['user_id'])) {
       const viewerMeta = document.getElementById('styleDocViewMeta');
       const viewerContent = document.getElementById('styleDocViewContent');
       const editFromViewer = document.getElementById('styleDocEditFromViewer');
+      const deleteModalBackdrop = document.getElementById('deleteStyleDocumentModalBackdrop');
+      const deleteModalName = document.getElementById('deleteStyleDocumentName');
+      const deleteModalId = document.getElementById('deleteStyleDocumentId');
+      const deleteModalForm = document.getElementById('deleteStyleDocumentForm');
       let activeDoc = null;
       let activeDocDefaults = {};
+      let pendingDeleteStyleDocumentId = '';
 
       const escapeHtml = (str) => String(str ?? '')
         .replace(/&/g,'&amp;')
@@ -5042,6 +5102,27 @@ if (isset($_SESSION['user_id'])) {
       modalBackdrop?.addEventListener('click', (event) => {
         if (event.target === modalBackdrop) closeModal();
       });
+      const openDeleteModal = (id, title) => {
+        pendingDeleteStyleDocumentId = String(id || '');
+        if (!pendingDeleteStyleDocumentId || !deleteModalBackdrop) return;
+        if (deleteModalName) deleteModalName.textContent = title || 'Style document';
+        deleteModalBackdrop.style.display = 'flex';
+      };
+      const closeDeleteModal = () => {
+        pendingDeleteStyleDocumentId = '';
+        if (deleteModalBackdrop) deleteModalBackdrop.style.display = 'none';
+      };
+      document.getElementById('closeDeleteStyleDocumentModal')?.addEventListener('click', closeDeleteModal);
+      document.getElementById('cancelDeleteStyleDocumentBtn')?.addEventListener('click', closeDeleteModal);
+      deleteModalBackdrop?.addEventListener('click', (event) => {
+        if (event.target === deleteModalBackdrop) closeDeleteModal();
+      });
+      document.getElementById('confirmDeleteStyleDocumentBtn')?.addEventListener('click', () => {
+        if (!pendingDeleteStyleDocumentId || !deleteModalId || !deleteModalForm) return;
+        deleteModalId.value = pendingDeleteStyleDocumentId;
+        try { localStorage.setItem('citationDatabaseView', 'library'); } catch (e) {}
+        deleteModalForm.submit();
+      });
 
       const openViewer = (doc, fallback = {}) => {
         activeDoc = doc || null;
@@ -5079,6 +5160,11 @@ if (isset($_SESSION['user_id'])) {
         };
         card.querySelector('[data-open-doc-card]')?.addEventListener('click', () => openViewer(cardDoc()));
         card.querySelector('[data-edit-doc-card]')?.addEventListener('click', () => openModal(cardDoc()));
+        card.querySelector('[data-delete-style-doc]')?.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openDeleteModal(card.dataset.id || '', card.dataset.title || 'Style document');
+        });
       });
 
       document.querySelectorAll('[data-doc-menu]').forEach((menu) => {
@@ -6776,6 +6862,7 @@ if (isset($_SESSION['user_id'])) {
       const sortSelect = document.getElementById('citationSortSelect');
       const viewButtons = Array.from(document.querySelectorAll('[data-citation-view-button]'));
       const viewPanels = Array.from(document.querySelectorAll('[data-citation-view]'));
+      const citationViewStorageKey = 'citationDatabaseView';
       const citationNoResults = document.getElementById('citationNoResults');
       const moreFiltersBtn = document.getElementById('citationMoreFilters');
       const advancedFilters = document.getElementById('citationAdvancedFilters');
@@ -6786,7 +6873,19 @@ if (isset($_SESSION['user_id'])) {
       const columnsBtn = document.getElementById('citationColumnsBtn');
       const columnsMenu = document.getElementById('citationColumnMenu');
       const columnToggles = Array.from(document.querySelectorAll('[data-column-toggle]'));
+      const styleDocCards = Array.from(document.querySelectorAll('[data-style-doc-card]'));
+      const dynamicFilterSelect = statusSelect;
+      const dynamicFilterLabel = dynamicFilterSelect?.closest?.('.citation-filter-chip')?.querySelector('span') || null;
+      const subCategoryChip = subCategorySelect?.closest?.('.citation-filter-chip') || null;
+      const columnMenuWrap = columnsBtn?.closest?.('.citation-column-menu-wrap') || null;
+      const presetWrap = document.querySelector('.citation-presets');
       let citationView = 'summary';
+      let dynamicFilterRole = 'status';
+      const viewFilterState = {
+        summary: { style: '', category: '', dynamic: '', subCategory: '' },
+        data: { style: '', category: '', dynamic: '', subCategory: '' },
+        library: { style: '', category: '', dynamic: '', subCategory: '' },
+      };
 
       const activeViewRows = () => entries.filter(row => row.closest('[data-citation-view]')?.dataset.citationView === citationView);
       const setChipState = (select) => {
@@ -6794,12 +6893,151 @@ if (isset($_SESSION['user_id'])) {
         if (chip) chip.classList.toggle('active', !!select.value);
       };
       const filterSelects = [globalStyle, statusSelect, categorySelect, subCategorySelect].filter(Boolean);
+      const viewConfig = {
+        summary: {
+          search: 'Search operations by reference type, key, author, or keyword',
+          dynamicRole: 'status',
+          dynamicLabel: 'Status',
+          dynamicAll: 'Any status',
+          dynamicOptions: [
+            ['clean', 'Clean'],
+            ['staged', 'Queued'],
+            ['edited', 'Edited'],
+          ],
+          sortOptions: [
+            ['label-asc', 'Reference type A-Z'],
+            ['label-desc', 'Reference type Z-A'],
+            ['style-asc', 'Style A-Z'],
+            ['category-asc', 'Category A-Z'],
+            ['sub_category-asc', 'Sub-category A-Z'],
+          ],
+        },
+        data: {
+          search: 'Search editorial text, examples, You try guidance, or keywords',
+          dynamicRole: 'subCategory',
+          dynamicLabel: 'Sub-category',
+          dynamicAll: 'All sub-categories',
+          sortOptions: [
+            ['label-asc', 'Reference type A-Z'],
+            ['label-desc', 'Reference type Z-A'],
+            ['style-asc', 'Style A-Z'],
+            ['category-asc', 'Category A-Z'],
+            ['sub_category-asc', 'Sub-category A-Z'],
+          ],
+        },
+        library: {
+          search: 'Search style guides, source notes, rules, or guidance',
+          dynamicRole: 'docType',
+          dynamicLabel: 'Document type',
+          dynamicAll: 'All document types',
+          sortOptions: [
+            ['title-asc', 'Title A-Z'],
+            ['title-desc', 'Title Z-A'],
+            ['style-asc', 'Style A-Z'],
+            ['type-asc', 'Document type A-Z'],
+            ['category-asc', 'Category A-Z'],
+          ],
+        },
+      };
+      const optionLabel = (select, fallback) => select?.options?.[select.selectedIndex]?.text || fallback || '';
+      const sourceForView = (view) => view === 'library' ? styleDocCards : entries;
+      const dataValue = (el, key) => {
+        if (!el) return '';
+        if (key === 'type') return el.dataset.type || '';
+        if (key === 'subCategory') return el.dataset.subCategory || '';
+        return el.dataset[key] || '';
+      };
+      const uniqueValues = (items, key) => {
+        const values = new Set();
+        items.forEach(item => {
+          const value = String(dataValue(item, key) || '').trim();
+          if (value) values.add(value);
+        });
+        return Array.from(values).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
+      };
+      const setOptions = (select, allLabel, values, selected = '') => {
+        if (!select) return;
+        select.innerHTML = '';
+        if (allLabel !== null) select.appendChild(new Option(allLabel, ''));
+        values.forEach(item => {
+          if (Array.isArray(item)) select.appendChild(new Option(item[1], item[0]));
+          else select.appendChild(new Option(item, item));
+        });
+        select.value = values.some(item => (Array.isArray(item) ? item[0] : item) === selected) ? selected : '';
+      };
+      const setPreset = (index, label, dataset = {}) => {
+        const btn = presetButtons[index];
+        if (!btn) return;
+        btn.style.display = label ? '' : 'none';
+        btn.textContent = label || '';
+        ['style', 'category', 'status', 'dynamic', 'subCategory'].forEach(key => delete btn.dataset[key]);
+        Object.entries(dataset).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') btn.dataset[key] = String(value);
+        });
+      };
+      const configurePresetsForView = (source) => {
+        if (!presetButtons.length) return;
+        if (citationView === 'summary') {
+          setPreset(0, 'Harvard', { style: 'Harvard' });
+          setPreset(1, 'Books', { category: 'Books' });
+          setPreset(2, 'Queued changes', { dynamic: 'staged' });
+          return;
+        }
+        if (citationView === 'data') {
+          const subCategory = uniqueValues(source, 'subCategory')[0] || '';
+          setPreset(0, 'Harvard', { style: 'Harvard' });
+          setPreset(1, 'Books', { category: 'Books' });
+          setPreset(2, subCategory || '', { dynamic: subCategory });
+          return;
+        }
+        setPreset(0, 'Style guides', { dynamic: 'Style guide' });
+        setPreset(1, 'Source info', { dynamic: 'Source type information' });
+        setPreset(2, 'Referencing rules', { dynamic: 'Referencing rules' });
+      };
+      const saveFilterState = () => {
+        const state = viewFilterState[citationView];
+        if (!state) return;
+        state.style = globalStyle?.value || '';
+        state.category = categorySelect?.value || '';
+        state.dynamic = dynamicFilterSelect?.value || '';
+        state.subCategory = subCategorySelect?.value || '';
+      };
+      const configureFiltersForView = () => {
+        const config = viewConfig[citationView] || viewConfig.summary;
+        const state = viewFilterState[citationView] || viewFilterState.summary;
+        const source = sourceForView(citationView);
+        dynamicFilterRole = config.dynamicRole;
+        if (search) search.placeholder = config.search;
+        if (dynamicFilterLabel) dynamicFilterLabel.textContent = config.dynamicLabel;
+
+        setOptions(globalStyle, 'All styles', uniqueValues(source, 'style'), state.style);
+        setOptions(categorySelect, 'All categories', uniqueValues(source, 'category'), state.category);
+
+        if (config.dynamicOptions) {
+          setOptions(dynamicFilterSelect, config.dynamicAll, config.dynamicOptions, state.dynamic);
+        } else if (config.dynamicRole === 'subCategory') {
+          setOptions(dynamicFilterSelect, config.dynamicAll, uniqueValues(source, 'subCategory'), state.dynamic);
+        } else if (config.dynamicRole === 'docType') {
+          setOptions(dynamicFilterSelect, config.dynamicAll, uniqueValues(styleDocCards, 'type'), state.dynamic);
+        }
+
+        setOptions(subCategorySelect, 'All sub-categories', uniqueValues(source, 'subCategory'), state.subCategory);
+        if (subCategoryChip) subCategoryChip.style.display = config.dynamicRole === 'subCategory' ? 'none' : '';
+        if (columnMenuWrap) columnMenuWrap.style.display = citationView === 'data' ? '' : 'none';
+        if (presetWrap) presetWrap.style.display = '';
+        configurePresetsForView(source);
+        if (sortSelect) {
+          const selectedSort = sortSelect.value;
+          setOptions(sortSelect, null, config.sortOptions, selectedSort || config.sortOptions[0]?.[0] || '');
+          if (!sortSelect.value && config.sortOptions[0]) sortSelect.value = config.sortOptions[0][0];
+        }
+      };
       const activeFilterLabels = () => {
         const labels = [];
         if (globalStyle?.value) labels.push(globalStyle.value);
         if (categorySelect?.value) labels.push(categorySelect.value);
-        if (subCategorySelect?.value) labels.push(subCategorySelect.value);
-        if (statusSelect?.value) labels.push(statusSelect.options[statusSelect.selectedIndex]?.text || statusSelect.value);
+        if (dynamicFilterSelect?.value) labels.push(optionLabel(dynamicFilterSelect, dynamicFilterSelect.value));
+        if (subCategorySelect?.value && dynamicFilterRole !== 'subCategory') labels.push(subCategorySelect.value);
         return labels;
       };
       const updateFilterMeta = () => {
@@ -6814,11 +7052,15 @@ if (isset($_SESSION['user_id'])) {
         filterSelects.forEach(setChipState);
       };
       const setCitationView = (view) => {
+        saveFilterState();
         citationView = view || 'summary';
+        try { localStorage.setItem(citationViewStorageKey, citationView); } catch (e) {}
         viewButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.citationViewButton === citationView));
         viewPanels.forEach(panel => {
           panel.style.display = panel.dataset.citationView === citationView ? '' : 'none';
         });
+        configureFiltersForView();
+        sortEntries();
         entryFilter();
       };
       const compareText = (a, b, dir) => {
@@ -6830,6 +7072,19 @@ if (isset($_SESSION['user_id'])) {
         const lastDash = raw.lastIndexOf('-');
         const key = lastDash > 0 ? raw.slice(0, lastDash) : raw;
         const dir = lastDash > 0 ? raw.slice(lastDash + 1) : 'asc';
+        if (citationView === 'library') {
+          const grid = document.querySelector('#styleLibraryList .style-doc-grid');
+          if (!grid) return;
+          const cards = Array.from(grid.querySelectorAll('[data-style-doc-card]'));
+          cards.sort((a, b) => {
+            if (key === 'style') return compareText(a.dataset.style, b.dataset.style, dir) || compareText(a.dataset.title, b.dataset.title, 'asc');
+            if (key === 'type') return compareText(a.dataset.type, b.dataset.type, dir) || compareText(a.dataset.title, b.dataset.title, 'asc');
+            if (key === 'category') return compareText(a.dataset.category, b.dataset.category, dir) || compareText(a.dataset.title, b.dataset.title, 'asc');
+            return compareText(a.dataset.title, b.dataset.title, dir);
+          });
+          cards.forEach(card => grid.appendChild(card));
+          return;
+        }
         viewPanels.forEach(panel => {
           const tbody = panel.querySelector('tbody');
           if (!tbody) return;
@@ -6857,15 +7112,40 @@ if (isset($_SESSION['user_id'])) {
       };
       const entryFilter = () => {
         if (citationView === 'library') {
-          if (citationNoResults) citationNoResults.style.display = 'none';
+          const q = (search?.value || '').toLowerCase();
+          const styleSel = globalStyle?.value || '';
+          const typeSel = dynamicFilterRole === 'docType' ? (dynamicFilterSelect?.value || '') : '';
+          const categorySel = categorySelect?.value || '';
+          const subCategorySel = subCategorySelect?.value || '';
+          let visible = 0;
+          styleDocCards.forEach(card => {
+            const title = (card.dataset.title || '').toLowerCase();
+            const body = (card.dataset.body || '').toLowerCase();
+            const style = card.dataset.style || '';
+            const type = card.dataset.type || '';
+            const category = card.dataset.category || '';
+            const subCategory = card.dataset.subCategory || '';
+            const matchesText = !q || title.includes(q) || body.includes(q) || style.toLowerCase().includes(q) || type.toLowerCase().includes(q) || category.toLowerCase().includes(q);
+            const matchesStyle = !styleSel || styleSel === style;
+            const matchesType = !typeSel || typeSel === type;
+            const matchesCategory = !categorySel || categorySel === category;
+            const matchesSubCategory = !subCategorySel || subCategorySel === subCategory;
+            const match = matchesText && matchesStyle && matchesType && matchesCategory && matchesSubCategory;
+            card.style.display = match ? '' : 'none';
+            if (match) visible++;
+          });
+          if (citationNoResults) {
+            citationNoResults.textContent = 'No style guide documents match the selected filters.';
+            citationNoResults.style.display = visible || !styleDocCards.length ? 'none' : '';
+          }
           updateFilterMeta();
           return;
         }
         const q = (search?.value || '').toLowerCase();
         const styleSel = globalStyle?.value || '';
-        const statusSel = statusSelect?.value || '';
+        const dynamicSel = dynamicFilterSelect?.value || '';
         const categorySel = categorySelect?.value || '';
-        const subCategorySel = subCategorySelect?.value || '';
+        const subCategorySel = dynamicFilterRole === 'subCategory' ? dynamicSel : (subCategorySelect?.value || '');
         let activeVisible = 0;
         entries.forEach(row => {
           const label = (row.dataset.label || '').toLowerCase();
@@ -6879,14 +7159,19 @@ if (isset($_SESSION['user_id'])) {
           const subCategory = row.dataset.subCategory || '';
           const matchesText = !q || label.includes(q) || key.includes(q) || heading.includes(q) || body.includes(q) || youtry.includes(q);
           const matchesStyle = !styleSel || styleSel === style;
-          const matchesStatus = !statusSel || statusSel === status;
+          const matchesStatus = dynamicFilterRole !== 'status' || !dynamicSel || dynamicSel === status;
           const matchesCategory = !categorySel || categorySel === category;
           const matchesSubCategory = !subCategorySel || subCategorySel === subCategory;
           const match = matchesText && matchesStyle && matchesStatus && matchesCategory && matchesSubCategory;
           row.style.display = match ? '' : 'none';
           if (match && activeViewRows().includes(row)) activeVisible++;
         });
-        if (citationNoResults) citationNoResults.style.display = activeVisible ? 'none' : '';
+        if (citationNoResults) {
+          citationNoResults.textContent = citationView === 'data'
+            ? 'No editorial rows match the selected filters.'
+            : 'No citations match the selected filters.';
+          citationNoResults.style.display = activeVisible ? 'none' : '';
+        }
         updateFilterMeta();
       };
       if (entries.length) {
@@ -6932,12 +7217,18 @@ if (isset($_SESSION['user_id'])) {
             if (btn.dataset.style && globalStyle) globalStyle.value = btn.dataset.style;
             if (btn.dataset.category && categorySelect) categorySelect.value = btn.dataset.category;
             if (btn.dataset.status && statusSelect) statusSelect.value = btn.dataset.status;
+            if (btn.dataset.dynamic && dynamicFilterSelect) dynamicFilterSelect.value = btn.dataset.dynamic;
+            if (btn.dataset.subCategory && subCategorySelect) subCategorySelect.value = btn.dataset.subCategory;
             entryFilter();
           });
         });
         sortEntries();
         applyColumnVisibility();
-        setCitationView('summary');
+        const storedCitationView = (() => {
+          try { return localStorage.getItem(citationViewStorageKey); } catch (e) { return null; }
+        })();
+        const initialCitationView = viewButtons.some(btn => btn.dataset.citationViewButton === storedCitationView) ? storedCitationView : 'summary';
+        setCitationView(initialCitationView);
       }
 
       // Advanced filters toggle (tab-specific)

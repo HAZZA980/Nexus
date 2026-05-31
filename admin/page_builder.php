@@ -671,20 +671,24 @@ $builderBodyClasses = [
 <div id="linkModal" class="nx-modal" style="display:none;">
   <div class="nx-modal-dialog nx-link-modal-dialog">
     <div class="nx-modal-head">
-      <div class="nx-modal-title">Insert page link</div>
+      <div class="nx-modal-title">Insert link</div>
       <button type="button" class="nx-modal-close" id="linkModalClose">×</button>
     </div>
     <div class="nx-modal-body nx-link-modal-body">
       <div id="linkModalCurrent" class="nx-link-current" style="display:none;"></div>
-      <label class="nx-muted" for="linkModalSearch">Search pages</label>
+      <div class="nx-link-mode-row" role="group" aria-label="Link target type">
+        <button type="button" class="smallbtn active" id="linkModePages">Pages</button>
+        <button type="button" class="smallbtn" id="linkModeBlocks">Pick from page blueprint</button>
+      </div>
+      <label class="nx-muted" for="linkModalSearch" id="linkModalSearchLabel">Search pages</label>
       <input id="linkModalSearch" type="search" placeholder="Filter by page name, path, or id">
       <div class="nx-link-table-wrap">
         <table class="nx-link-table">
           <thead>
             <tr>
-              <th>Page name</th>
-              <th>Path</th>
-              <th>ID</th>
+              <th id="linkModalColOne">Page name</th>
+              <th id="linkModalColTwo">Path</th>
+              <th id="linkModalColThree">ID</th>
             </tr>
           </thead>
           <tbody id="linkModalRows"></tbody>

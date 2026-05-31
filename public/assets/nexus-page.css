@@ -39,6 +39,11 @@
   color:inherit;
   text-decoration:none;
 }
+.nexus-page .nx-block-anchor{
+  display:flow-root;
+  width:100%;
+  scroll-margin-top:24px;
+}
 
 /* Make your existing rendered classes adapt to light pages */
 .nexus-page .nx-text{ color:inherit; }
@@ -961,7 +966,7 @@
   padding:10px 14px;
   font-size:17px;
   font-weight:500;
-  font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif !important;
 }
 .nexus-page .nx-accordion--title .nx-accordion-parent .nx-accordion-plus{
   display:inline-flex;
@@ -1083,7 +1088,7 @@
   border-radius:0;
   border-top:0;
   font-size:16px;
-  font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif !important;
   box-shadow:none;
 }
 .nexus-page .nx-accordion--title .nx-title-accordion-item .nx-accordion-head,
